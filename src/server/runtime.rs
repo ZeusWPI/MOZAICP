@@ -108,7 +108,7 @@ impl BrokerHandle {
         where S: 'static + Send
     {
         let mut broker = self.broker.lock().unwrap();
-    
+
         let reactor = Reactor {
             id: id.clone(),
             internal_state: core_params.state,
@@ -143,7 +143,7 @@ impl BrokerHandle {
 
 enum InternalOp {
     Message(Message),
-    OpenLink(Box<LinkParamsTrait<Runtime>>),
+    OpenLink(Box<dyn LinkParamsTrait<Runtime>>),
     CloseLink(ReactorId),
 }
 

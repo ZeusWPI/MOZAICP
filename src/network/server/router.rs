@@ -19,7 +19,7 @@ pub trait Router {
 // The reason that we return a 'creator' instead of just directly creating
 // a connection is that a connecting transport is not authenticated when routing
 // happens. This is, of course, because we need to know who we have to
-// authenticate before we can actually do so. 
+// authenticate before we can actually do so.
 // Suppose an intruder tries to open a new connection. If the connection would
 // be opened right away, we would be stuck with an open connection that nobody
 // can connect to (because the intruder cannot authenticate).
@@ -36,7 +36,7 @@ pub enum Routing<R>
 }
 
 pub struct BoxedSpawner<R: ?Sized> {
-    spawner: Box<ConnectionSpawner<R>>,
+    spawner: Box<dyn ConnectionSpawner<R>>,
 }
 
 impl<R: 'static> BoxedSpawner<R> {

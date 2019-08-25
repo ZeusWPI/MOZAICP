@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use core_capnp::{mozaic_message, initialize};
@@ -14,9 +14,11 @@ use rand::Rng;
 use messaging::types::*;
 use messaging::reactor::*;
 
-
 pub struct Runtime;
 
+/// ? RunetimeState is the core state, all messages pass through it.
+/// ? The runtime_worker handles it 'send_internal' messages from it's links.
+/// ? But why?
 pub struct RuntimeState {
     runtime_id: ReactorId,
     actors: HashMap<ReactorId, ActorData>,
@@ -26,7 +28,7 @@ pub struct RuntimeState {
 
 impl RuntimeState {
     pub fn bootstrap<F>(init_worker: F) -> Arc<Mutex<Self>>
-        where F: FnOnce(Arc<Mutex<RuntimeState>>) -> mpsc::UnboundedSender<Message> 
+        where F: FnOnce(Arc<Mutex<RuntimeState>>) -> mpsc::UnboundedSender<Message>
     {
         let runtime_id: ReactorId = rand::thread_rng().gen();
 
@@ -159,7 +161,7 @@ pub fn spawn_reactor<S>(
 
 enum InternalOp {
     Message(Message),
-    OpenLink(Box<LinkParamsTrait<Runtime>>),
+    OpenLink(Box<dyn LinkParamsTrait<Runtime>>),
     CloseLink(ReactorId),
 }
 

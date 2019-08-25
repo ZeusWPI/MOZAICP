@@ -84,7 +84,7 @@ impl<R> RoutingTableHandle<R>
         };
         return Ok(conn_routing);
     }
-    
+
     pub fn get_secret_key(&self) -> SecretKey {
         let table = self.routing_table.lock().unwrap();
         // clone to avoid keeping connection table locked
@@ -105,7 +105,7 @@ impl<R> RoutingTableHandle<R>
         let connection_id = table.connections
             .register(public_key, connection_handle.clone());
         register_fn(&mut table.router, connection_id);
-    
+
         return RegisteredHandle {
             connection_handle,
             connection_id,
@@ -123,7 +123,7 @@ pub struct RegisteredHandle {
     connection_handle: ConnectionHandle,
     connection_id: usize,
 
-    registrar: Box<ConnectionRegistrar>,
+    registrar: Box<dyn ConnectionRegistrar>,
 }
 
 impl RegisteredHandle {

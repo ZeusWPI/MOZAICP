@@ -21,7 +21,7 @@ pub trait CtxHandle<C> {
     fn open_link<S>(&mut self, params: LinkParams<S, C>)
         where S: 'static + Send,
               C: Ctx;
-    
+
     fn close_link(&mut self, id: &ReactorId);
 
 
@@ -147,7 +147,7 @@ pub struct LinkState {
 pub struct Link<C> {
     pub remote_id: ReactorId,
 
-    pub reducer: Box<LinkReducerTrait<C>>,
+    pub reducer: Box<dyn LinkReducerTrait<C>>,
 
     pub link_state: LinkState,
 }
@@ -277,7 +277,7 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
-            
+
             msg.set_sender(self.id.bytes());
             msg.set_receiver(self.id.bytes());
         }
@@ -320,7 +320,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
-            
+
             msg.set_sender(self.id.bytes());
             msg.set_receiver(self.id.bytes());
         }
@@ -425,7 +425,7 @@ impl<'a, S, H> Deref for HandlerCtx<'a, S, H> {
 
 
 type CoreHandler<S, C, T, E> = Box<
-    for <'a, 'c>
+    dyn for <'a, 'c>
         Handler<
             'a,
             HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>,
@@ -436,7 +436,7 @@ type CoreHandler<S, C, T, E> = Box<
 >;
 
 type LinkHandler<S, C, T, E> = Box<
-    for<'a, 'c>
+    dyn for<'a, 'c>
         Handler<'a,
             HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>,
             any_pointer::Owned,
@@ -457,7 +457,7 @@ type LinkHandlers<S, C, T, E> = HashMap<u64, LinkHandler<S, C, T, E>>;
 
 
 
-
+/// ? CoreParams are the parameters for defining handlers for the reactor core
 pub struct CoreParams<S, C: Ctx> {
     pub state: S,
     pub handlers: HashMap<u64, CoreHandler<S, C, (), capnp::Error>>,
@@ -471,7 +471,7 @@ impl<S, C: Ctx> CoreParams<S, C> {
         }
     }
 
-    pub fn handler<M, H>(&mut self, m: M, h: H)
+    pub fn handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
              <M as Owned<'static>>::Reader: HasTypeId,
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>, M, Output=(), Error=capnp::Error>,
@@ -484,7 +484,9 @@ impl<S, C: Ctx> CoreParams<S, C> {
     }
 }
 
-
+/// ? LinkParams are the parameters for defining handlers for links.
+/// ? Internal are sent to the reactor, 'to it's params'
+/// ? External handlers are sent to links of other reactors
 pub struct LinkParams<S, C: Ctx> {
     pub remote_id: ReactorId,
     pub state: S,

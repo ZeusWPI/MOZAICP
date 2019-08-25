@@ -172,7 +172,7 @@ impl<S> StreamHandler<S> {
 }
 
 type MessageHandler<S> = Box<
-    for<'a, 'c>
+    dyn for<'a, 'c>
         Handler<'a,
             MsgHandlerCtx<'a, 'c, S>,
             any_pointer::Owned, Output=(), Error=capnp::Error>
@@ -236,4 +236,3 @@ impl<'a> Writer<'a> {
         self.write_queue.push_back(builder);
     }
 }
-

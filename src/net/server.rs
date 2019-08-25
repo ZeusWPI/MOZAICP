@@ -1,4 +1,4 @@
-use server::runtime::{Broker, BrokerHandle};
+use server::runtime::{BrokerHandle};
 use messaging::types::{Message, VecSegment, ReactorId};
 
 use futures::sync::mpsc;
@@ -51,7 +51,7 @@ impl ServerHandler {
         return Ok(());
     }
 
-    fn publish_message(&mut self, w: &mut Writer, r: publish::Reader)
+    fn publish_message(&mut self, _w: &mut Writer, r: publish::Reader)
         -> Result<(), capnp::Error>
     {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);

@@ -11,25 +11,19 @@ extern crate crossbeam_channel;
 extern crate capnp;
 
 use tokio::net::TcpStream;
-use futures::{Future, Poll, Async, Stream};
+use futures::{Future};
 use futures::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 
-use mozaic::core_capnp::{initialize, terminate_stream, send_greeting, greeting};
+use mozaic::core_capnp::{initialize, terminate_stream};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
 
-use capnp::any_pointer;
-use capnp::traits::{Owned, HasTypeId};
-
-use std::thread;
-use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::env;
 use std::process::{Command, Stdio, ChildStdin};
-use std::io::{Write, BufReader, BufRead};
+use std::io::{Write, BufReader};
 
 pub mod chat {
     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
@@ -55,7 +49,7 @@ fn main() {
         .expect("Process spawn failed");
 
     let stdout = BufReader::new(prog.stdout.take().expect("No stdout"));
-    let mut stdin = Arc::new(Mutex::new(prog.stdin.take().expect("No stdin")));
+    let stdin = Arc::new(Mutex::new(prog.stdin.take().expect("No stdin")));
     // thread::spawn(move || {
     //     let mut stdin = stdin;
     //     for i in 0..10 {
@@ -65,7 +59,7 @@ fn main() {
     //         thread::sleep_ms(100);
     //     }
     // });
-    
+
     // let mut line = String::new();
 
     // while let Ok(x) = stdout.read_line(&mut line) {
@@ -210,7 +204,7 @@ impl ServerLink {
             b.set_message(message);
             b.set_user(user);
         });
-        
+
         handle.send_message(chat_message);
 
         return Ok(());
@@ -226,9 +220,9 @@ impl ServerLink {
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
-        
+
         println!("{}: {}", user, message);
-    
+
         let mut chat_message = MsgBuffer::<chat::chat_message::Owned>::new();
         chat_message.build(|b| {
             b.set_message(message);
@@ -252,7 +246,7 @@ impl ServerLink {
 
 }
 
-// 
+//
 struct RuntimeLink {
     user: String,
 }
@@ -283,14 +277,14 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: chat::connect_to_gui::Reader,
-    ) -> Result<(), capnp::Error> 
+    ) -> Result<(), capnp::Error>
     {
         let connect = MsgBuffer::<chat::connect_to_gui::Owned>::new();
         handle.send_message(connect);
         return Ok(());
     }
 
-    // // Pick up chat messages on the reactor, and forward them to the chat GUI.
+    // Pick up chat messages on the reactor, and forward them to the chat GUI.
     // fn handle_chat_message<C: Ctx>(
     //     &mut self,
     //     handle: &mut LinkHandle<C>,
@@ -334,9 +328,6 @@ mod runtime {
     use capnp::any_pointer;
     use capnp::traits::{Owned, HasTypeId};
     use chat;
-    use crossbeam_channel;
-    use cursive::{Cursive, CbFunc};
-    use cursive::views::{TextView, EditView};
     use futures::{Future, Async, Poll, Stream};
     use futures::sync::mpsc;
     use mozaic::client::runtime::RuntimeState;
@@ -345,8 +336,6 @@ mod runtime {
     use std::sync::{Arc, Mutex};
     use std::io::{BufRead, BufReader};
     use std::process::ChildStdout;
-    use std::mem;
-    use std::thread;
 
     pub struct RuntimeWorker {
         msg_chan: mpsc::UnboundedReceiver<Message>,
@@ -446,7 +435,7 @@ mod runtime {
 
 
     type RtMsgHandler<S> = Box<
-        for<'a>
+        dyn for<'a>
             Handler<'a,
                 RtHandlerCtx<'a, S>,
                 any_pointer::Owned, Output=(), Error=capnp::Error>

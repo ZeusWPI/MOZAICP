@@ -11,5 +11,6 @@ fn main() {
         .file("../schema/core.capnp")
         .file("../schema/network.capnp")
         .file("../schema/chat.capnp")
+        .file("../schema/planetwars.capnp")
         .run().expect("schema compiler command");
 }

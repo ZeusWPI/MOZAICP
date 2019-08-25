@@ -7,7 +7,6 @@ use rand::Rng;
 use capnp;
 use capnp::any_pointer;
 use capnp::traits::{Owned, HasTypeId};
-use core_capnp;
 use core_capnp::mozaic_message;
 
 /// Handles messages of type M with lifetime 'a, using state S.

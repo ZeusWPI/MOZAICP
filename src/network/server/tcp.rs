@@ -3,7 +3,8 @@ use futures::sync::mpsc;
 use std::io;
 use std::net::SocketAddr;
 use tokio;
-use tokio::net::{Incoming, TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::net::tcp::Incoming;
 use std::collections::HashMap;
 
 use network::lib::protobuf_codec::{ProtobufTransport, MessageStream};

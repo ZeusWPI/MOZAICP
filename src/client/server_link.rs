@@ -5,7 +5,6 @@ use messaging::reactor::CoreParams;
 use messaging::types::{Message, VecSegment, ReactorId};
 
 use tokio::net::TcpStream;
-use futures::sync::mpsc;
 use rand::Rng;
 
 use net::connection_handler::*;
@@ -23,9 +22,16 @@ pub struct LinkHandler<S> {
 
     // TODO: UGH clean up this mess wtf
     client_id: ReactorId,
-    spawner: Option<Box<Fn(ClientParams) -> CoreParams<S, Runtime> + Send>>, 
+    spawner: Option<Box<dyn Fn(ClientParams) -> CoreParams<S, Runtime> + Send>>,
 }
 
+/// ? Why does this LinkHandler can just set the runtime server to itself?
+/// ? Because all Runtimes 'need' to have one tcp stream, otherweise it would just be a reactor.
+/// ?
+/// ? This LinkHandler starts the communication with a server. (See h.writer().write ...)
+/// ? I suppose it gets a messages back connected::Owned, with the servers own 'greeter_id'.
+/// ? When this happens it can set the runtime server to itself, because the communication has been started.
+/// ? This is what happens with that |tx| closure, which is called in the handle_connected.
 impl<S> LinkHandler<S>
     where S: Send + 'static
 {
@@ -61,7 +67,7 @@ impl<S> LinkHandler<S>
         return h;
     }
 
-    fn handle_connected(&mut self, w: &mut Writer, r: connected::Reader)
+    fn handle_connected(&mut self, _w: &mut Writer, r: connected::Reader)
         -> Result<(), capnp::Error>
     {
         let spawner = match self.spawner.take() {
@@ -82,7 +88,7 @@ impl<S> LinkHandler<S>
     }
 
 
-    fn publish_message(&mut self, w: &mut Writer, r: publish::Reader)
+    fn publish_message(&mut self, _w: &mut Writer, r: publish::Reader)
         -> Result<(), capnp::Error>
     {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);

@@ -3,7 +3,7 @@ pub mod runtime;
 use std::net::SocketAddr;
 use std::io;
 
-use futures::{Future, Poll, Async};
+use futures::{Future, Poll};
 use tokio::net::TcpListener;
 use rand::Rng;
 

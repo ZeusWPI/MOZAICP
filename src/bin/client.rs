@@ -11,25 +11,19 @@ extern crate crossbeam_channel;
 extern crate capnp;
 
 use tokio::net::TcpStream;
-use futures::{Future, Poll, Async, Stream};
 use futures::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use futures::Future;
 
-
-use mozaic::core_capnp::{initialize, terminate_stream, send_greeting, greeting};
+use mozaic::core_capnp::{initialize, terminate_stream};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
 
-use capnp::any_pointer;
-use capnp::traits::{Owned, HasTypeId};
 
 use std::thread;
-use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::env;
+use std::sync::{Arc, Mutex};
 
-use cursive::CbFunc;
 use cursive::align::VAlign;
 use cursive::Cursive;
 use cursive::theme::Theme;
@@ -70,7 +64,7 @@ fn main() {
         let addr = "127.0.0.1:9142".parse().unwrap();
         tokio::run(futures::lazy(move || {
             // This part is needlessly complex, please ignore =/
-            let rt = RuntimeState::bootstrap(|runtime| {
+            let rt: Arc<Mutex<RuntimeState>> = RuntimeState::bootstrap(|runtime| {
                 let (tx, rx) = mpsc::unbounded();
 
                 runtime::RuntimeWorker::spawn(rx, cb_sink, runtime);
@@ -99,6 +93,9 @@ fn main() {
 }
 
 // Main client logic
+/// ? greeter_id is the server, the tcp stream that you connected to
+/// ? runtime_id is your own runtime, to handle visualisation etc
+/// ? user are you  ...
 struct ClientReactor {
     greeter_id: ReactorId,
     runtime_id: ReactorId,
@@ -178,7 +175,7 @@ impl ServerLink {
             b.set_message(message);
             b.set_user(user);
         });
-        
+
         handle.send_message(chat_message);
 
         return Ok(());
@@ -195,7 +192,7 @@ impl ServerLink {
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
-    
+
         let mut chat_message = MsgBuffer::<chat::chat_message::Owned>::new();
         chat_message.build(|b| {
             b.set_message(message);
@@ -220,7 +217,7 @@ impl ServerLink {
 
 }
 
-// 
+//
 struct RuntimeLink {
     user: String,
 }
@@ -251,7 +248,7 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: chat::connect_to_gui::Reader,
-    ) -> Result<(), capnp::Error> 
+    ) -> Result<(), capnp::Error>
     {
         let connect = MsgBuffer::<chat::connect_to_gui::Owned>::new();
         handle.send_message(connect);
@@ -313,10 +310,12 @@ mod runtime {
     use std::sync::{Arc, Mutex};
 
     struct HandlerState {
-        cb_sink: crossbeam_channel::Sender<Box<CbFunc>>,
+        cb_sink: crossbeam_channel::Sender<Box<dyn CbFunc>>,
         runtime: Arc<Mutex<RuntimeState>>,
     }
 
+    /// ? Reads all messages from the RuntimeState and handles them.
+    /// ? It also creates new messages that are sent to the RuntimeState
     pub struct RuntimeWorker {
         msg_chan: mpsc::UnboundedReceiver<Message>,
         handler_core: HandlerCore<HandlerState>,
@@ -325,7 +324,7 @@ mod runtime {
     impl RuntimeWorker {
         pub fn spawn(
             rx: mpsc::UnboundedReceiver<Message>,
-            cb_sink: crossbeam_channel::Sender<Box<CbFunc>>,
+            cb_sink: crossbeam_channel::Sender<Box<dyn CbFunc>>,
             runtime: Arc<Mutex<RuntimeState>>
         ) {
                 let mut worker = RuntimeWorker {
@@ -338,21 +337,21 @@ mod runtime {
                     )
                 };
 
-                let id = <chat::connect_to_gui::Owned as Owned>::Reader::type_id();
+                let _id = <chat::connect_to_gui::Owned as Owned>::Reader::type_id();
                 worker.handler_core.on(
                     chat::connect_to_gui::Owned,
                     FnHandler::new(rt_connect_to_gui),
                 );
 
-                let id = <chat::chat_message::Owned as Owned>::Reader::type_id();
+                let _id = <chat::chat_message::Owned as Owned>::Reader::type_id();
                 worker.handler_core.on(
                     chat::chat_message::Owned,
                     FnHandler::new(rt_display_chat_message),
                 );
 
                 tokio::spawn(worker);
-
         }
+
         fn handle_message(&mut self, msg: Message) {
             self.handler_core.handle(&msg)
                 .expect("message handling failed");
@@ -426,7 +425,7 @@ mod runtime {
 
 
     type RtMsgHandler<S> = Box<
-        for<'a>
+        dyn for<'a>
             Handler<'a,
                 RtHandlerCtx<'a, S>,
                 any_pointer::Owned, Output=(), Error=capnp::Error>
