@@ -63,7 +63,7 @@ impl<S, C: Ctx> Reactor<S, C> {
         let closed = {
             let link = match self.links.get_mut(&sender_uuid) {
                 Some(link) => link,
-                None => panic!("no link with sender {:?}", sender_uuid),
+                None =>  panic!("No link found, did you open one?"),
             };
 
             let mut reactor_handle = ReactorHandle {
@@ -100,6 +100,7 @@ impl<S, C: Ctx> Reactor<S, C> {
     ) -> Result<(), capnp::Error>
     {
         let reader = message.reader();
+
         let msg = reader.get()?;
 
         if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
@@ -329,6 +330,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         self.ctx.dispatch_internal(message);
     }
 
+    /// ? Send message to the other side of the link
     pub fn send_message<T>(&mut self, msg_buffer: MsgBuffer<T>) {
         let mut builder = msg_buffer.into_builder();
         {

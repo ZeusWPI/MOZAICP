@@ -15,6 +15,7 @@ use futures::sync::mpsc;
 use futures::Future;
 
 use mozaic::core_capnp::{initialize, terminate_stream};
+use mozaic::chat_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
@@ -30,14 +31,13 @@ use cursive::theme::Theme;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::views::{TextView, EditView, LinearLayout};
 
-pub mod chat {
-    include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
-}
+// pub mod chat {
+//     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
+// }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let user = args.get(1).unwrap_or(&"Ben".to_string()).clone();
-    println!("current user {}", user);
 
     // Creates the cursive root - required for every application.
     let mut siv = Cursive::default();
@@ -127,7 +127,7 @@ impl ClientReactor {
         // dispatch this additional message to instruct the runtime link
         // to connect to the gui.
         // TODO: this is kind of initalization code, could it be avoided?
-        let msg = MsgBuffer::<chat::connect_to_gui::Owned>::new();
+        let msg = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
         handle.send_internal(msg);
 
         return Ok(());
@@ -147,12 +147,12 @@ impl ServerLink {
         );
 
         params.external_handler(
-            chat::chat_message::Owned,
+            chat_capnp::chat_message::Owned,
             CtxHandler::new(Self::receive_chat_message),
         );
 
         params.internal_handler(
-            chat::send_message::Owned,
+            chat_capnp::send_message::Owned,
             CtxHandler::new(Self::send_chat_message),
         );
 
@@ -164,13 +164,13 @@ impl ServerLink {
     fn send_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        send_message: chat::send_message::Reader,
+        send_message: chat_capnp::send_message::Reader,
     ) -> Result<(), capnp::Error>
     {
         let message = send_message.get_message()?;
         let user = send_message.get_user()?;
 
-        let mut chat_message = MsgBuffer::<chat::chat_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
         chat_message.build(|b| {
             b.set_message(message);
             b.set_user(user);
@@ -187,13 +187,13 @@ impl ServerLink {
     fn receive_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        chat_message: chat::chat_message::Reader,
+        chat_message: chat_capnp::chat_message::Reader,
     ) -> Result<(), capnp::Error>
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
 
-        let mut chat_message = MsgBuffer::<chat::chat_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
         chat_message.build(|b| {
             b.set_message(message);
             b.set_user(user);
@@ -226,17 +226,17 @@ impl RuntimeLink {
     fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
         params.internal_handler(
-            chat::connect_to_gui::Owned,
+            chat_capnp::connect_to_gui::Owned,
             CtxHandler::new(Self::connect_to_gui),
         );
 
         params.internal_handler(
-            chat::chat_message::Owned,
+            chat_capnp::chat_message::Owned,
             CtxHandler::new(Self::handle_chat_message),
         );
 
         params.external_handler(
-            chat::user_input::Owned,
+            chat_capnp::user_input::Owned,
             CtxHandler::new(Self::handle_user_input),
         );
 
@@ -247,10 +247,10 @@ impl RuntimeLink {
     fn connect_to_gui<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        _: chat::connect_to_gui::Reader,
+        _: chat_capnp::connect_to_gui::Reader,
     ) -> Result<(), capnp::Error>
     {
-        let connect = MsgBuffer::<chat::connect_to_gui::Owned>::new();
+        let connect = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
         handle.send_message(connect);
         return Ok(());
     }
@@ -259,13 +259,13 @@ impl RuntimeLink {
     fn handle_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        chat_message: chat::chat_message::Reader,
+        chat_message: chat_capnp::chat_message::Reader,
     ) -> Result<(), capnp::Error>
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
 
-        let mut chat_message = MsgBuffer::<chat::chat_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
         chat_message.build(|b| {
             b.set_message(message);
             b.set_user(user);
@@ -278,12 +278,12 @@ impl RuntimeLink {
     fn handle_user_input<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        input: chat::user_input::Reader,
+        input: chat_capnp::user_input::Reader,
     ) -> Result<(), capnp::Error>
     {
         let message = input.get_text()?;
 
-        let mut send_message = MsgBuffer::<chat::send_message::Owned>::new();
+        let mut send_message = MsgBuffer::<chat_capnp::send_message::Owned>::new();
         send_message.build(|b| {
             b.set_message(message);
             b.set_user(&self.user);
@@ -298,9 +298,9 @@ impl RuntimeLink {
 mod runtime {
     use capnp::any_pointer;
     use capnp::traits::{Owned, HasTypeId};
-    use chat;
+    use mozaic::chat_capnp;
     use crossbeam_channel;
-    use cursive::{Cursive, CbFunc};
+    use cursive::{Cursive, CbSink};
     use cursive::views::{TextView, EditView};
     use futures::{Future, Async, Poll, Stream};
     use futures::sync::mpsc;
@@ -310,7 +310,7 @@ mod runtime {
     use std::sync::{Arc, Mutex};
 
     struct HandlerState {
-        cb_sink: crossbeam_channel::Sender<Box<dyn CbFunc>>,
+        cb_sink: CbSink,
         runtime: Arc<Mutex<RuntimeState>>,
     }
 
@@ -324,7 +324,7 @@ mod runtime {
     impl RuntimeWorker {
         pub fn spawn(
             rx: mpsc::UnboundedReceiver<Message>,
-            cb_sink: crossbeam_channel::Sender<Box<dyn CbFunc>>,
+            cb_sink: CbSink,
             runtime: Arc<Mutex<RuntimeState>>
         ) {
                 let mut worker = RuntimeWorker {
@@ -337,15 +337,15 @@ mod runtime {
                     )
                 };
 
-                let _id = <chat::connect_to_gui::Owned as Owned>::Reader::type_id();
+                let _id = <chat_capnp::connect_to_gui::Owned as Owned>::Reader::type_id();
                 worker.handler_core.on(
-                    chat::connect_to_gui::Owned,
+                    chat_capnp::connect_to_gui::Owned,
                     FnHandler::new(rt_connect_to_gui),
                 );
 
-                let _id = <chat::chat_message::Owned as Owned>::Reader::type_id();
+                let _id = <chat_capnp::chat_message::Owned as Owned>::Reader::type_id();
                 worker.handler_core.on(
-                    chat::chat_message::Owned,
+                    chat_capnp::chat_message::Owned,
                     FnHandler::new(rt_display_chat_message),
                 );
 
@@ -374,7 +374,7 @@ mod runtime {
 
     fn rt_connect_to_gui(
         ctx: &mut RtHandlerCtx<HandlerState>,
-        _: chat::connect_to_gui::Reader
+        _: chat_capnp::connect_to_gui::Reader
     ) -> Result<(), capnp::Error>
     {
         let reactor_id = ctx.sender_id.clone();
@@ -385,9 +385,9 @@ mod runtime {
                 view.set_on_submit(move |cursive, input_text| {
                     runtime.lock().unwrap().send_message(
                         &reactor_id,
-                        chat::user_input::Owned,
+                        chat_capnp::user_input::Owned,
                         |b| {
-                            let mut input: chat::user_input::Builder = b.init_as();
+                            let mut input: chat_capnp::user_input::Builder = b.init_as();
                             input.set_text(input_text);
                         });
                     cursive.call_on_id("input", |view: &mut EditView| {
@@ -402,7 +402,7 @@ mod runtime {
 
     fn rt_display_chat_message(
         ctx: &mut RtHandlerCtx<HandlerState>,
-        msg: chat::chat_message::Reader
+        msg: chat_capnp::chat_message::Reader
     ) -> Result<(), capnp::Error>
     {
         let message = msg.get_message()?.to_string();

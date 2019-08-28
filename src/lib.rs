@@ -36,12 +36,22 @@ pub mod net;
 pub mod server;
 pub mod client;
 
+pub mod modules;
+
 pub mod protocol {
     include!(concat!(env!("OUT_DIR"), "/mozaic.protocol.rs"));
 }
 
 pub mod core_capnp {
     include!(concat!(env!("OUT_DIR"), "/core_capnp.rs"));
+}
+
+pub mod chat_capnp {
+    include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
+}
+
+pub mod my_capnp {
+    include!(concat!(env!("OUT_DIR"), "/my_capnp.rs"));
 }
 
 pub mod network_capnp {

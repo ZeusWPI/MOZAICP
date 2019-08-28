@@ -86,6 +86,11 @@ impl BrokerHandle {
 
     {
         let mut broker = self.broker.lock().unwrap();
+
+        if target == &broker.runtime_id {
+            panic!("This is not how you distribute a message locally. Target and runtime_id are the same...")
+        }
+
         let mut message_builder = ::capnp::message::Builder::new_default();
         {
             let mut msg = message_builder.init_root::<mozaic_message::Builder>();

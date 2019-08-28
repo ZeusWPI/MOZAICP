@@ -88,7 +88,6 @@ impl ControlHandler {
     pub fn quit(&mut self, _e: &events::ConnectionClosed)
         -> io::Result<WireEvent>
     {
-        println!("CONTROL CONNECItON CLOSED");
         let _handle = self.handle.take().unwrap();
         return Ok(WireEvent::null());
     }
