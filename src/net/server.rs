@@ -39,7 +39,7 @@ impl ServerHandler {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.broker.register(connecting_id.clone(), self.tx.clone());
 
-        self.broker.send_message(&self.welcomer_id, actor_joined::Owned, |b| {
+        self.broker.send_message_self(&self.welcomer_id, actor_joined::Owned, |b| {
             let mut joined: actor_joined::Builder = b.init_as();
             joined.set_id(connecting_id.bytes());
         });

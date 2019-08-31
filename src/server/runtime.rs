@@ -79,7 +79,16 @@ impl BrokerHandle {
         broker.actors.remove(&id);
     }
 
-    pub fn send_message<M, F>(&mut self, target: &ReactorId, _m: M, initializer: F)
+
+    pub fn send_message_self<M, F>(&mut self, target: &ReactorId, m: M, initializer: F)
+        where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
+              M: Owned<'static>,
+              <M as Owned<'static>>::Builder: HasTypeId,
+    {
+        self.send_message(&self.get_runtime_id(), target, m, initializer)
+    }
+
+    pub fn send_message<M, F>(&mut self, sender: &ReactorId, target: &ReactorId, _m: M, initializer: F)
         where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
               M: Owned<'static>,
               <M as Owned<'static>>::Builder: HasTypeId,
@@ -95,7 +104,7 @@ impl BrokerHandle {
         {
             let mut msg = message_builder.init_root::<mozaic_message::Builder>();
 
-            msg.set_sender(broker.runtime_id.bytes());
+            msg.set_sender(sender.bytes());
             msg.set_receiver(target.bytes());
 
             msg.set_type_id(<M as Owned<'static>>::Builder::type_id());
