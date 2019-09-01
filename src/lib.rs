@@ -60,3 +60,7 @@ pub mod match_control_capnp {
 pub mod mozaic_cmd_capnp {
     include!(concat!(env!("OUT_DIR"), "/mozaic/cmd_capnp.rs"));
 }
+
+pub mod log_capnp {
+    include!(concat!(env!("OUT_DIR"), "/mozaic/logging_capnp.rs"));
+}

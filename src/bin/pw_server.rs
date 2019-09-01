@@ -35,9 +35,11 @@ fn main() {
 
 
     tokio::run(futures::lazy(move || {
-
         broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()));
-        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id).params());
+        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id.clone()).params());
+
+
+        broker.spawn(reactors::logger_id(), reactors::LogReactor::params((stupid_id.clone(), "Main")));
 
         return Ok(());
     }));
@@ -75,6 +77,9 @@ impl Reactor {
         // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()));
 
+        handle.open_link(reactors::LogLink::params(reactors::logger_id()));
+
+        reactors::log_reactor(handle, "Starting!!");
         Ok(())
     }
 
@@ -83,11 +88,11 @@ impl Reactor {
         handle: &mut ReactorHandle<C>,
         r: start_game::Reader,
     ) -> Result<(), capnp::Error> {
-        println!("Starting game bois");
-
+        reactors::log_reactor(handle, "Creating new game!!");
 
         Ok(())
     }
+
 }
 
 /// Listen for command line messages and handle them.

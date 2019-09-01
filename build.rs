@@ -13,5 +13,7 @@ fn main() {
         .file("./schema/server_control.capnp")
         .file("./schema/my.capnp")
         .file("./schema/mozaic/cmd.capnp")
+        .file("./schema/mozaic/logging.capnp")
+
         .run().expect("schema compiler command");
 }
