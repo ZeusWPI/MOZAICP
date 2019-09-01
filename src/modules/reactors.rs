@@ -49,6 +49,8 @@ impl CmdReactor {
         handle.open_link(ForeignLink.params(self.foreign_id.clone()));
 
         setup_async_stdin(self.broker.clone(), handle.id().clone());
+
+        self.new_line();
         Ok(())
     }
 
@@ -59,10 +61,14 @@ impl CmdReactor {
     ) -> Result<(), capnp::Error> {
         let msg = r.get_message()?;
         println!("< {}", msg);
-        print!("> ");
-        stdout().flush().unwrap();
+        self.new_line();
 
         Ok(())
+    }
+
+    fn new_line(&self) {
+        print!("> ");
+        stdout().flush().unwrap();
     }
 }
 
