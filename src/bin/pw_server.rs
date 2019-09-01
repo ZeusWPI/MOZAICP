@@ -5,7 +5,7 @@ extern crate tokio;
 extern crate futures;
 extern crate rand;
 
-use mozaic::modules::{reactors};
+use mozaic::{modules};
 use mozaic::mozaic_cmd_capnp::{cmd_input, cmd_return};
 use mozaic::core_capnp::initialize;
 use mozaic::match_control_capnp::{start_game};
@@ -37,7 +37,7 @@ fn main() {
         let mut broker = Broker::new();
 
         broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main");
-        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd");
+        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd");
 
         return Ok(());
     }));
@@ -75,8 +75,8 @@ impl Reactor {
         // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()));
 
-        // handle.open_link(reactors::LogLink::params(reactors::logger_id()));
-        reactors::log_reactor(handle, "Starting!!");
+        // handle.open_link(modules::LogLink::params(modules::logger_id()));
+        modules::log_reactor(handle, "Starting!!");
         Ok(())
     }
 
@@ -85,7 +85,7 @@ impl Reactor {
         handle: &mut ReactorHandle<C>,
         r: start_game::Reader,
     ) -> Result<(), capnp::Error> {
-        reactors::log_reactor(handle, "Creating new game!!");
+        modules::log_reactor(handle, "Creating new game!!");
 
         Ok(())
     }

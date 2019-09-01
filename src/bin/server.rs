@@ -50,10 +50,10 @@ impl Welcomer {
         handle.open_link(link.params(self.runtime_id.clone()));
 
         let logger = Logger { from: handle.id().clone()};
-        let loggerId = handle.spawn(logger.params(), "logger");
+        let logger_id = handle.spawn(logger.params(), "logger");
 
-        let loggerLink = LoggerLink {};
-        handle.open_link(loggerLink.params(loggerId));
+        let logger_link = LoggerLink {};
+        handle.open_link(logger_link.params(logger_id));
         return Ok(());
     }
 
@@ -63,7 +63,7 @@ impl Welcomer {
         r: actor_joined::Reader,
     ) -> Result<(), capnp::Error>
     {
-        /// ? id is the id of the client reactor on the other side of the interwebs
+        //? id is the id of the client reactor on the other side of the interwebs
         let id: ReactorId = r.get_id()?.into();
         println!("welcoming {:?}", id);
         let link = WelcomerGreeterLink {};

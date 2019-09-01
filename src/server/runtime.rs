@@ -13,7 +13,7 @@ use rand::Rng;
 
 use messaging::types::*;
 use messaging::reactor::*;
-use modules::reactors;
+use modules;
 use log_capnp::{open_log_link};
 
 
@@ -35,7 +35,7 @@ impl Broker {
         };
         let mut broker = BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
 
-        broker.spawn(reactors::logger_id(), reactors::LogReactor::params((id, "Broker")), "Broker");
+        broker.spawn(modules::logger_id(), modules::LogReactor::params((id, "Broker")), "Broker");
 
         return broker;
     }
@@ -149,7 +149,7 @@ impl BrokerHandle {
             }
         };
 
-        self.send_message_self(&reactors::logger_id(), open_log_link::Owned, |b| {
+        self.send_message_self(&modules::logger_id(), open_log_link::Owned, |b| {
             let mut msg: open_log_link::Builder = b.init_as();
             msg.set_id(id.bytes());
             msg.set_name(name);
@@ -162,7 +162,7 @@ impl BrokerHandle {
             };
 
             let mut reactor_handle = driver.reactor.handle(&mut ctx_handle);
-            reactor_handle.open_link(reactors::LogLink::params(reactors::logger_id()));
+            reactor_handle.open_link(modules::LogLink::params(modules::logger_id()));
 
             let initialize = MsgBuffer::<initialize::Owned>::new();
             reactor_handle.send_internal(initialize);

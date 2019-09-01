@@ -17,13 +17,11 @@ extern crate rand;
 extern crate serde;
 extern crate serde_json;
 extern crate erased_serde;
-#[macro_use]
 extern crate error_chain;
 
 extern crate serde_derive;
 
 extern crate prost;
-#[macro_use]
 extern crate prost_derive;
 extern crate sodiumoxide;
 extern crate capnp;

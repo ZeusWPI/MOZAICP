@@ -5,7 +5,7 @@ use core_capnp::{initialize};
 use log_capnp::{open_log_link, log, inner_log};
 
 use std::fs::File;
-use std::io::{Write, self};
+use std::io::{Write};
 
 pub struct LogReactor {
     file: File,

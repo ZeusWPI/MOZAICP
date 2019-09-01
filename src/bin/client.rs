@@ -299,7 +299,6 @@ mod runtime {
     use capnp::any_pointer;
     use capnp::traits::{Owned, HasTypeId};
     use mozaic::chat_capnp;
-    use crossbeam_channel;
     use cursive::{Cursive, CbSink};
     use cursive::views::{TextView, EditView};
     use futures::{Future, Async, Poll, Stream};
