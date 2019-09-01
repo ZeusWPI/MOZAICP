@@ -4,7 +4,6 @@ use core_capnp::{initialize};
 
 use mozaic_cmd_capnp::{cmd_input, cmd_return};
 
-use std::mem;
 use std::io::{self, BufRead, Write, stdout};
 use std::thread;
 
