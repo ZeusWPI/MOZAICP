@@ -58,6 +58,10 @@ pub mod network_capnp {
     include!(concat!(env!("OUT_DIR"), "/network_capnp.rs"));
 }
 
+pub mod match_control_capnp {
+    include!(concat!(env!("OUT_DIR"), "/match_control_capnp.rs"));
+}
+
 pub mod mozaic_cmd_capnp {
     include!(concat!(env!("OUT_DIR"), "/mozaic/cmd_capnp.rs"));
 }

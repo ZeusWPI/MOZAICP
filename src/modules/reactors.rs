@@ -1,12 +1,11 @@
 use messaging::reactor::*;
 use messaging::types::*;
 use core_capnp::{initialize};
-use capnp::traits::{Owned, HasTypeId};
 
-use mozaic_cmd_capnp::{cmd_input, cmd_return, cmd};
+use mozaic_cmd_capnp::{cmd_input, cmd_return};
 
 use std::mem;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write, stdout};
 use std::thread;
 
 use server::runtime::BrokerHandle;
@@ -14,6 +13,8 @@ use server::runtime::BrokerHandle;
 use futures::{Future, Sink, Stream};
 use futures::sync::mpsc::channel;
 
+
+/// Parser to parse cmd input, but is this really required?
 pub trait Parser<C: Ctx>: Send {
     fn parse(
         &mut self,
@@ -25,7 +26,7 @@ pub trait Parser<C: Ctx>: Send {
 type BoxedParser<C> = Box<dyn Parser<C>>;
 
 
-
+/// Reactor to handle cmd input
 pub struct CmdReactor<C: Ctx> {
     foreign_id: ReactorId,
     broker: BrokerHandle,
@@ -47,7 +48,6 @@ impl<C> CmdReactor<C>
     pub fn params(self) -> CoreParams<Self, C> {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
-        // params.handler(my_capnp::sent_message::Owned, CtxHandler::new(Self::handle_sent));
         params.handler(cmd_return::Owned, CtxHandler::new(Self::handle_return));
 
         return params;
@@ -64,24 +64,26 @@ impl<C> CmdReactor<C>
         let parser = mem::replace(&mut self.parser, None).unwrap();
         handle.open_link(ForeignLink{parser}.params(self.foreign_id.clone()));
 
-
         setup_async_stdin(self.broker.clone(), handle.id().clone());
         Ok(())
     }
 
     fn handle_return(
         &mut self,
-        handle: &mut ReactorHandle<C>,
+        _: &mut ReactorHandle<C>,
         r: cmd_return::Reader,
     ) -> Result<(), capnp::Error> {
         let msg = r.get_message()?;
-        println!("{}", msg);
+        println!("< {}", msg);
+        print!("> ");
+        stdout().flush().unwrap();
 
         Ok(())
     }
 }
 
 
+/// Link from the reactor to the cmd line, only handling incoming messages
 struct CmdLink;
 
 impl CmdLink {
@@ -111,7 +113,8 @@ impl CmdLink {
 }
 
 
-
+/// Link from the cmd reactor to somewhere, sending through the cmd messages
+/// Also listening for messages that have to return to the command line
 struct ForeignLink<C: Ctx> {
     parser: BoxedParser<C>,
 }
@@ -125,6 +128,12 @@ impl<C> ForeignLink<C>
             cmd_input::Owned,
             CtxHandler::new(Self::i_handle_cmd),
         );
+
+        params.external_handler(
+            cmd_return::Owned,
+            CtxHandler::new(Self::e_handle_return)
+        );
+
 
         return params;
     }
@@ -147,9 +156,24 @@ impl<C> ForeignLink<C>
 
         Ok(())
     }
+
+    fn e_handle_return(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: cmd_return::Reader,
+    ) -> Result<(), capnp::Error> {
+        let message = r.get_message()?;
+
+        let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+        joined.build(|b| b.set_message(&message));
+        handle.send_internal(joined);
+
+        Ok(())
+    }
 }
 
 
+/// Helper function to make stdin async
 fn stdin() -> impl Stream<Item=String, Error=io::Error> {
     let (mut tx, rx) = channel(1);
     thread::spawn(move || {
@@ -165,6 +189,8 @@ fn stdin() -> impl Stream<Item=String, Error=io::Error> {
 }
 
 
+/// Read stdin async, and send messages from it
+/// Via broker, this is not preffered, but it's ok
 fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
     tokio::spawn(futures::lazy(move || {
         stdin().for_each(|string| {

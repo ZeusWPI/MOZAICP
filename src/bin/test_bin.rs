@@ -1,3 +1,5 @@
+#![feature(slice_patterns)]
+
 extern crate mozaic;
 extern crate sodiumoxide;
 extern crate hex;
@@ -13,13 +15,22 @@ extern crate capnp;
 use mozaic::modules::{reactors, links};
 use mozaic::core_capnp::initialize;
 use mozaic::my_capnp;
+use mozaic::match_control_capnp::{start_game};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
-use mozaic::server::runtime::{Broker, BrokerHandle, Runtime};
-
-use futures::Future;
+use mozaic::server::runtime::{Broker, Runtime};
 
 use rand::Rng;
+
+static HELP: &'static str = "\
+Please use one of the following commands:
+
+start [turn_count] [path_to_map_file]   To start a new game instance.
+status                                  Get the status update of all game instances.
+status [id]                             Get status of game instance.
+kill [id]                               Kill game instance.
+help                                    Print this help message.
+";
 
 struct MyParser;
 
@@ -30,8 +41,29 @@ impl reactors::Parser<Runtime> for MyParser {
         input: &str,
         handle: &mut LinkHandle<Runtime>
     ) -> Result<Option<String>, capnp::Error> {
-        println!("Trying to parse {}", input);
-        Ok(Some(":/".to_string()))
+
+        let split: Vec<&str> = input.split(" ").collect();
+        Ok(match split[..] {
+            ["start", turn_count, path, ..] => {
+                let turn_count: u64 = match turn_count.parse() {
+                    Ok(count) => count,
+                    Err(_) => return Ok(Some(HELP.to_string())),
+                };
+                let mut joined = MsgBuffer::<start_game::Owned>::new();
+
+                joined.build(|b| {
+                    b.set_map_path(path);
+                    b.set_max_turns(turn_count);
+                });
+
+                handle.send_message(joined);
+                None
+            },
+            _ => {
+
+                Some(HELP.to_string())
+            },
+        })
     }
 }
 
