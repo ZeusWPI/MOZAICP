@@ -14,38 +14,23 @@ use futures::{Future, Sink, Stream};
 use futures::sync::mpsc::channel;
 
 
-/// Parser to parse cmd input, but is this really required?
-pub trait Parser<C: Ctx>: Send {
-    fn parse(
-        &mut self,
-        input: &str,
-        handle: &mut LinkHandle<C>,
-    ) -> Result<Option<String>, capnp::Error>;
-}
-
-type BoxedParser<C> = Box<dyn Parser<C>>;
-
-
 /// Reactor to handle cmd input
-pub struct CmdReactor<C: Ctx> {
+pub struct CmdReactor {
     foreign_id: ReactorId,
     broker: BrokerHandle,
-    parser: Option<BoxedParser<C>>,
 }
 
-impl<C> CmdReactor<C>
-    where C: Ctx {
+impl CmdReactor {
 
-    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, parser: BoxedParser<C>) -> Self {
+    pub fn new(broker: BrokerHandle, foreign_id: ReactorId) -> Self {
 
         CmdReactor {
             foreign_id,
             broker,
-            parser: Some(parser),
         }
     }
 
-    pub fn params(self) -> CoreParams<Self, C> {
+    pub fn params<C: Ctx>(self) -> CoreParams<Self, C> {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         params.handler(cmd_return::Owned, CtxHandler::new(Self::handle_return));
@@ -53,7 +38,7 @@ impl<C> CmdReactor<C>
         return params;
     }
 
-    fn handle_initialize(
+    fn handle_initialize<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
@@ -61,14 +46,13 @@ impl<C> CmdReactor<C>
     {
         handle.open_link(CmdLink.params(handle.id().clone()));
 
-        let parser = mem::replace(&mut self.parser, None).unwrap();
-        handle.open_link(ForeignLink{parser}.params(self.foreign_id.clone()));
+        handle.open_link(ForeignLink.params(self.foreign_id.clone()));
 
         setup_async_stdin(self.broker.clone(), handle.id().clone());
         Ok(())
     }
 
-    fn handle_return(
+    fn handle_return<C: Ctx>(
         &mut self,
         _: &mut ReactorHandle<C>,
         r: cmd_return::Reader,
@@ -115,14 +99,11 @@ impl CmdLink {
 
 /// Link from the cmd reactor to somewhere, sending through the cmd messages
 /// Also listening for messages that have to return to the command line
-struct ForeignLink<C: Ctx> {
-    parser: BoxedParser<C>,
-}
+struct ForeignLink;
 
-impl<C> ForeignLink<C>
-    where C: Ctx {
+impl ForeignLink {
 
-    pub fn params(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
+    pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
         params.internal_handler(
             cmd_input::Owned,
@@ -138,26 +119,21 @@ impl<C> ForeignLink<C>
         return params;
     }
 
-    fn i_handle_cmd(
+    fn i_handle_cmd<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_input::Reader,
     ) -> Result<(), capnp::Error> {
         let msg = r.get_input()?;
 
-        match self.parser.parse(msg, handle)? {
-            Some(message) => {
-                let mut joined = MsgBuffer::<cmd_return::Owned>::new();
-                joined.build(|b| b.set_message(&message));
-                handle.send_internal(joined);
-            },
-            None => {}
-        }
+        let mut joined = MsgBuffer::<cmd_input::Owned>::new();
+        joined.build(|b| b.set_input(&msg));
+        handle.send_message(joined);
 
         Ok(())
     }
 
-    fn e_handle_return(
+    fn e_handle_return<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_return::Reader,

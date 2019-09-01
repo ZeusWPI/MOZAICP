@@ -13,6 +13,7 @@ extern crate crossbeam_channel;
 extern crate capnp;
 
 use mozaic::modules::{reactors, links};
+use mozaic::mozaic_cmd_capnp::{cmd_input, cmd_return};
 use mozaic::core_capnp::initialize;
 use mozaic::my_capnp;
 use mozaic::match_control_capnp::{start_game};
@@ -32,40 +33,6 @@ kill [id]                               Kill game instance.
 help                                    Print this help message.
 ";
 
-struct MyParser;
-
-impl reactors::Parser<Runtime> for MyParser {
-
-    fn parse(
-        &mut self,
-        input: &str,
-        handle: &mut LinkHandle<Runtime>
-    ) -> Result<Option<String>, capnp::Error> {
-
-        let split: Vec<&str> = input.split(" ").collect();
-        Ok(match split[..] {
-            ["start", turn_count, path, ..] => {
-                let turn_count: u64 = match turn_count.parse() {
-                    Ok(count) => count,
-                    Err(_) => return Ok(Some(HELP.to_string())),
-                };
-                let mut joined = MsgBuffer::<start_game::Owned>::new();
-
-                joined.build(|b| {
-                    b.set_map_path(path);
-                    b.set_max_turns(turn_count);
-                });
-
-                handle.send_message(joined);
-                None
-            },
-            _ => {
-
-                Some(HELP.to_string())
-            },
-        })
-    }
-}
 
 fn main() {
     let mut broker = Broker::new();
@@ -78,7 +45,7 @@ fn main() {
         // broker.spawn(cmd_id.clone(), cmd_reactor.params());
 
         broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone()));
-        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id, Box::new(MyParser)).params());
+        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id).params());
         return Ok(());
     }));
 }
@@ -92,8 +59,6 @@ impl Reactor {
         let mut params = CoreParams::new(Reactor { cmd_id });
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
 
-        params.handler(my_capnp::sent_message::Owned, CtxHandler::new(Self::handle_msg));
-
         return params;
     }
 
@@ -104,21 +69,80 @@ impl Reactor {
     ) -> Result<(), capnp::Error>
     {
         // sending to the cmd
-        let cmd_link = links::CommandLink {name: "mains linking to cmd_id"};
-        handle.open_link(cmd_link.params(self.cmd_id.clone()));
+        handle.open_link(CmdLink.params(self.cmd_id.clone()));
 
         Ok(())
     }
 
-    fn handle_msg<C: Ctx>(
+}
+
+struct CmdLink;
+
+impl CmdLink {
+    pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, self);
+        params.external_handler(
+            cmd_input::Owned,
+            CtxHandler::new(Self::e_handle_cmd),
+        );
+
+        params.internal_handler(
+            cmd_return::Owned,
+            CtxHandler::new(Self::i_handle_return),
+        );
+
+        return params;
+    }
+
+    fn e_handle_cmd<C: Ctx>(
         &mut self,
-        handle: &mut ReactorHandle<C>,
-        r: my_capnp::sent_message::Reader,
-    ) -> Result<(), capnp::Error>
-    {
+        handle: &mut LinkHandle<C>,
+        r: cmd_input::Reader,
+    ) -> Result<(), capnp::Error> {
+
+        // TODO: make fancy
+        // Parse the input
+        let split: Vec<&str> = r.get_input()?.split(" ").collect();
+        let error_msg = match split[..] {
+            ["start", turn_count, path, ..] => {
+                if let Ok(turn_count) = turn_count.parse() {
+                    let mut joined = MsgBuffer::<start_game::Owned>::new();
+
+                    joined.build(|b| {
+                        b.set_map_path(path);
+                        b.set_max_turns(turn_count);
+                    });
+
+                    handle.send_message(joined);
+
+                    return Ok(());
+                }
+                "That is not how you start a game...\n"
+            },
+            _ => {
+                ""
+            },
+        };
+
+        let msg = error_msg.to_string() + HELP;
+
+        let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+        joined.build(|b| b.set_message(&msg));
+        handle.send_message(joined);
+
+        Ok(())
+    }
+
+    fn i_handle_return<C: Ctx> (
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: cmd_return::Reader,
+    ) -> Result<(), capnp::Error> {
         let msg = r.get_message()?;
 
-        println!("Reactor got msg {}", msg);
+        let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+        joined.build(|b| b.set_message(msg));
+        handle.send_message(joined);
 
         Ok(())
     }
