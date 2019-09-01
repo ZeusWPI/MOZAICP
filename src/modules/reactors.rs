@@ -5,7 +5,7 @@ use capnp::traits::{Owned, HasTypeId};
 
 use mozaic_cmd_capnp::{cmd_input, cmd_return, cmd};
 
-
+use std::mem;
 use std::io::{self, BufRead};
 use std::thread;
 
@@ -18,26 +18,29 @@ pub trait Parser<C: Ctx>: Send {
     fn parse(
         &mut self,
         input: &str,
-        handle: &mut ReactorHandle<C>,
+        handle: &mut LinkHandle<C>,
     ) -> Result<Option<String>, capnp::Error>;
 }
+
+type BoxedParser<C> = Box<dyn Parser<C>>;
+
 
 
 pub struct CmdReactor<C: Ctx> {
     foreign_id: ReactorId,
     broker: BrokerHandle,
-    parser: Box<dyn Parser<C>>,
+    parser: Option<BoxedParser<C>>,
 }
 
 impl<C> CmdReactor<C>
     where C: Ctx {
 
-    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, parser: Box<dyn Parser<C>>) -> Self {
+    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, parser: BoxedParser<C>) -> Self {
 
         CmdReactor {
             foreign_id,
             broker,
-            parser,
+            parser: Some(parser),
         }
     }
 
@@ -45,7 +48,6 @@ impl<C> CmdReactor<C>
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         // params.handler(my_capnp::sent_message::Owned, CtxHandler::new(Self::handle_sent));
-        params.handler(cmd_input::Owned, CtxHandler::new(Self::handle_command));
         params.handler(cmd_return::Owned, CtxHandler::new(Self::handle_return));
 
         return params;
@@ -59,10 +61,13 @@ impl<C> CmdReactor<C>
     {
         handle.open_link(CmdLink.params(handle.id().clone()));
 
+        let parser = mem::replace(&mut self.parser, None).unwrap();
+        handle.open_link(ForeignLink{parser}.params(self.foreign_id.clone()));
+
+
         setup_async_stdin(self.broker.clone(), handle.id().clone());
         Ok(())
     }
-
 
     fn handle_return(
         &mut self,
@@ -74,27 +79,8 @@ impl<C> CmdReactor<C>
 
         Ok(())
     }
-
-    fn handle_command(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        r: cmd_input::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let msg = r.get_input()?;
-
-        match self.parser.parse(msg, handle)? {
-            Some(message) => {
-                    let mut joined = MsgBuffer::<cmd_return::Owned>::new();
-                joined.build(|b| b.set_message(&message));
-                handle.send_internal(joined);
-            },
-            None => {}
-        }
-
-        Ok(())
-    }
 }
+
 
 struct CmdLink;
 
@@ -119,6 +105,45 @@ impl CmdLink {
         let mut joined = MsgBuffer::<cmd_input::Owned>::new();
         joined.build(|b| b.set_input(msg));
         handle.send_internal(joined);
+
+        Ok(())
+    }
+}
+
+
+
+struct ForeignLink<C: Ctx> {
+    parser: BoxedParser<C>,
+}
+
+impl<C> ForeignLink<C>
+    where C: Ctx {
+
+    pub fn params(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, self);
+        params.internal_handler(
+            cmd_input::Owned,
+            CtxHandler::new(Self::i_handle_cmd),
+        );
+
+        return params;
+    }
+
+    fn i_handle_cmd(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: cmd_input::Reader,
+    ) -> Result<(), capnp::Error> {
+        let msg = r.get_input()?;
+
+        match self.parser.parse(msg, handle)? {
+            Some(message) => {
+                let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+                joined.build(|b| b.set_message(&message));
+                handle.send_internal(joined);
+            },
+            None => {}
+        }
 
         Ok(())
     }

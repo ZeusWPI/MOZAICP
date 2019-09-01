@@ -28,7 +28,7 @@ impl reactors::Parser<Runtime> for MyParser {
     fn parse(
         &mut self,
         input: &str,
-        handle: &mut ReactorHandle<Runtime>
+        handle: &mut LinkHandle<Runtime>
     ) -> Result<Option<String>, capnp::Error> {
         println!("Trying to parse {}", input);
         Ok(Some(":/".to_string()))
