@@ -71,7 +71,7 @@ impl KxKeypair {
         }
     }
 
-    pub fn server_session_keys(&self, client_pk: &kx::PublicKey) 
+    pub fn server_session_keys(&self, client_pk: &kx::PublicKey)
         -> Result<SessionKeys>
     {
         let res = kx::server_session_keys(
@@ -133,7 +133,7 @@ impl Encryptor {
     }
 
     pub fn decrypt(&mut self, data: &[u8]) -> io::Result<Vec<u8>> {
-        let encrypted = try!(EncryptedPacket::decode(data));
+        let encrypted = EncryptedPacket::decode(data)?;
 
         let nonce = match aead::Nonce::from_slice(&encrypted.nonce) {
             None => bail!(

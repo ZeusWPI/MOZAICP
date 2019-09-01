@@ -15,6 +15,7 @@ use messaging::types::*;
 use messaging::reactor::*;
 
 
+/// The main runtime
 pub struct Runtime;
 
 pub struct Broker {

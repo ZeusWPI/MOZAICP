@@ -17,5 +17,6 @@ fn main() {
         .file("../schema/match_events.capnp")
         .file("../schema/server_control.capnp")
         .file("../schema/my.capnp")
+        .file("../schema/mozaic/cmd.capnp")
         .run().expect("schema compiler command");
 }

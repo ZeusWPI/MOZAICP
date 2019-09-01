@@ -2,6 +2,8 @@ use messaging::reactor::*;
 use messaging::types::*;
 use core_capnp::{initialize};
 use my_capnp;
+use mozaic_cmd_capnp::{cmd_input, cmd_return, cmd};
+
 
 use super::links;
 
@@ -13,17 +15,26 @@ use server::runtime::BrokerHandle;
 use futures::{Future, Sink, Stream};
 use futures::sync::mpsc::channel;
 
+pub struct Command {
+    inner: MsgBuffer<cmd::Reader>,
+}
+
+pub type Parser = Box<dyn Fn(&str) -> Result<Command, String> + Send>;
+
+
 pub struct CmdReactor {
     foreign_id: ReactorId,
     broker: BrokerHandle,
+    parser: Parser,
 }
 
 impl CmdReactor {
-    pub fn new(broker: BrokerHandle, foreign_id: ReactorId) -> Self {
+    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, parser: Parser) -> Self {
 
         CmdReactor {
             foreign_id,
             broker,
+            parser,
         }
     }
 
@@ -31,7 +42,8 @@ impl CmdReactor {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         // params.handler(my_capnp::sent_message::Owned, CtxHandler::new(Self::handle_sent));
-        params.handler(my_capnp::send_message::Owned, CtxHandler::new(Self::handle_send));
+        params.handler(cmd_input::Owned, CtxHandler::new(Self::handle_command));
+        params.handler(cmd_return::Owned, CtxHandler::new(Self::handle_return));
 
         return params;
     }
@@ -42,54 +54,50 @@ impl CmdReactor {
         _: initialize::Reader,
     ) -> Result<(), capnp::Error>
     {
-        let id = handle.id().clone();
+        setup_async_stdin(self.broker.clone(), handle.id().clone());
+        Ok(())
+    }
 
-        let cmd_link = links::CommandLink { name: "self link"};
-        handle.open_link(cmd_link.params(id.clone()));
 
-        let cmd_link = links::CommandLink { name: "cmd to reactor link"};
-        handle.open_link(cmd_link.params(self.foreign_id.clone()));
-
-        let mut broker = self.broker.clone();
-        tokio::spawn(futures::lazy(move || {
-            stdin().for_each(|string| {
-                broker.send_message(
-                    &id,
-                    &id,
-                    my_capnp::send_message::Owned,
-                    move |b| {
-                        let mut msg: my_capnp::send_message::Builder = b.init_as();
-                        msg.set_message(&string);
-                    }
-                );
-                Ok(())
-            })
-            .wait()
-            .map_err(|_| ())
-            .unwrap();
-            Ok(())
-        }));
+    fn handle_return<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        r: cmd_return::Reader,
+    ) -> Result<(), capnp::Error> {
+        let msg = r.get_message()?;
+        println!("{}", msg);
 
         Ok(())
     }
 
-    fn handle_send<C: Ctx>(
+    fn handle_command<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
-        r: my_capnp::send_message::Reader,
+        r: cmd_input::Reader,
     ) -> Result<(), capnp::Error>
     {
-        let msg = r.get_message()?;
+        let msg = r.get_input()?;
 
-        // println!("CmdReactor senD got msg {}", msg);
-
-        let mut joined = MsgBuffer::<my_capnp::sent_message::Owned>::new();
-        joined.build(|b| b.set_message(msg));
-        handle.send_internal(joined);
+        match (self.parser)(msg) {
+            Ok(command) => {
+                let payload = command.inner.get_payload()?;
+                handle.send_internal(payload);
+            },
+            Err(msg) => {
+                let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+                joined.build(|b| b.set_message(&msg));
+                handle.send_internal(joined);
+            }
+        }
 
         Ok(())
     }
 }
+
+struct CmdLink {
+
+}
+
 
 fn stdin() -> impl Stream<Item=String, Error=io::Error> {
     let (mut tx, rx) = channel(1);
@@ -103,4 +111,25 @@ fn stdin() -> impl Stream<Item=String, Error=io::Error> {
         }
     });
     rx.then(|e| e.unwrap())
+}
+
+fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
+    tokio::spawn(futures::lazy(move || {
+        stdin().for_each(|string| {
+            broker.send_message(
+                &id,
+                &id,
+                cmd_input::Owned,
+                move |b| {
+                    let mut msg: cmd_input::Builder = b.init_as();
+                    msg.set_input(&string);
+                }
+            );
+            Ok(())
+        })
+        .wait()
+        .map_err(|_| ())
+        .unwrap();
+        Ok(())
+    }));
 }

@@ -56,7 +56,7 @@ impl Channel {
         // space.
         msg.encode(&mut bytes).unwrap();
 
-        match try!(self.start_send(bytes)) {
+        match self.start_send(bytes)? {
             AsyncSink::Ready => Ok(()),
             AsyncSink::NotReady(_) => panic!("sink was not ready"),
         }
