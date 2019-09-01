@@ -1,147 +1,164 @@
-use std::env;
+#![feature(slice_patterns)]
 
-extern crate sodiumoxide;
-extern crate serde_json;
+extern crate mozaic;
 extern crate tokio;
 extern crate futures;
-extern crate mozaic;
 extern crate rand;
-extern crate capnp;
 
-use std::net::SocketAddr;
-use mozaic::core_capnp::{initialize, actor_joined};
-use mozaic::messaging::types::*;
+use mozaic::modules::{reactors};
+use mozaic::mozaic_cmd_capnp::{cmd_input, cmd_return};
+use mozaic::core_capnp::initialize;
+use mozaic::match_control_capnp::{start_game};
 use mozaic::messaging::reactor::*;
-use mozaic::server::run_server;
+use mozaic::messaging::types::*;
+use mozaic::server::runtime::{Broker, BrokerHandle};
 
-pub mod pw {
-    include!(concat!(env!("OUT_DIR"), "/planetwars_capnp.rs"));
-}
+use rand::Rng;
 
-// Load the config and start the game.
+use std::collections::HashMap;
+
+static HELP: &'static str = "\
+Please use one of the following commands:
+
+start [turn_count] [path_to_map_file]   To start a new game instance.
+status                                  Get the status update of all game instances.
+status [id]                             Get status of game instance.
+kill [id]                               Kill game instance.
+help                                    Print this help message.
+";
+
+
 fn main() {
-    run(env::args().collect());
+    let mut broker = Broker::new();
+    let stupid_id: ReactorId = rand::thread_rng().gen();
+    let cmd_id: ReactorId = rand::thread_rng().gen();
+
+
+    tokio::run(futures::lazy(move || {
+
+        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()));
+        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id).params());
+
+        return Ok(());
+    }));
 }
 
 
-struct PwRuntime {
-    runtime_id: ReactorId,
+/// The main starting reactor
+struct Reactor {
+    cmd_id: ReactorId,
+    broker: BrokerHandle,
+    games: HashMap<ReactorId, i32>,
 }
 
-impl PwRuntime {
-    fn params<C: Ctx>(self) -> CoreParams<Self, C> {
-        let mut params = CoreParams::new(self);
-        params.handler(initialize::Owned, CtxHandler::new(Self::initialize));
-        params.handler(actor_joined::Owned, CtxHandler::new(Self::welcome));
-        params.handler(
-            pw::pw_move::Owned,
-            CtxHandler::new(Self::handle_turn)
-        );
+impl Reactor {
+    fn new(cmd_id: ReactorId, broker: BrokerHandle) -> Self {
+        Reactor {
+            cmd_id, broker,
+            games: HashMap::new(),
+        }
+    }
+
+    fn params<C: Ctx>(cmd_id: ReactorId, broker: BrokerHandle) -> CoreParams<Self, C> {
+        let mut params = CoreParams::new(Reactor::new(cmd_id, broker));
+        params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
+        params.handler(start_game::Owned, CtxHandler::new(Self::start_game));
         return params;
     }
 
-    fn initialize<C: Ctx>(
+    fn handle_initialize<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
     ) -> Result<(), capnp::Error>
     {
-        let link = ClientServerLink { };
-        handle.open_link(link.params(self.runtime_id.clone()));
-        return Ok(());
+        // open link with command line
+        handle.open_link(CmdLink.params(self.cmd_id.clone()));
+
+        Ok(())
     }
 
-    fn welcome<C: Ctx>(
+    fn start_game<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
-        r: actor_joined::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let id: ReactorId = r.get_id()?.into();
-        println!("welcoming {:?}", id);
-        let link = ClientServerLink { };
-        handle.open_link(link.params(id));
-        return Ok(());
-    }
+        r: start_game::Reader,
+    ) -> Result<(), capnp::Error> {
+        println!("Starting game bois");
 
-    fn handle_turn<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        r: pw::pw_move::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        println!("{}: {}", r.get_user_id(), r.get_move()?);
-        return Ok(());
+
+        Ok(())
     }
 }
 
-struct ClientServerLink {
-}
+/// Listen for command line messages and handle them.
+struct CmdLink;
 
-impl ClientServerLink {
-    fn params<C: Ctx>(self, client_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(client_id, self);
-
-        params.internal_handler(
-            pw::pw_state::Owned,
-            CtxHandler::new(Self::send_state),
+impl CmdLink {
+    pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, self);
+        params.external_handler(
+            cmd_input::Owned,
+            CtxHandler::new(Self::e_handle_cmd),
         );
 
-        params.external_handler(
-            pw::pw_move::Owned,
-            CtxHandler::new(Self::recv_turn),
+        params.internal_handler(
+            cmd_return::Owned,
+            CtxHandler::new(Self::i_handle_return),
         );
 
         return params;
     }
 
-    fn send_state<C: Ctx>(
+    fn e_handle_cmd<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: pw::pw_state::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let turn = message.get_turn();
-        let state = message.get_state()?;
+        r: cmd_input::Reader,
+    ) -> Result<(), capnp::Error> {
 
-        let mut pw_state = MsgBuffer::<pw::pw_state::Owned>::new();
-        pw_state.build(|b| {
-            b.set_turn(turn);
-            b.set_state(state);
-        });
-        handle.send_message(pw_state);
+        // TODO: make fancy
+        // Parse the input
+        let split: Vec<&str> = r.get_input()?.split(" ").collect();
+        let error_msg = match split[..] {
+            ["start", turn_count, path, ..] => {
+                if let Ok(turn_count) = turn_count.parse() {
+                    let mut joined = MsgBuffer::<start_game::Owned>::new();
 
-        return Ok(());
+                    joined.build(|b| {
+                        b.set_map_path(path);
+                        b.set_max_turns(turn_count);
+                    });
+
+                    handle.send_internal(joined);
+
+                    return Ok(());
+                }
+                "That is not how you start a game...\n"
+            },
+            _ => {
+                ""
+            },
+        };
+
+        let msg = error_msg.to_string() + HELP;
+
+        let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+        joined.build(|b| b.set_message(&msg));
+        handle.send_message(joined);
+
+        Ok(())
     }
 
-    fn recv_turn<C: Ctx>(
+    fn i_handle_return<C: Ctx> (
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: pw::pw_move::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let turn = message.get_move()?;
-        let client_id = message.get_user_id();
-        println!("Got move from {}", client_id);
+        r: cmd_return::Reader,
+    ) -> Result<(), capnp::Error> {
+        let msg = r.get_message()?;
 
-        let mut turn_with_id = MsgBuffer::<pw::pw_move::Owned>::new();
-        turn_with_id.build(|b| {
-            b.set_move(turn);
-            b.set_user_id(client_id);
-        });
+        let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+        joined.build(|b| b.set_message(msg));
+        handle.send_message(joined);
 
-        handle.send_internal(turn_with_id);
-
-        return Ok(());
+        Ok(())
     }
-}
-
-pub fn run(_args : Vec<String>) {
-
-    let addr = "127.0.0.1:9142".parse::<SocketAddr>().unwrap();
-
-    run_server(addr, |runtime_id| {
-        let w = PwRuntime { runtime_id };
-        return w.params();
-    });
 }
