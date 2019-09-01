@@ -17,7 +17,7 @@ use mozaic::core_capnp::initialize;
 use mozaic::match_control_capnp::{start_game};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
-use mozaic::server::runtime::{Broker};
+use mozaic::server::runtime::{Broker, BrokerHandle};
 
 use rand::Rng;
 
@@ -57,7 +57,7 @@ impl Reactor {
     fn params<C: Ctx>(cmd_id: ReactorId) -> CoreParams<Self, C> {
         let mut params = CoreParams::new(Reactor { cmd_id });
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
-
+        params.handler(start_game::Owned, CtxHandler::new(Self::start_game));
         return params;
     }
 
@@ -69,6 +69,16 @@ impl Reactor {
     {
         // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()));
+
+        Ok(())
+    }
+
+    fn start_game<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        r: start_game::Reader,
+    ) -> Result<(), capnp::Error> {
+        println!("Starting game bois");
 
         Ok(())
     }
@@ -112,7 +122,7 @@ impl CmdLink {
                         b.set_max_turns(turn_count);
                     });
 
-                    handle.send_message(joined);
+                    handle.send_internal(joined);
 
                     return Ok(());
                 }
