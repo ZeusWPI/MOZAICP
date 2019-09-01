@@ -4,7 +4,6 @@ extern crate mozaic;
 extern crate sodiumoxide;
 extern crate hex;
 extern crate tokio;
-#[macro_use]
 extern crate futures;
 extern crate prost;
 extern crate rand;
@@ -12,14 +11,13 @@ extern crate cursive;
 extern crate crossbeam_channel;
 extern crate capnp;
 
-use mozaic::modules::{reactors, links};
+use mozaic::modules::{reactors};
 use mozaic::mozaic_cmd_capnp::{cmd_input, cmd_return};
 use mozaic::core_capnp::initialize;
-use mozaic::my_capnp;
 use mozaic::match_control_capnp::{start_game};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
-use mozaic::server::runtime::{Broker, Runtime};
+use mozaic::server::runtime::{Broker};
 
 use rand::Rng;
 
@@ -41,15 +39,16 @@ fn main() {
 
 
     tokio::run(futures::lazy(move || {
-        // let cmd_reactor = reactors::CmdReactor::new(broker.clone(), stupid_id.clone());
-        // broker.spawn(cmd_id.clone(), cmd_reactor.params());
 
         broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone()));
         broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id).params());
+
         return Ok(());
     }));
 }
 
+
+/// The main starting reactor
 struct Reactor {
     cmd_id: ReactorId,
 }
@@ -68,14 +67,14 @@ impl Reactor {
         _: initialize::Reader,
     ) -> Result<(), capnp::Error>
     {
-        // sending to the cmd
+        // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()));
 
         Ok(())
     }
-
 }
 
+/// Listen for command line messages and handle them.
 struct CmdLink;
 
 impl CmdLink {
