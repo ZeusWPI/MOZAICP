@@ -29,7 +29,6 @@ extern crate sodiumoxide;
 extern crate capnp;
 extern crate capnp_futures;
 
-pub mod network;
 pub mod messaging;
 pub mod net;
 
@@ -37,10 +36,6 @@ pub mod server;
 pub mod client;
 
 pub mod modules;
-
-pub mod protocol {
-    include!(concat!(env!("OUT_DIR"), "/mozaic.protocol.rs"));
-}
 
 pub mod core_capnp {
     include!(concat!(env!("OUT_DIR"), "/core_capnp.rs"));
