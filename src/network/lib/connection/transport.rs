@@ -93,7 +93,7 @@ impl Transport {
 
         let encrypted = self.encryptor.encrypt(&data_buffer);
 
-        let res = try!(self.channel.start_send(encrypted));
+        let res = self.channel.start_send(encrypted)?;
         assert!(res.is_ready(), "writing to channel blocked");
         return Ok(Async::Ready(()));
     }
@@ -106,7 +106,7 @@ impl Transport {
             let packet = match self.channel.poll().unwrap() {
                 Async::NotReady => return Ok(Async::NotReady),
                 Async::Ready(None) => bail!(io::ErrorKind::ConnectionAborted),
-                Async::Ready(Some(bytes)) => try!(self.decode_packet(&bytes)),
+                Async::Ready(Some(bytes)) => self.decode_packet(&bytes)?,
             };
 
             // TODO: how should these faulty cases be handled?
@@ -134,13 +134,13 @@ impl Transport {
     pub fn poll(&mut self, state: &mut ConnectionState)
         -> Poll<Vec<u8>, io::Error>
     {
-        try!(self.send_messages(state));
+        self.send_messages(state)?;
         return self.receive_message(state);
     }
 
     fn decode_packet(&mut self, bytes: &[u8]) -> io::Result<Packet> {
-        let data = try!(self.encryptor.decrypt(bytes));
-        let packet = try!(Packet::decode(&data));
+        let data = self.encryptor.decrypt(bytes)?;
+        let packet = Packet::decode(&data)?;
         return Ok(packet);
     }
 }

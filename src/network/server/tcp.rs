@@ -134,7 +134,7 @@ impl<R> TcpStreamHandler<R>
             match instruction {
                 TransportInstruction::Send { channel_num, data } => {
                     let frame = proto::Frame { channel_num, data };
-                    let res = try!(self.stream.start_send(frame));
+                    let res = self.stream.start_send(frame)?;
                     assert!(res.is_ready(), "writing to MessageStream blocked");
 
                 }
@@ -146,7 +146,7 @@ impl<R> TcpStreamHandler<R>
     }
 
     pub fn poll_(&mut self) -> Poll<(), io::Error> {
-        try!(self.poll_instructions());
+        self.poll_instructions()?;
         return self.poll_stream();
     }
 }

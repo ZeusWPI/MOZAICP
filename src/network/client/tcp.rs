@@ -29,7 +29,7 @@ struct TcpStreamTransport {
 impl TcpStreamTransport {
     pub fn new(stream: TcpStream) -> Self {
         let (snd, recv) = mpsc::channel(32);
-       
+
        TcpStreamTransport {
             stream: MessageStream::new(ProtobufTransport::new(stream)),
             channels: HashMap::new(),
@@ -77,7 +77,7 @@ impl TcpStreamTransport {
             match instruction {
                 TransportInstruction::Send { channel_num, data } => {
                     let frame = proto::Frame { channel_num, data };
-                    let res = try!(self.stream.start_send(frame));
+                    let res = self.stream.start_send(frame)?;
                     assert!(res.is_ready(), "writing to MessageStream blocked");
 
                 }
@@ -92,9 +92,9 @@ impl TcpStreamTransport {
 impl Future for TcpStreamTransport {
     type Item = ();
     type Error = io::Error;
-    
+
     fn poll(&mut self) -> Poll<(), io::Error> {
-        try!(self.poll_instructions());
+        self.poll_instructions()?;
         return self.poll_stream();
     }
 }

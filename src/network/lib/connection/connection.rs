@@ -102,7 +102,7 @@ impl<H> Connection<H>
         };
 
         loop {
-            match try!(transport.poll(&mut self.state)) {
+            match transport.poll(&mut self.state)? {
                 Async::Ready(data) => {
                     self.handler.on_message(data);
                 }
@@ -147,10 +147,10 @@ impl<H> Future for Connection<H>
 
     fn poll(&mut self) -> Poll<(), ()> {
         loop {
-            if try!(self.poll_ctrl_chan()).is_ready() {
+            if ( self.poll_ctrl_chan()? ).is_ready() {
                 self.state.should_close = true;
             }
-            
+
             // TODO: this could probably be simplified even further
             if self.state.is_closed() {
                 return self.poll_complete();

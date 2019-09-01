@@ -60,7 +60,7 @@ impl<R> RoutingTableHandle<R>
         -> Result<ConnectionRouting<R>, io::Error>
     {
         let mut table = self.routing_table.lock().unwrap();
-        let routing = try!(table.router.route(msg));
+        let routing = table.router.route(msg)?;
 
         let conn_routing = match routing {
             Routing::Connect(connection_id) => {

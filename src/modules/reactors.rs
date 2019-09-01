@@ -1,11 +1,8 @@
 use messaging::reactor::*;
 use messaging::types::*;
 use core_capnp::{initialize};
-use my_capnp;
 use mozaic_cmd_capnp::{cmd_input, cmd_return, cmd};
 
-
-use super::links;
 
 use std::io::{self, BufRead};
 use std::thread;

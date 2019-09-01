@@ -86,7 +86,7 @@ impl<R> Handshaker<R>
                 return Ok(Async::Ready(()));
             };
 
-            match try!(state.step()) {
+            match state.step()? {
                 Step::NotReady(state) => {
                     self.state = state;
                     return Ok(Async::NotReady);

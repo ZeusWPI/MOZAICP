@@ -3,14 +3,12 @@ pub mod runtime;
 use std::net::SocketAddr;
 use std::io;
 
-use core_capnp::{actor_joined, initialize};
-
 use futures::{Future, Poll};
 use tokio::net::TcpListener;
 use rand::Rng;
 
 use messaging::types::*;
-use messaging::reactor::{CoreParams, ReactorHandle, Ctx, CtxHandler, LinkParams};
+use messaging::reactor::{CoreParams};
 
 use self::runtime::{Broker, BrokerHandle, Runtime};
 

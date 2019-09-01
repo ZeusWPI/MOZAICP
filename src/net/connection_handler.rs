@@ -159,7 +159,7 @@ impl<S> StreamHandler<S> {
 
     fn poll_transport(&mut self) -> Poll<(), capnp::Error> {
         while let Some(reader) = try_ready!(self.transport.poll()) {
-            try!(self.handle_message(reader));
+            self.handle_message(reader)?;
             try_ready!(self.flush_writes());
         }
         return Ok(Async::Ready(()));

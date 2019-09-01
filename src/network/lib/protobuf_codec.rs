@@ -29,7 +29,7 @@ impl<T, M> Stream for MessageStream<T, M>
             None => None,
             Some(bytes_mut) => {
                 let bytes = bytes_mut.freeze();
-                let msg = try!(M::decode(bytes));
+                let msg = M::decode(bytes)?;
                 Some(msg)
             }
         };
@@ -51,7 +51,7 @@ impl<T, M> MessageStream<T, M>
 
     fn poll_send(&mut self) -> Poll<(), Error> {
         if let Some(bytes) = self.buffered.take() {
-            match try!(self.inner.start_send(bytes)) {
+            match self.inner.start_send(bytes)? {
                 AsyncSink::Ready => (),
                 AsyncSink::NotReady(bytes) => {
                     self.buffered = Some(bytes);
@@ -71,7 +71,7 @@ impl<T, M> Sink for MessageStream<T, M>
     type SinkError = Error;
 
     fn start_send(&mut self, item: M) -> StartSend<M, Error> {
-        match try!(self.poll_send()) {
+        match self.poll_send()? {
             Async::NotReady => Ok(AsyncSink::NotReady(item)),
             Async::Ready(()) => {
                 let mut bytes = BytesMut::with_capacity(item.encoded_len());
@@ -86,7 +86,7 @@ impl<T, M> Sink for MessageStream<T, M>
     }
 
     fn poll_complete(&mut self) -> Poll<(), Error> {
-        let res = try!(self.poll_send());
+        let res = self.poll_send()?;
         try_ready!(self.inner.poll_complete());
         return Ok(res);
     }
@@ -123,7 +123,7 @@ impl<T> ProtobufTransport<T>
             None => None,
             Some(bytes_mut) => {
                 let bytes = bytes_mut.freeze();
-                let msg = try!(M::decode(bytes));
+                let msg = M::decode(bytes)?;
                 Some(msg)
             },
         };
@@ -213,7 +213,7 @@ impl Decoder for LengthDelimited {
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<BytesMut>> {
         let n = match self.decoder_state {
             DecoderState::Head => {
-                match try!(self.decode_head(buf)) {
+                match self.decode_head(buf)? {
                     Some(n) => {
                         self.decoder_state = DecoderState::Data(n);
                         n
@@ -224,7 +224,7 @@ impl Decoder for LengthDelimited {
             DecoderState::Data(n) => n,
         };
 
-        match try!(self.decode_data(n, buf)) {
+        match self.decode_data(n, buf)? {
             Some(data) => {
                 self.decoder_state = DecoderState::Head;
                 Ok(Some(data))

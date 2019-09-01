@@ -120,7 +120,7 @@ impl Handshake {
                             .client_session_keys(&data.kx_server_pk)?;
                         return Ok(Async::Ready(session_keys));
                     }
-                }                
+                }
             }
             ServerMessage::ConnectionRefused(refused) => {
                 // TODO: produce nicer error or something
@@ -137,8 +137,8 @@ impl Handshake {
 
         loop {
             let frame = try_ready!(channel.poll_frame());
-            let signed_msg = try!(SignedMessage::decode(&frame));
-            let server_msg = try!(HandshakeServerMessage::decode(&signed_msg.data));
+            let signed_msg = SignedMessage::decode(&frame)?;
+            let server_msg = HandshakeServerMessage::decode(&signed_msg.data)?;
             if let Some(payload) =  server_msg.payload {
                 return Ok(Async::Ready(payload));
             }
@@ -152,7 +152,7 @@ impl Handshake {
         };
 
         if let Some(buf) = self.send_buf.take() {
-            match try!(channel.start_send(buf)) {
+            match channel.start_send(buf)? {
                 AsyncSink::Ready => {}
                 AsyncSink::NotReady(buf) => {
                     self.send_buf = Some(buf);
