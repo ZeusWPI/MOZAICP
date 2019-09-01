@@ -209,7 +209,6 @@ pub trait LinkReducerTrait<C: Ctx>: 'static + Send {
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
     ) -> Result<(), capnp::Error>;
-
 }
 
 impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>

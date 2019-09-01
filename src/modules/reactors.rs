@@ -1,6 +1,8 @@
 use messaging::reactor::*;
 use messaging::types::*;
 use core_capnp::{initialize};
+use capnp::traits::{Owned, HasTypeId};
+
 use mozaic_cmd_capnp::{cmd_input, cmd_return, cmd};
 
 
@@ -12,21 +14,25 @@ use server::runtime::BrokerHandle;
 use futures::{Future, Sink, Stream};
 use futures::sync::mpsc::channel;
 
-pub struct Command {
-    inner: MsgBuffer<cmd::Reader>,
+pub trait Parser<C: Ctx>: Send {
+    fn parse(
+        &mut self,
+        input: &str,
+        handle: &mut ReactorHandle<C>,
+    ) -> Result<Option<String>, capnp::Error>;
 }
 
-pub type Parser = Box<dyn Fn(&str) -> Result<Command, String> + Send>;
 
-
-pub struct CmdReactor {
+pub struct CmdReactor<C: Ctx> {
     foreign_id: ReactorId,
     broker: BrokerHandle,
-    parser: Parser,
+    parser: Box<dyn Parser<C>>,
 }
 
-impl CmdReactor {
-    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, parser: Parser) -> Self {
+impl<C> CmdReactor<C>
+    where C: Ctx {
+
+    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, parser: Box<dyn Parser<C>>) -> Self {
 
         CmdReactor {
             foreign_id,
@@ -35,7 +41,7 @@ impl CmdReactor {
         }
     }
 
-    pub fn params<C: Ctx>(self) -> CoreParams<Self, C> {
+    pub fn params(self) -> CoreParams<Self, C> {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         // params.handler(my_capnp::sent_message::Owned, CtxHandler::new(Self::handle_sent));
@@ -45,18 +51,20 @@ impl CmdReactor {
         return params;
     }
 
-    fn handle_initialize<C: Ctx>(
+    fn handle_initialize(
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
     ) -> Result<(), capnp::Error>
     {
+        handle.open_link(CmdLink.params(handle.id().clone()));
+
         setup_async_stdin(self.broker.clone(), handle.id().clone());
         Ok(())
     }
 
 
-    fn handle_return<C: Ctx>(
+    fn handle_return(
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: cmd_return::Reader,
@@ -67,7 +75,7 @@ impl CmdReactor {
         Ok(())
     }
 
-    fn handle_command<C: Ctx>(
+    fn handle_command(
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: cmd_input::Reader,
@@ -75,24 +83,45 @@ impl CmdReactor {
     {
         let msg = r.get_input()?;
 
-        match (self.parser)(msg) {
-            Ok(command) => {
-                let payload = command.inner.get_payload()?;
-                handle.send_internal(payload);
-            },
-            Err(msg) => {
-                let mut joined = MsgBuffer::<cmd_return::Owned>::new();
-                joined.build(|b| b.set_message(&msg));
+        match self.parser.parse(msg, handle)? {
+            Some(message) => {
+                    let mut joined = MsgBuffer::<cmd_return::Owned>::new();
+                joined.build(|b| b.set_message(&message));
                 handle.send_internal(joined);
-            }
+            },
+            None => {}
         }
 
         Ok(())
     }
 }
 
-struct CmdLink {
+struct CmdLink;
 
+impl CmdLink {
+    pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, self);
+        params.external_handler(
+            cmd_input::Owned,
+            CtxHandler::new(Self::e_handle_cmd),
+        );
+
+        return params;
+    }
+
+    fn e_handle_cmd<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: cmd_input::Reader,
+    ) -> Result<(), capnp::Error> {
+        let msg = r.get_input()?;
+
+        let mut joined = MsgBuffer::<cmd_input::Owned>::new();
+        joined.build(|b| b.set_input(msg));
+        handle.send_internal(joined);
+
+        Ok(())
+    }
 }
 
 
@@ -109,6 +138,7 @@ fn stdin() -> impl Stream<Item=String, Error=io::Error> {
     });
     rx.then(|e| e.unwrap())
 }
+
 
 fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
     tokio::spawn(futures::lazy(move || {

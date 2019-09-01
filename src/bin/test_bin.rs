@@ -15,11 +15,25 @@ use mozaic::core_capnp::initialize;
 use mozaic::my_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
-use mozaic::server::runtime::{Broker, BrokerHandle};
+use mozaic::server::runtime::{Broker, BrokerHandle, Runtime};
 
 use futures::Future;
 
 use rand::Rng;
+
+struct MyParser;
+
+impl reactors::Parser<Runtime> for MyParser {
+
+    fn parse(
+        &mut self,
+        input: &str,
+        handle: &mut ReactorHandle<Runtime>
+    ) -> Result<Option<String>, capnp::Error> {
+        println!("Trying to parse {}", input);
+        Ok(Some(":/".to_string()))
+    }
+}
 
 fn main() {
     let mut broker = Broker::new();
@@ -32,7 +46,7 @@ fn main() {
         // broker.spawn(cmd_id.clone(), cmd_reactor.params());
 
         broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone()));
-        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id).params());
+        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id, Box::new(MyParser)).params());
         return Ok(());
     }));
 }
