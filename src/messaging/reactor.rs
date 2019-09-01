@@ -25,7 +25,7 @@ pub trait CtxHandle<C> {
     fn close_link(&mut self, id: &ReactorId);
 
 
-    fn spawn<S>(&mut self, params: CoreParams<S, C>) -> ReactorId
+    fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> ReactorId
         where S: 'static + Send,
               C: Ctx;
 }
@@ -286,10 +286,10 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
         self.ctx.dispatch_internal(message);
     }
 
-    pub fn spawn<S>(&mut self, params: CoreParams<S, C>) -> ReactorId
+    pub fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> ReactorId
         where S: 'static + Send
     {
-        self.ctx.spawn(params)
+        self.ctx.spawn(params, name)
     }
 
     pub fn open_link<S>(&mut self, params: LinkParams<S, C>)

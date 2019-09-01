@@ -29,17 +29,15 @@ help                                    Print this help message.
 
 
 fn main() {
-    let mut broker = Broker::new();
     let stupid_id: ReactorId = rand::thread_rng().gen();
     let cmd_id: ReactorId = rand::thread_rng().gen();
 
 
     tokio::run(futures::lazy(move || {
-        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()));
-        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id.clone()).params());
+        let mut broker = Broker::new();
 
-
-        broker.spawn(reactors::logger_id(), reactors::LogReactor::params((stupid_id.clone(), "Main")));
+        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main");
+        broker.spawn(cmd_id.clone(), reactors::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd");
 
         return Ok(());
     }));
@@ -77,8 +75,7 @@ impl Reactor {
         // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()));
 
-        handle.open_link(reactors::LogLink::params(reactors::logger_id()));
-
+        // handle.open_link(reactors::LogLink::params(reactors::logger_id()));
         reactors::log_reactor(handle, "Starting!!");
         Ok(())
     }

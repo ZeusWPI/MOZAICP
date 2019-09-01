@@ -50,7 +50,7 @@ impl Welcomer {
         handle.open_link(link.params(self.runtime_id.clone()));
 
         let logger = Logger { from: handle.id().clone()};
-        let loggerId = handle.spawn(logger.params());
+        let loggerId = handle.spawn(logger.params(), "logger");
 
         let loggerLink = LoggerLink {};
         handle.open_link(loggerLink.params(loggerId));

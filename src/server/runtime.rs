@@ -13,6 +13,8 @@ use rand::Rng;
 
 use messaging::types::*;
 use messaging::reactor::*;
+use modules::reactors;
+use log_capnp::{open_log_link};
 
 
 /// The main runtime
@@ -28,10 +30,14 @@ impl Broker {
         let id: ReactorId = rand::thread_rng().gen();
 
         let broker = Broker {
-            runtime_id: id,
+            runtime_id: id.clone(),
             actors: HashMap::new(),
         };
-        return BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
+        let mut broker = BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
+
+        broker.spawn(reactors::logger_id(), reactors::LogReactor::params((id, "Broker")), "Broker");
+
+        return broker;
     }
 
     fn dispatch_message(&mut self, message: Message) {
@@ -119,28 +125,36 @@ impl BrokerHandle {
         broker.dispatch_message(msg);
     }
 
-    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>)
+    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str)
         where S: 'static + Send
     {
-        let mut broker = self.broker.lock().unwrap();
+        let mut driver = {
+            let mut broker = self.broker.lock().unwrap();
 
-        let reactor = Reactor {
-            id: id.clone(),
-            internal_state: core_params.state,
-            internal_handlers: core_params.handlers,
-            links: HashMap::new(),
+            let reactor = Reactor {
+                id: id.clone(),
+                internal_state: core_params.state,
+                internal_handlers: core_params.handlers,
+                links: HashMap::new(),
+            };
+
+            let (tx, rx) = mpsc::unbounded();
+            broker.actors.insert(id.clone(), ActorData { tx });
+
+            ReactorDriver {
+                broker: self.clone(),
+                internal_queue: VecDeque::new(),
+                message_chan: rx,
+                reactor,
+            }
         };
 
-        let (tx, rx) = mpsc::unbounded();
+        self.send_message_self(&reactors::logger_id(), open_log_link::Owned, |b| {
+            let mut msg: open_log_link::Builder = b.init_as();
+            msg.set_id(id.bytes());
+            msg.set_name(name);
+        });
 
-        broker.actors.insert(id.clone(), ActorData { tx });
-
-        let mut driver = ReactorDriver {
-            broker: self.clone(),
-            internal_queue: VecDeque::new(),
-            message_chan: rx,
-            reactor,
-        };
         {
             let mut ctx_handle = DriverHandle {
                 broker: &mut driver.broker,
@@ -148,6 +162,8 @@ impl BrokerHandle {
             };
 
             let mut reactor_handle = driver.reactor.handle(&mut ctx_handle);
+            reactor_handle.open_link(reactors::LogLink::params(reactors::logger_id()));
+
             let initialize = MsgBuffer::<initialize::Owned>::new();
             reactor_handle.send_internal(initialize);
         }
@@ -249,11 +265,11 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         self.broker.dispatch_message(msg);
     }
 
-    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>) -> ReactorId
+    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, name: &str) -> ReactorId
         where T: 'static + Send
     {
         let id: ReactorId = rand::thread_rng().gen();
-        self.broker.spawn(id.clone(), params);
+        self.broker.spawn(id.clone(), params, name);
         return id;
     }
 

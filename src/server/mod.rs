@@ -28,7 +28,7 @@ pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
     // let mut params: CoreParams<Stupid, Runtime> = stupid.params();
 
     tokio::run(futures::lazy(move || {
-        broker.spawn(greeter_id.clone(), greeter_params);
+        broker.spawn(greeter_id.clone(), greeter_params, &format!("Tcp Server {}", addr.port()));
         // broker.spawn(stupid_id.clone(), params);
 
         tokio::spawn(TcpServer::new(broker, greeter_id, &addr));

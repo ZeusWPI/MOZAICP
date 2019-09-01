@@ -253,7 +253,7 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         self.runtime.lock().unwrap().dispatch_message(msg);
     }
 
-    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>) -> ReactorId
+    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, _: &str) -> ReactorId
         where T: 'static + Send
     {
         let id: ReactorId = rand::thread_rng().gen();
