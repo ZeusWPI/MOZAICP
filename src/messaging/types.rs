@@ -8,6 +8,7 @@ use capnp;
 use capnp::any_pointer;
 use capnp::traits::{Owned, HasTypeId};
 use core_capnp::mozaic_message;
+use errors;
 
 /// Handles messages of type M with lifetime 'a, using state S.
 pub trait Handler<'a, S, M>: Send

@@ -10,6 +10,7 @@ use rand::Rng;
 use net::connection_handler::*;
 
 use network_capnp::{connect, connected, publish, disconnected};
+use errors;
 
 pub struct ClientParams {
     pub runtime_id: ReactorId,
@@ -70,7 +71,7 @@ impl<S> LinkHandler<S>
     }
 
     fn handle_connected(&mut self, _w: &mut Writer, r: connected::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         let spawner = match self.spawner.take() {
             None => return Ok(()),
@@ -91,7 +92,7 @@ impl<S> LinkHandler<S>
 
 
     fn publish_message(&mut self, _w: &mut Writer, r: publish::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);
         let message = Message::from_segment(vec_segment);
@@ -100,7 +101,7 @@ impl<S> LinkHandler<S>
     }
 
     fn handle_disconnected(&mut self, _w: &mut Writer, _:disconnected::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         println!("DISCONNEcTING");
         Ok(())

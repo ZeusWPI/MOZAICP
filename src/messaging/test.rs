@@ -14,7 +14,7 @@ use rand::Rng;
 pub fn run() {
     // Create the runtime
     let mut rt = Runtime::new().unwrap();
-    
+
     let mut broker = Broker::new();
     rt.spawn(poll_fn(move || {
         let main = Main {};
@@ -40,7 +40,7 @@ impl Main {
     fn initialize<C: Ctx>(
         self: &mut ReactorCtx<Self, C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let greeter = Greeter { to_greet: self.handle().id().clone() };
         let greeter_uuid = self.handle().spawn(greeter.params());
@@ -66,7 +66,7 @@ impl Greeter {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let link = (GreeterLink {}).params(self.to_greet.clone());
         handle.open_link(link);
@@ -113,7 +113,7 @@ impl GreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         send_greeting: send_greeting::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let message = send_greeting.get_message()?;
 
@@ -129,7 +129,7 @@ impl GreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         greeting: greeting::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let message = greeting.get_message()?;
         println!("got greeting: {:?}", message);
@@ -141,7 +141,7 @@ impl GreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: terminate_stream::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         // also close our end of the stream
         handle.close_link();

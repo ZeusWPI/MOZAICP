@@ -17,6 +17,7 @@ use mozaic::core_capnp::{initialize, terminate_stream};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
+use mozaic::errors;
 
 use std::env;
 use std::process::{Command, Stdio, ChildStdin};
@@ -122,7 +123,7 @@ impl ClientReactor {
         &mut self,
         _handle: &mut ReactorHandle<C>,
         message: chat::chat_message::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let user = message.get_user()?;
         if user == self.user {
             return Ok(());
@@ -140,7 +141,7 @@ impl ClientReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         // open link with chat server
         let link = (ServerLink {}).params(self.greeter_id.clone());
@@ -191,7 +192,7 @@ impl ServerLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         send_message: chat::send_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let message = send_message.get_message()?;
         let user = send_message.get_user()?;
@@ -213,7 +214,7 @@ impl ServerLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         chat_message: chat::chat_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
@@ -234,7 +235,7 @@ impl ServerLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: terminate_stream::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         // also close our end of the stream
         handle.close_link();
@@ -274,7 +275,7 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: chat::connect_to_gui::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let connect = MsgBuffer::<chat::connect_to_gui::Owned>::new();
         handle.send_message(connect);
@@ -286,7 +287,7 @@ impl RuntimeLink {
     //     &mut self,
     //     handle: &mut LinkHandle<C>,
     //     chat_message: chat::chat_message::Reader,
-    // ) -> Result<(), capnp::Error>
+    // ) -> Result<(), errors::Error>
     // {
     //     let message = chat_message.get_message()?;
     //     let user = chat_message.get_user()?;
@@ -305,7 +306,7 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         input: chat::user_input::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let message = input.get_text()?;
 
@@ -329,6 +330,8 @@ mod runtime {
     use futures::sync::mpsc;
     use mozaic::client::runtime::RuntimeState;
     use mozaic::messaging::types::*;
+    use mozaic::errors;
+
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     use std::io::{BufRead, BufReader};
@@ -396,7 +399,7 @@ mod runtime {
     fn rt_connect_to_gui(
         ctx: &mut RtHandlerCtx<HandlerState>,
         _: chat::connect_to_gui::Reader
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         println!("Connecting to 'gui'");
 
@@ -435,7 +438,7 @@ mod runtime {
         dyn for<'a>
             Handler<'a,
                 RtHandlerCtx<'a, S>,
-                any_pointer::Owned, Output=(), Error=capnp::Error>
+                any_pointer::Owned, Output=(), Error=errors::Error>
     >;
 
     pub struct HandlerCore<S> {
@@ -454,7 +457,7 @@ mod runtime {
         fn on<M, H>(&mut self, _m: M, h: H)
             where M: for<'a> Owned<'a> + Send + 'static,
                 <M as Owned<'static>>::Reader: HasTypeId,
-                H: 'static + for <'a> Handler<'a, RtHandlerCtx<'a, S>, M, Output=(), Error=capnp::Error>
+                H: 'static + for <'a> Handler<'a, RtHandlerCtx<'a, S>, M, Output=(), Error=errors::Error>
         {
             let boxed = Box::new(AnyPtrHandler::new(h));
             self.handlers.insert(
@@ -464,7 +467,7 @@ mod runtime {
         }
 
         pub fn handle(&mut self, message: &Message)
-            -> Result<(), capnp::Error>
+            -> Result<(), errors::Error>
         {
             let reader = message.reader();
             let type_id = reader.get()?.get_type_id();

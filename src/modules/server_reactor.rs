@@ -2,6 +2,7 @@
 
 use messaging::reactor::*;
 use messaging::types::*;
+use errors;
 use core_capnp::{initialize};
 
 use core_capnp::{actor_joined, identify};
@@ -55,7 +56,7 @@ impl ServerReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
 
         Ok(())
@@ -65,7 +66,7 @@ impl ServerReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: actor_joined::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let id = r.get_id()?;
 
@@ -78,7 +79,7 @@ impl ServerReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: identify::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let id = r.get_key()?;
         let id = Identifier::from(id);
@@ -109,7 +110,7 @@ impl CreationLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: actor_joined::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let id = r.get_id()?;
 
         let mut joined = MsgBuffer::<actor_joined::Owned>::new();
@@ -139,7 +140,7 @@ impl SimpleLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: identify::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let id = r.get_key()?;
 
         let mut joined = MsgBuffer::<identify::Owned>::new();

@@ -1,6 +1,6 @@
 use server::runtime::{BrokerHandle};
 use messaging::types::{Message, VecSegment, ReactorId};
-
+use errors;
 use futures::sync::mpsc;
 use tokio::net::TcpStream;
 
@@ -36,7 +36,7 @@ impl ServerHandler {
     }
 
     fn handle_connect(&mut self, w: &mut Writer, r: connect::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
@@ -56,7 +56,7 @@ impl ServerHandler {
     }
 
     fn publish_message(&mut self, _w: &mut Writer, r: publish::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);
         let message = Message::from_segment(vec_segment);
@@ -65,7 +65,7 @@ impl ServerHandler {
     }
 
     fn handle_disconnected(&mut self, _w: &mut Writer, _: disconnected::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         println!("DISCONNECTED HERE");
 

@@ -12,6 +12,7 @@ use mozaic::match_control_capnp::{start_game};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::server::runtime::{Broker, BrokerHandle};
+use mozaic::errors;
 
 use rand::Rng;
 
@@ -72,7 +73,7 @@ impl Reactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()));
@@ -86,7 +87,7 @@ impl Reactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: start_game::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         modules::log_reactor(handle, "Creating new game!!");
 
         Ok(())
@@ -117,7 +118,7 @@ impl CmdLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_input::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
 
         // TODO: make fancy
         // Parse the input
@@ -156,7 +157,7 @@ impl CmdLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_return::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let msg = r.get_message()?;
 
         let mut joined = MsgBuffer::<cmd_return::Owned>::new();

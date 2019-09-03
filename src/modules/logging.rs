@@ -1,6 +1,6 @@
 use messaging::reactor::*;
 use messaging::types::*;
-
+use errors;
 use core_capnp::{initialize};
 use log_capnp::{open_log_link, log, inner_log};
 
@@ -34,7 +34,7 @@ impl LogReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         // Open link with foreign
         self.open_link(handle, self.foreign.clone());
 
@@ -45,7 +45,7 @@ impl LogReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: open_log_link::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         // Open link with new person
         let name = r.get_name()?;
         let id = r.get_id()?;
@@ -69,7 +69,7 @@ impl LogReactor {
         &mut self,
         _: &mut ReactorHandle<C>,
         r: inner_log::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         // Open link with new person
         let user = r.get_name()?;
         let msg = r.get_log()?;
@@ -97,7 +97,7 @@ impl Link {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: log::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let msg = r.get_log()?;
 
         let mut joined = MsgBuffer::<log::Owned>::new();
@@ -137,7 +137,7 @@ impl LogLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: log::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let msg = r.get_log()?;
 
         let mut joined = MsgBuffer::<inner_log::Owned>::new();
@@ -154,7 +154,7 @@ impl LogLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: open_log_link::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let name = r.get_name()?;
         let id = r.get_id()?;
 

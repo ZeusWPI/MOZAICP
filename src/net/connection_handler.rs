@@ -14,7 +14,7 @@ use capnp::message::{ReaderOptions, Reader, Builder, HeapAllocator, ReaderSegmen
 
 use network_capnp::{network_message, publish, disconnected};
 use messaging::types::{Message, Handler, AnyPtrHandler};
-
+use errors;
 
 pub struct ConnectionHandler<S> {
     handler: StreamHandler<S>,
@@ -97,7 +97,7 @@ impl<S> HandlerCore<S> {
     pub fn on<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
              <M as Owned<'static>>::Reader: HasTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, MsgHandlerCtx<'a, 'c, S>, M, Output=(), Error=capnp::Error>
+              H: 'static + for <'a, 'c> Handler<'a, MsgHandlerCtx<'a, 'c, S>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         self.handlers.insert(
@@ -107,7 +107,7 @@ impl<S> HandlerCore<S> {
     }
 
     pub fn handle(&mut self, writer: &mut Writer, r: network_message::Reader)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
     {
         let type_id = r.get_type_id();
         match self.handlers.get(&type_id) {
@@ -146,7 +146,7 @@ impl<S> StreamHandler<S> {
     }
 
 
-    fn flush_writes(&mut self) -> Poll<(), capnp::Error> {
+    fn flush_writes(&mut self) -> Poll<(), errors::Error> {
         while let Some(builder) = self.write_queue.pop_front() {
             match self.transport.start_send(builder)? {
                 AsyncSink::Ready => { }, // continue
@@ -157,11 +157,11 @@ impl<S> StreamHandler<S> {
             };
         }
 
-        return self.transport.poll_complete();
+        return self.transport.poll_complete().map_err(|e| e.into());
     }
 
     pub fn handle_message<T>(&mut self, builder: Reader<T>)
-        -> Result<(), capnp::Error>
+        -> Result<(), errors::Error>
         where T: ReaderSegments
     {
         let mut writer = Writer {
@@ -172,9 +172,9 @@ impl<S> StreamHandler<S> {
         return self.core.handle(&mut writer, reader);
     }
 
-    // Stream.poll() -> Result<Async<T>, capnp::Error>
+    // Stream.poll() -> Result<Async<T>, errors::Error>
     /// self.transport.poll will finish with Err(disconnected), I think
-    fn poll_transport(&mut self) -> Poll<(), capnp::Error> {
+    fn poll_transport(&mut self) -> Poll<(), errors::Error> {
         while let Some(reader) = try_ready!(self.transport.poll()) {
             self.handle_message(reader)?;
             try_ready!(self.flush_writes());
@@ -182,7 +182,7 @@ impl<S> StreamHandler<S> {
         return Ok(Async::Ready(()));
     }
 
-    fn poll_stream(&mut self) -> Poll<(), capnp::Error> {
+    fn poll_stream(&mut self) -> Poll<(), errors::Error> {
         try_ready!(self.flush_writes());
         return self.poll_transport();
     }
@@ -192,7 +192,7 @@ type MessageHandler<S> = Box<
     dyn for<'a, 'c>
         Handler<'a,
             MsgHandlerCtx<'a, 'c, S>,
-            any_pointer::Owned, Output=(), Error=capnp::Error>
+            any_pointer::Owned, Output=(), Error=errors::Error>
 >;
 
 pub struct MsgHandlerCtx<'a, 'w, S> {

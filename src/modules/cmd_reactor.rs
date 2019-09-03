@@ -1,5 +1,6 @@
 use messaging::reactor::*;
 use messaging::types::*;
+use errors;
 use core_capnp::{initialize};
 
 use mozaic_cmd_capnp::{cmd_input, cmd_return};
@@ -41,7 +42,7 @@ impl CmdReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         handle.open_link(CmdLink.params(handle.id().clone()));
 
@@ -57,7 +58,7 @@ impl CmdReactor {
         &mut self,
         _: &mut ReactorHandle<C>,
         r: cmd_return::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let msg = r.get_message()?;
         println!("< {}", msg);
         self.new_line();
@@ -90,7 +91,7 @@ impl CmdLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_input::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let msg = r.get_input()?;
 
         let mut joined = MsgBuffer::<cmd_input::Owned>::new();
@@ -128,7 +129,7 @@ impl ForeignLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_input::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let msg = r.get_input()?;
 
         let mut joined = MsgBuffer::<cmd_input::Owned>::new();
@@ -142,7 +143,7 @@ impl ForeignLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_return::Reader,
-    ) -> Result<(), capnp::Error> {
+    ) -> Result<(), errors::Error> {
         let message = r.get_message()?;
 
         let mut joined = MsgBuffer::<cmd_return::Owned>::new();

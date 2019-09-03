@@ -12,6 +12,7 @@ use mozaic::core_capnp::{initialize, actor_joined};
 use mozaic::messaging::types::*;
 use mozaic::messaging::reactor::*;
 use mozaic::server::run_server;
+use mozaic::errors;
 
 // TODO: Find from where to get disconnect event something something
 
@@ -45,7 +46,7 @@ impl Welcomer {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let link = WelcomerRuntimeLink {};
         handle.open_link(link.params(self.runtime_id.clone()));
@@ -57,7 +58,7 @@ impl Welcomer {
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: actor_joined::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         //? id is the id of the client reactor on the other side of the interwebs
         let id: ReactorId = r.get_id()?.into();
@@ -72,7 +73,7 @@ impl Welcomer {
         &mut self,
         _: &mut ReactorHandle<C>,
         msg: chat::chat_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         println!("{}: {}",msg.get_user()? ,msg.get_message()?);
         return Ok(());
@@ -97,7 +98,7 @@ impl WelcomerRuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: actor_joined::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let id: ReactorId = r.get_id()?.into();
 
@@ -130,7 +131,7 @@ impl WelcomerGreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         message: chat::chat_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let content = message.get_message()?;
         let user = message.get_user()?;
@@ -151,7 +152,7 @@ impl WelcomerGreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         message: chat::chat_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> Result<(), errors::Error>
     {
         let content = message.get_message()?;
         let user = message.get_user()?;
