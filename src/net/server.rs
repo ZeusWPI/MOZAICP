@@ -46,7 +46,7 @@ impl ServerHandler {
         self.broker.send_message_self(&self.welcomer_id, actor_joined::Owned, |b| {
             let mut joined: actor_joined::Builder = b.init_as();
             joined.set_id(connecting_id.bytes());
-        });
+        })?;
 
         w.write(connected::Owned, |b| {
             let mut connected: connected::Builder = b.init_as();
@@ -60,7 +60,7 @@ impl ServerHandler {
     {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);
         let message = Message::from_segment(vec_segment);
-        self.broker.dispatch_message(message);
+        self.broker.dispatch_message(message)?;
         return Ok(());
     }
 

@@ -24,12 +24,12 @@ pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
 
     tokio::run(futures::lazy(move || {
 
-        let mut broker = Broker::new();
+        let mut broker = Broker::new().unwrap();
         let greeter_id: ReactorId = rand::thread_rng().gen();
 
         let greeter_params = initialize_greeter(broker.get_runtime_id());
 
-        broker.spawn(greeter_id.clone(), greeter_params, &format!("Tcp Server {}", addr.port()));
+        broker.spawn(greeter_id.clone(), greeter_params, &format!("Tcp Server {}", addr.port())).unwrap();
 
         tokio::spawn(TcpServer::new(broker, greeter_id, &addr));
         return Ok(());

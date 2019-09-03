@@ -49,7 +49,7 @@ impl Welcomer {
     ) -> Result<(), errors::Error>
     {
         let link = WelcomerRuntimeLink {};
-        handle.open_link(link.params(self.runtime_id.clone()));
+        handle.open_link(link.params(self.runtime_id.clone()))?;
 
         return Ok(());
     }
@@ -65,7 +65,7 @@ impl Welcomer {
         println!("welcoming {:?}", id);
 
         let link = WelcomerGreeterLink {};
-        handle.open_link(link.params(id));
+        handle.open_link(link.params(id))?;
         return Ok(());
     }
 
@@ -104,7 +104,7 @@ impl WelcomerRuntimeLink {
 
         let mut joined = MsgBuffer::<actor_joined::Owned>::new();
         joined.build(|b| b.set_id(id.bytes()));
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
         return Ok(());
     }
 }
@@ -141,7 +141,7 @@ impl WelcomerGreeterLink {
             b.set_message(content);
             b.set_user(user);
         });
-        handle.send_message(chat_message);
+        handle.send_message(chat_message)?;
 
         return Ok(());
     }
@@ -163,7 +163,7 @@ impl WelcomerGreeterLink {
             b.set_user(user);
         });
 
-        handle.send_internal(chat_message);
+        handle.send_internal(chat_message)?;
 
         return Ok(());
     }

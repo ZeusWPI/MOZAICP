@@ -18,5 +18,10 @@ error_chain!{
             description("Link not found")
             display("No Link from {:?} to {:?} found", from.bytes(), to.bytes())
         }
+
+        MozaicError(msg: &'static str) {
+            description("Generic MOZAIC Error")
+            display("Generic MOZAIC error: {}", msg)
+        }
     }
 }

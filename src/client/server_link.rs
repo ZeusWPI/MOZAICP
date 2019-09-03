@@ -86,7 +86,7 @@ impl<S> LinkHandler<S>
             runtime_id: self.runtime.lock().unwrap().runtime_id().clone(),
             greeter_id,
         });
-        spawn_reactor(&self.runtime, self.client_id.clone(), r);
+        spawn_reactor(&self.runtime, self.client_id.clone(), r)?;
         return Ok(());
     }
 
@@ -96,7 +96,7 @@ impl<S> LinkHandler<S>
     {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);
         let message = Message::from_segment(vec_segment);
-        self.runtime.lock().unwrap().dispatch_message(message);
+        self.runtime.lock().unwrap().dispatch_message(message)?;
         return Ok(());
     }
 

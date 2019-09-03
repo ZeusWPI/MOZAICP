@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use super::types::*;
-use capnp;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
 
 use errors;
+use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 
 use core_capnp::{mozaic_message, terminate_stream};
 
@@ -62,11 +62,10 @@ impl<S, C: Ctx> Reactor<S, C> {
         let msg = reader.get()?;
         let sender_uuid = msg.get_sender()?.into();
 
+        let receiver: ReactorId = msg.get_receiver()?.into();
+
         let closed = {
-            let link = match self.links.get_mut(&sender_uuid) {
-                Some(link) => link,
-                None =>  panic!("No link found, did you open one?"),
-            };
+            let link = self.links.get_mut(&sender_uuid).ok_or(errors::Error::from_kind(NoLinkFoundError(sender_uuid.clone(), receiver.clone())))?;
 
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
@@ -79,7 +78,7 @@ impl<S, C: Ctx> Reactor<S, C> {
         };
 
         if closed {
-            ctx_handle.close_link(&sender_uuid);
+            ctx_handle.close_link(&sender_uuid)?;
         }
 
         // the handling link may now emit a domestic message, which will
@@ -170,8 +169,7 @@ impl<C> Link<C>
             self.link_state.remote_closed = true;
         }
 
-        let mut link_handle = handle
-            .link_handle(&self.remote_id, &mut self.link_state);
+        let mut link_handle = handle.link_handle(&self.remote_id, &mut self.link_state);
         return self.reducer.handle_external(&mut link_handle, msg);
     }
 
@@ -243,15 +241,16 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
         msg: mozaic_message::Reader<'a>,
     ) -> errors::Result<()>
     {
-        if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
-            let mut ctx = HandlerCtx {
-                state: &mut self.state,
-                handle: link_handle,
-            };
-            handler.handle(&mut ctx, msg.get_payload())?
-        } else {
-            eprintln!("No link internal handler found");
-        }
+
+        let handler = self.internal_handlers.get(&msg.get_type_id()).ok_or(
+            errors::Error::from_kind(MozaicError("No link internal handler found"))
+        )?;
+
+        let mut ctx = HandlerCtx {
+            state: &mut self.state,
+            handle: link_handle,
+        };
+        handler.handle(&mut ctx, msg.get_payload())?;
         return Ok(());
     }
 }

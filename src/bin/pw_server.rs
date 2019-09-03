@@ -37,10 +37,10 @@ fn main() {
 
 
     tokio::run(futures::lazy(move || {
-        let mut broker = Broker::new();
+        let mut broker = Broker::new().unwrap();
 
-        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main");
-        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd");
+        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main").unwrap();
+        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd").unwrap();
 
         return Ok(());
     }));
@@ -76,7 +76,7 @@ impl Reactor {
     ) -> Result<(), errors::Error>
     {
         // open link with command line
-        handle.open_link(CmdLink.params(self.cmd_id.clone()));
+        handle.open_link(CmdLink.params(self.cmd_id.clone()))?;
 
         // handle.open_link(modules::LogLink::params(modules::logger_id()));
         modules::log_reactor(handle, "Starting!!");
@@ -86,7 +86,7 @@ impl Reactor {
     fn start_game<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
-        r: start_game::Reader,
+        _r: start_game::Reader,
     ) -> Result<(), errors::Error> {
         modules::log_reactor(handle, "Creating new game!!");
 
@@ -133,7 +133,7 @@ impl CmdLink {
                         b.set_max_turns(turn_count);
                     });
 
-                    handle.send_internal(joined);
+                    handle.send_internal(joined)?;
 
                     return Ok(());
                 }
@@ -148,7 +148,7 @@ impl CmdLink {
 
         let mut joined = MsgBuffer::<cmd_return::Owned>::new();
         joined.build(|b| b.set_message(&msg));
-        handle.send_message(joined);
+        handle.send_message(joined)?;
 
         Ok(())
     }
@@ -162,7 +162,7 @@ impl CmdLink {
 
         let mut joined = MsgBuffer::<cmd_return::Owned>::new();
         joined.build(|b| b.set_message(msg));
-        handle.send_message(joined);
+        handle.send_message(joined)?;
 
         Ok(())
     }

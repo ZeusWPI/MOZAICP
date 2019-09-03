@@ -15,7 +15,8 @@ use messaging::types::*;
 use messaging::reactor::*;
 use modules;
 use log_capnp::{open_log_link};
-
+use errors::ErrorKind::{NoSuchReactorError, MozaicError};
+use errors;
 
 /// The main runtime
 pub struct Runtime;
@@ -26,7 +27,7 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new() -> BrokerHandle {
+    pub fn new() -> errors::Result<BrokerHandle> {
         let id: ReactorId = rand::thread_rng().gen();
 
         let broker = Broker {
@@ -35,25 +36,25 @@ impl Broker {
         };
         let mut broker = BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
 
-        broker.spawn(modules::logger_id(), modules::LogReactor::params((id, "Broker")), "Broker");
+        broker.spawn(modules::logger_id(), modules::LogReactor::params((id, "Broker")), "Broker")?;
 
-        return broker;
+        return Ok(broker);
     }
 
     fn dispatch_message(&mut self, message: Message) -> R<()>{
-        let receiver_id = message.reader()
+        let receiver_id: ReactorId = message.reader()
             .get()
             .unwrap()
             .get_receiver()
             .unwrap()
             .into();
 
-        if let Some(receiver) = self.actors.get_mut(&receiver_id) {
-            receiver.tx.unbounded_send(message)
-                .expect("send failed");
-        } else {
-            panic!("no such actor: {:?}", receiver_id);
-        }
+        let receiver = self.actors.get_mut(&receiver_id.clone()).ok_or(
+            errors::Error::from_kind(NoSuchReactorError(receiver_id))
+        )?;
+
+        receiver.tx.unbounded_send(message)
+            .expect("send failed");
         Ok(())
     }
 }
@@ -105,7 +106,7 @@ impl BrokerHandle {
         let mut broker = self.broker.lock().unwrap();
 
         if target == &broker.runtime_id {
-            panic!("This is not how you distribute a message locally. Target and runtime_id are the same...")
+            return Err(errors::Error::from_kind(MozaicError("This is not how you distribute a message locally. Target and runtime_id are the same...")));
         }
 
         let mut message_builder = ::capnp::message::Builder::new_default();
@@ -154,7 +155,7 @@ impl BrokerHandle {
             let mut msg: open_log_link::Builder = b.init_as();
             msg.set_id(id.bytes());
             msg.set_name(name);
-        });
+        })?;
 
         {
             let mut ctx_handle = DriverHandle {
@@ -163,10 +164,10 @@ impl BrokerHandle {
             };
 
             let mut reactor_handle = driver.reactor.handle(&mut ctx_handle);
-            reactor_handle.open_link(modules::LogLink::params(modules::logger_id()));
+            reactor_handle.open_link(modules::LogLink::params(modules::logger_id()))?;
 
             let initialize = MsgBuffer::<initialize::Owned>::new();
-            reactor_handle.send_internal(initialize);
+            reactor_handle.send_internal(initialize)?;
         }
 
         tokio::spawn(driver);

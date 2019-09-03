@@ -14,7 +14,8 @@ use rand::Rng;
 use messaging::types::*;
 use messaging::reactor::*;
 
-use errors::Result as R;
+use errors::{Result as R, self};
+use errors::ErrorKind::MozaicError;
 
 pub struct Runtime;
 
@@ -89,8 +90,9 @@ impl RuntimeState {
             server_link.unbounded_send(message)
                 .expect("send failed");
         } else {
-            panic!("server link closed");
+            return Err(errors::Error::from_kind(MozaicError("server link closed")));
         }
+
         Ok(())
     }
 
@@ -115,7 +117,7 @@ impl RuntimeState {
         }
 
         let msg = Message::from_capnp(message_builder.into_reader());
-        self.dispatch_message(msg);
+        self.dispatch_message(msg)?;
         Ok(())
     }
 }
@@ -128,7 +130,7 @@ pub fn spawn_reactor<S>(
     runtime_state: &Arc<Mutex<RuntimeState>>,
     id: ReactorId,
     core_params: CoreParams<S, Runtime>,
-) where S: 'static + Send
+) -> R<()> where S: 'static + Send
 {
     let mut runtime = runtime_state.lock().unwrap();
 
@@ -157,10 +159,11 @@ pub fn spawn_reactor<S>(
 
         let mut reactor_handle = driver.reactor.handle(&mut ctx_handle);
         let initialize = MsgBuffer::<initialize::Owned>::new();
-        reactor_handle.send_internal(initialize);
+        reactor_handle.send_internal(initialize)?;
     }
 
     tokio::spawn(driver);
+    Ok(())
 }
 
 enum InternalOp {
@@ -263,7 +266,7 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         where T: 'static + Send
     {
         let id: ReactorId = rand::thread_rng().gen();
-        spawn_reactor(self.runtime, id.clone(), params);
+        spawn_reactor(self.runtime, id.clone(), params)?;
         return Ok(id);
     }
 

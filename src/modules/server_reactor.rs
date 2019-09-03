@@ -34,7 +34,7 @@ pub struct ServerReactor {
 
 impl ServerReactor {
 
-    pub fn params<C: Ctx>(broker: BrokerHandle, ids: Vec<Identifier>, foreign_id: ReactorId) -> CoreParams<Self, C> {
+    pub fn params<C: Ctx>(broker: BrokerHandle, _ids: Vec<Identifier>, foreign_id: ReactorId) -> CoreParams<Self, C> {
         // TODO: Spawn real client controllers
         let client_controllers = HashMap::new();
 
@@ -54,7 +54,7 @@ impl ServerReactor {
 
     fn handle_initialize<C: Ctx>(
         &mut self,
-        handle: &mut ReactorHandle<C>,
+        _handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
     ) -> Result<(), errors::Error>
     {
@@ -68,23 +68,23 @@ impl ServerReactor {
         r: actor_joined::Reader,
     ) -> Result<(), errors::Error>
     {
-        let id = r.get_id()?;
+        let _id = r.get_id()?;
 
-        handle.open_link(CreationLink.params(handle.id().clone()));
+        handle.open_link(CreationLink.params(handle.id().clone()))?;
 
         Ok(())
     }
 
     fn handle_identify<C: Ctx> (
         &mut self,
-        handle: &mut ReactorHandle<C>,
+        _handle: &mut ReactorHandle<C>,
         r: identify::Reader,
     ) -> Result<(), errors::Error>
     {
         let id = r.get_key()?;
         let id = Identifier::from(id);
 
-        if let Some(reactor_id) = self.client_controllers.get(&id) {
+        if let Some(_reactor_id) = self.client_controllers.get(&id) {
             // bla bla
         }
 
@@ -115,7 +115,7 @@ impl CreationLink {
 
         let mut joined = MsgBuffer::<actor_joined::Owned>::new();
         joined.build(|b| b.set_id(id));
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
 
         Ok(())
     }
@@ -145,10 +145,10 @@ impl SimpleLink {
 
         let mut joined = MsgBuffer::<identify::Owned>::new();
         joined.build(|b| b.set_key(id));
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
 
 
-        handle.close_link();
+        handle.close_link()?;
 
         Ok(())
     }

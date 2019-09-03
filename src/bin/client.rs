@@ -116,17 +116,17 @@ impl ClientReactor {
     {
         // open link with chat server
         let link = (ServerLink {}).params(self.greeter_id.clone());
-        handle.open_link(link);
+        handle.open_link(link)?;
 
         // open link with runtime, for communicating with chat GUI
         let runtime_link = (RuntimeLink {user: self.user.clone()}).params(self.runtime_id.clone());
-        handle.open_link(runtime_link);
+        handle.open_link(runtime_link)?;
 
         // dispatch this additional message to instruct the runtime link
         // to connect to the gui.
         // TODO: this is kind of initalization code, could it be avoided?
         let msg = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
-        handle.send_internal(msg);
+        handle.send_internal(msg)?;
 
         return Ok(());
     }
@@ -174,7 +174,7 @@ impl ServerLink {
             b.set_user(user);
         });
 
-        handle.send_message(chat_message);
+        handle.send_message(chat_message)?;
 
         return Ok(());
 
@@ -196,7 +196,7 @@ impl ServerLink {
             b.set_message(message);
             b.set_user(user);
         });
-        handle.send_internal(chat_message);
+        handle.send_internal(chat_message)?;
 
 
         return Ok(());
@@ -209,7 +209,7 @@ impl ServerLink {
     ) -> Result<(), errors::Error>
     {
         // also close our end of the stream
-        handle.close_link();
+        handle.close_link()?;
         return Ok(());
     }
 
@@ -249,7 +249,7 @@ impl RuntimeLink {
     ) -> Result<(), errors::Error>
     {
         let connect = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
-        handle.send_message(connect);
+        handle.send_message(connect)?;
         return Ok(());
     }
 
@@ -268,7 +268,7 @@ impl RuntimeLink {
             b.set_message(message);
             b.set_user(user);
         });
-        handle.send_message(chat_message);
+        handle.send_message(chat_message)?;
 
         return Ok(());
     }
@@ -286,7 +286,7 @@ impl RuntimeLink {
             b.set_message(message);
             b.set_user(&self.user);
         });
-        handle.send_internal(send_message);
+        handle.send_internal(send_message)?;
 
         return Ok(());
     }
@@ -388,7 +388,7 @@ mod runtime {
                         |b| {
                             let mut input: chat_capnp::user_input::Builder = b.init_as();
                             input.set_text(input_text);
-                        });
+                        }).unwrap();
                     cursive.call_on_id("input", |view: &mut EditView| {
                         view.set_content("");
                     });
