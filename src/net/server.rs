@@ -15,6 +15,7 @@ pub struct ServerHandler {
     broker: BrokerHandle,
     tx: mpsc::UnboundedSender<Message>,
     welcomer_id: ReactorId,
+    connecting_id: Option<ReactorId>,
 }
 
 impl ServerHandler {
@@ -26,6 +27,7 @@ impl ServerHandler {
                 broker,
                 tx,
                 welcomer_id,
+                connecting_id: None,
             });
             handler.on(publish::Owned, MsgHandler::new(Self::publish_message));
             handler.on(connect::Owned, MsgHandler::new(Self::handle_connect));
@@ -39,6 +41,8 @@ impl ServerHandler {
         -> Result<(), capnp::Error>
     {
         let connecting_id: ReactorId = r.get_id()?.into();
+        self.connecting_id = Some(connecting_id.clone());
+
         self.broker.register(connecting_id.clone(), self.tx.clone());
 
         self.broker.send_message_self(&self.welcomer_id, actor_joined::Owned, |b| {
@@ -66,6 +70,13 @@ impl ServerHandler {
         -> Result<(), capnp::Error>
     {
         println!("DISCONNECTED HERE");
+
+        if let Some(sender) = &self.connecting_id {
+            self.broker.unregister(&sender);
+
+            println!("Disconnected the reactor");
+        }
+
         return Ok(());
     }
 }
