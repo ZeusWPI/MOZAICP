@@ -115,6 +115,8 @@ impl<S, C: Ctx> Reactor<S, C> {
             };
 
             handler.handle(&mut handler_ctx, msg.get_payload())?;
+        } else {
+            eprintln!("No reactor internal handler found");
         }
 
         for link in self.links.values_mut() {
@@ -227,6 +229,8 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
                 handle: link_handle,
             };
             handler.handle(&mut ctx, msg.get_payload())?
+        } else {
+            eprintln!("No link external handler found");
         }
         return Ok(());
     }
@@ -243,6 +247,8 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
                 handle: link_handle,
             };
             handler.handle(&mut ctx, msg.get_payload())?
+        } else {
+            eprintln!("No link internal handler found");
         }
         return Ok(());
     }

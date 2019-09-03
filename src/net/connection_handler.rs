@@ -65,9 +65,14 @@ impl<S> Future for ConnectionHandler<S> {
         if self.handler.poll_stream().expect("poll_stream failed").is_ready() {
             println!("Poll stream is ready");
 
-            self.handler.writer().write(disconnected::Owned, |b| {
-                let mut publish: disconnected::Builder = b.init_as();
-            });
+            let mut msg = Builder::new_default();
+
+            {
+                let mut root = msg.init_root::<network_message::Builder>();
+                root.set_type_id(disconnected::Builder::type_id());
+            }
+
+            self.handler.handle_message(msg.into_reader()).expect("what the hell");
 
             return Ok(Async::Ready(()));
         }
@@ -155,7 +160,7 @@ impl<S> StreamHandler<S> {
         return self.transport.poll_complete();
     }
 
-    fn handle_message<T>(&mut self, builder: Reader<T>)
+    pub fn handle_message<T>(&mut self, builder: Reader<T>)
         -> Result<(), capnp::Error>
         where T: ReaderSegments
     {
