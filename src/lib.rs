@@ -5,25 +5,17 @@ extern crate bytes;
 extern crate hex;
 
 extern crate tokio_core;
-extern crate tokio_io;
-extern crate tokio_process;
 extern crate tokio;
-extern crate tokio_timer;
-extern crate tokio_codec;
 #[macro_use]
 extern crate futures;
 extern crate rand;
 
 extern crate serde;
 extern crate serde_json;
-extern crate erased_serde;
 extern crate error_chain;
 
 extern crate serde_derive;
 
-extern crate prost;
-extern crate prost_derive;
-extern crate sodiumoxide;
 extern crate capnp;
 extern crate capnp_futures;
 

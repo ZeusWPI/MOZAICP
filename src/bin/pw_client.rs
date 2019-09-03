@@ -1,13 +1,10 @@
 extern crate mozaic;
-extern crate sodiumoxide;
 extern crate hex;
 extern crate tokio;
 #[macro_use]
 extern crate futures;
-extern crate prost;
 extern crate rand;
 extern crate cursive;
-extern crate crossbeam_channel;
 extern crate capnp;
 
 use tokio::net::TcpStream;

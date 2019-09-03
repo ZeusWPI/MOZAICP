@@ -1,6 +1,5 @@
 use std::env;
 
-extern crate sodiumoxide;
 extern crate serde_json;
 extern crate tokio;
 extern crate futures;
