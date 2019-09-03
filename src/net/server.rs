@@ -9,8 +9,6 @@ use super::connection_handler::*;
 use network_capnp::{connect, connected, publish, disconnected};
 use core_capnp::{actor_joined};
 
-
-
 pub struct ServerHandler {
     broker: BrokerHandle,
     tx: mpsc::UnboundedSender<Message>,
@@ -66,7 +64,7 @@ impl ServerHandler {
         return Ok(());
     }
 
-    fn handle_disconnected(&mut self, _w: &mut Writer, r: disconnected::Reader)
+    fn handle_disconnected(&mut self, _w: &mut Writer, _: disconnected::Reader)
         -> Result<(), capnp::Error>
     {
         println!("DISCONNECTED HERE");

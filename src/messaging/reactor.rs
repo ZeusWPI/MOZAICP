@@ -4,6 +4,8 @@ use capnp;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
 
+use errors;
+
 use core_capnp::{mozaic_message, terminate_stream};
 
 /// Runtime trait
@@ -15,17 +17,17 @@ pub trait Context<'a> : Sized {
 }
 
 pub trait CtxHandle<C> {
-    fn dispatch_internal(&mut self, message: Message);
-    fn dispatch_external(&mut self, message: Message);
+    fn dispatch_internal(&mut self, message: Message) -> errors::Result<()>;
+    fn dispatch_external(&mut self, message: Message) -> errors::Result<()>;
 
-    fn open_link<S>(&mut self, params: LinkParams<S, C>)
+    fn open_link<S>(&mut self, params: LinkParams<S, C>) -> errors::Result<()>
         where S: 'static + Send,
               C: Ctx;
 
-    fn close_link(&mut self, id: &ReactorId);
+    fn close_link(&mut self, id: &ReactorId) -> errors::Result<()>;
 
 
-    fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> ReactorId
+    fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> errors::Result<ReactorId>
         where S: 'static + Send,
               C: Ctx;
 }
@@ -43,7 +45,7 @@ pub trait CtxHandle<C> {
 pub struct Reactor<S, C: Ctx> {
     pub id: ReactorId,
     pub internal_state: S,
-    pub internal_handlers: HashMap<u64, CoreHandler<S, C, (), capnp::Error>>,
+    pub internal_handlers: HashMap<u64, CoreHandler<S, C, (), errors::Error>>,
     pub links: HashMap<ReactorId, Link<C>>,
 }
 
@@ -54,7 +56,7 @@ impl<S, C: Ctx> Reactor<S, C> {
         &'a mut self,
         ctx_handle: &'a mut <C as Context<'c>>::Handle,
         message: Message,
-    ) -> Result<(), capnp::Error>
+    ) -> errors::Result<()>
     {
         let reader = message.reader();
         let msg = reader.get()?;
@@ -97,7 +99,7 @@ impl<S, C: Ctx> Reactor<S, C> {
         &mut self,
         ctx_handle: &mut <C as Context<'c>>::Handle,
         message: Message,
-    ) -> Result<(), capnp::Error>
+    ) -> errors::Result<()>
     {
         let reader = message.reader();
 
@@ -162,7 +164,7 @@ impl<C> Link<C>
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: mozaic_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> errors::Result<()>
     {
         if msg.get_type_id() == terminate_stream::Reader::type_id() {
             self.link_state.remote_closed = true;
@@ -177,7 +179,7 @@ impl<C> Link<C>
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: mozaic_message::Reader,
-    ) -> Result<(), capnp::Error>
+    ) -> errors::Result<()>
     {
         let mut link_handle = handle
             .link_handle(&self.remote_id, &mut self.link_state);
@@ -192,9 +194,9 @@ pub struct LinkReducer<S, C>
     /// handler state
     pub state: S,
     /// handle internal messages (sent by core, or other link handlers)
-    pub internal_handlers: LinkHandlers<S, C, (), capnp::Error>,
+    pub internal_handlers: LinkHandlers<S, C, (), errors::Error>,
     /// handle external messages (sent by remote party)
-    pub external_handlers: LinkHandlers<S, C, (), capnp::Error>,
+    pub external_handlers: LinkHandlers<S, C, (), errors::Error>,
 }
 
 /// A trait for all LinkReducers to implement.
@@ -204,13 +206,13 @@ pub trait LinkReducerTrait<C: Ctx>: 'static + Send {
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
-    ) -> Result<(), capnp::Error>;
+    ) -> errors::Result<()>;
 
     fn handle_internal<'a>(
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
-    ) -> Result<(), capnp::Error>;
+    ) -> errors::Result<()>;
 }
 
 impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
@@ -221,7 +223,7 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
-    ) -> Result<(), capnp::Error>
+    ) -> errors::Result<()>
     {
         if let Some(handler) = self.external_handlers.get(&msg.get_type_id()) {
             let mut ctx = HandlerCtx {
@@ -239,7 +241,7 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
-    ) -> Result<(), capnp::Error>
+    ) -> errors::Result<()>
     {
         if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
             let mut ctx = HandlerCtx {
@@ -279,7 +281,7 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
         self.id
     }
 
-    pub fn send_internal<T>(&mut self, msg_buffer: MsgBuffer<T>) {
+    pub fn send_internal<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
@@ -289,19 +291,19 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
         }
 
         let message = Message::from_capnp(builder.into_reader());
-        self.ctx.dispatch_internal(message);
+        self.ctx.dispatch_internal(message)
     }
 
-    pub fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> ReactorId
+    pub fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> errors::Result<ReactorId>
         where S: 'static + Send
     {
         self.ctx.spawn(params, name)
     }
 
-    pub fn open_link<S>(&mut self, params: LinkParams<S, C>)
+    pub fn open_link<S>(&mut self, params: LinkParams<S, C>) -> errors::Result<()>
         where S: 'static + Send
     {
-        self.ctx.open_link(params);
+        self.ctx.open_link(params)
     }
 }
 
@@ -322,7 +324,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         self.remote_id
     }
 
-    pub fn send_internal<T>(&mut self, msg_buffer: MsgBuffer<T>) {
+    pub fn send_internal<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
@@ -332,11 +334,11 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         }
 
         let message = Message::from_capnp(builder.into_reader());
-        self.ctx.dispatch_internal(message);
+        self.ctx.dispatch_internal(message)
     }
 
     /// ? Send message to the other side of the link
-    pub fn send_message<T>(&mut self, msg_buffer: MsgBuffer<T>) {
+    pub fn send_message<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
@@ -346,18 +348,20 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         }
 
         let message = Message::from_capnp(builder.into_reader());
-        self.ctx.dispatch_external(message);
+        self.ctx.dispatch_external(message)
     }
 
-    pub fn close_link(&mut self) {
+    pub fn close_link(&mut self) -> errors::Result<()> {
         if self.link_state.local_closed {
-            return;
+            return Ok(());
         }
 
         let msg = MsgBuffer::<terminate_stream::Owned>::new();
-        self.send_message(msg);
+        self.send_message(msg)?;
 
         self.link_state.local_closed = true;
+
+        Ok(())
     }
 }
 
@@ -397,6 +401,7 @@ impl<M, F> CtxHandler<M, F> {
         }
     }
 }
+
 
 impl<'a, S, H, M, F, T, E> Handler<'a, HandlerCtx<'a, S, H>, M> for CtxHandler<M, F>
     where F: Fn(&mut S, &mut H, <M as Owned<'a>>::Reader) -> Result<T, E>,
@@ -467,7 +472,7 @@ type LinkHandlers<S, C, T, E> = HashMap<u64, LinkHandler<S, C, T, E>>;
 /// ? CoreParams are the parameters for defining handlers for the reactor core
 pub struct CoreParams<S, C: Ctx> {
     pub state: S,
-    pub handlers: HashMap<u64, CoreHandler<S, C, (), capnp::Error>>,
+    pub handlers: HashMap<u64, CoreHandler<S, C, (), errors::Error>>,
 }
 
 impl<S, C: Ctx> CoreParams<S, C> {
@@ -481,7 +486,7 @@ impl<S, C: Ctx> CoreParams<S, C> {
     pub fn handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
              <M as Owned<'static>>::Reader: HasTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>, M, Output=(), Error=capnp::Error>,
+              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         self.handlers.insert(
@@ -497,8 +502,8 @@ impl<S, C: Ctx> CoreParams<S, C> {
 pub struct LinkParams<S, C: Ctx> {
     pub remote_id: ReactorId,
     pub state: S,
-    pub internal_handlers: LinkHandlers<S, C, (), capnp::Error>,
-    pub external_handlers: LinkHandlers<S, C, (), capnp::Error>,
+    pub internal_handlers: LinkHandlers<S, C, (), errors::Error>,
+    pub external_handlers: LinkHandlers<S, C, (), errors::Error>,
 }
 
 impl<S, C: Ctx> LinkParams<S, C> {
@@ -514,7 +519,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
     pub fn internal_handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
              <M as Owned<'static>>::Reader: HasTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=capnp::Error>
+              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         self.internal_handlers.insert(
@@ -527,7 +532,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
     pub fn external_handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
              <M as Owned<'static>>::Reader: HasTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=capnp::Error>
+              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         self.external_handlers.insert(

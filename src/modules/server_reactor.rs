@@ -83,7 +83,7 @@ impl ServerReactor {
         let id = r.get_key()?;
         let id = Identifier::from(id);
 
-        if let Some(ReactorId) = self.client_controllers.get(&id) {
+        if let Some(reactor_id) = self.client_controllers.get(&id) {
             // bla bla
         }
 
