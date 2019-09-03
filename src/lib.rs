@@ -12,6 +12,8 @@ extern crate rand;
 
 extern crate serde;
 extern crate serde_json;
+
+#[macro_use]
 extern crate error_chain;
 
 extern crate serde_derive;
@@ -26,6 +28,8 @@ pub mod server;
 pub mod client;
 
 pub mod modules;
+
+pub mod errors;
 
 pub mod core_capnp {
     include!(concat!(env!("OUT_DIR"), "/core_capnp.rs"));
