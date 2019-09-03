@@ -17,6 +17,8 @@ use rand::Rng;
 
 use std::collections::HashMap;
 
+mod pw;
+
 static HELP: &'static str = "\
 Please use one of the following commands:
 
@@ -48,7 +50,7 @@ fn main() {
 struct Reactor {
     cmd_id: ReactorId,
     broker: BrokerHandle,
-    games: HashMap<ReactorId, i32>,
+    games: HashMap<ReactorId, pw::GameState>,
 }
 
 impl Reactor {

@@ -15,18 +15,20 @@ use self::runtime::{Broker, BrokerHandle, Runtime};
 use net::server::ServerHandler;
 
 pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
-    where F: FnOnce(ReactorId) -> CoreParams<S, Runtime>,
+    where F: Send + 'static + FnOnce(ReactorId) -> CoreParams<S, Runtime>,
           S: Send + 'static
 {
-    let mut broker = Broker::new();
-    let greeter_id: ReactorId = rand::thread_rng().gen();
-
-    let greeter_params = initialize_greeter(broker.get_runtime_id());
 
     // let stupid = Stupid { greeter_id: greeter_id.clone(), broker: broker.clone()};
     // let mut params: CoreParams<Stupid, Runtime> = stupid.params();
 
     tokio::run(futures::lazy(move || {
+
+        let mut broker = Broker::new();
+        let greeter_id: ReactorId = rand::thread_rng().gen();
+
+        let greeter_params = initialize_greeter(broker.get_runtime_id());
+
         broker.spawn(greeter_id.clone(), greeter_params, &format!("Tcp Server {}", addr.port()));
 
         tokio::spawn(TcpServer::new(broker, greeter_id, &addr));
@@ -64,7 +66,10 @@ impl TcpServer {
                 self.broker.clone(),
                 self.greeter_id.clone()
             );
-            tokio::spawn(handler);
+            tokio::spawn(handler.then(|e| {
+                println!("This one is done {:?}", e);
+                Ok(())
+            }));
         }
     }
 }

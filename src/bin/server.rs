@@ -14,6 +14,8 @@ use mozaic::messaging::types::*;
 use mozaic::messaging::reactor::*;
 use mozaic::server::run_server;
 
+// TODO: Find from where to get disconnect event something something
+
 pub mod chat {
     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
 }
@@ -49,11 +51,6 @@ impl Welcomer {
         let link = WelcomerRuntimeLink {};
         handle.open_link(link.params(self.runtime_id.clone()));
 
-        let logger = Logger { from: handle.id().clone()};
-        let logger_id = handle.spawn(logger.params(), "logger");
-
-        let logger_link = LoggerLink {};
-        handle.open_link(logger_link.params(logger_id));
         return Ok(());
     }
 
@@ -66,6 +63,7 @@ impl Welcomer {
         //? id is the id of the client reactor on the other side of the interwebs
         let id: ReactorId = r.get_id()?.into();
         println!("welcoming {:?}", id);
+
         let link = WelcomerGreeterLink {};
         handle.open_link(link.params(id));
         return Ok(());
@@ -95,7 +93,7 @@ impl WelcomerRuntimeLink {
         return params;
     }
 
-    /// ? Create a new handle connecting to the new users's reactor
+    //? Retransmit actor_joined so the Welcomer can create a link to it.
     fn e_handle_actor_joined<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
@@ -128,6 +126,7 @@ impl WelcomerGreeterLink {
         return params;
     }
 
+    //? Listen for local chat messages and resend them trough the interwebs
     fn i_handle_chat_msg_send<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
@@ -147,6 +146,8 @@ impl WelcomerGreeterLink {
         return Ok(());
     }
 
+    //? Handle chat messages by sending them internally so everybody can hear them
+    //? Including you self
     fn e_handle_chat_msg_resv<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
@@ -163,91 +164,6 @@ impl WelcomerGreeterLink {
         });
 
         handle.send_internal(chat_message);
-
-        return Ok(());
-    }
-}
-
-// This is aboslutely empty
-struct Logger {
-    from: ReactorId,
-}
-
-impl Logger {
-    fn params<C: Ctx>(self) -> CoreParams<Self, C> {
-        let mut params = CoreParams::new(self);
-        params.handler(initialize::Owned, CtxHandler::new(Self::initialize));
-        return params;
-    }
-
-    // reactor setup
-    fn initialize<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        _: initialize::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let link = LoggerLink{};
-        handle.open_link(link.params(self.from.clone()));
-
-        Ok(())
-    }
-}
-
-struct LoggerLink {
-
-}
-
-impl LoggerLink {
-    fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
-
-        let mut params = LinkParams::new(foreign_id, self);
-
-        params.external_handler(
-            chat::user_input::Owned,
-            CtxHandler::new(Self::handle_user_input),
-        );
-
-        params.internal_handler(
-            chat::chat_message::Owned,
-            CtxHandler::new(Self::log),
-        );
-
-        return params;
-    }
-
-    fn log<C: Ctx> (
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        input: chat::chat_message::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let message = input.get_message()?;
-
-        let mut send_message = MsgBuffer::<chat::user_input::Owned>::new();
-        send_message.build(|b| {
-            b.set_text(message);
-        });
-
-        handle.send_message(send_message);
-        return Ok(());
-    }
-
-    fn handle_user_input<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        input: chat::user_input::Reader,
-    ) -> Result<(), capnp::Error>
-    {
-        let message = input.get_text()?;
-
-        let mut send_message = MsgBuffer::<chat::send_message::Owned>::new();
-        send_message.build(|b| {
-            b.set_message(message);
-            b.set_user(&"Bob");
-        });
-
-        handle.send_internal(send_message);
 
         return Ok(());
     }

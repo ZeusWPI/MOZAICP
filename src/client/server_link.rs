@@ -9,7 +9,7 @@ use rand::Rng;
 
 use net::connection_handler::*;
 
-use network_capnp::{connect, connected, publish};
+use network_capnp::{connect, connected, publish, disconnected};
 
 pub struct ClientParams {
     pub runtime_id: ReactorId,
@@ -42,7 +42,7 @@ impl<S> LinkHandler<S>
     ) -> ConnectionHandler<Self>
         where F: 'static + Send + Fn(ClientParams) -> CoreParams<S, Runtime>
     {
-
+        println!("This is never called");
         let client_id: ReactorId = rand::thread_rng().gen();
 
         let mut h = ConnectionHandler::new(stream, |tx| {
@@ -56,6 +56,8 @@ impl<S> LinkHandler<S>
             });
             handler.on(publish::Owned, MsgHandler::new(Self::publish_message));
             handler.on(connected::Owned, MsgHandler::new(Self::handle_connected));
+            handler.on(disconnected::Owned, MsgHandler::new(Self::handle_disconnected));
+
             return handler;
         });
 
@@ -95,5 +97,12 @@ impl<S> LinkHandler<S>
         let message = Message::from_segment(vec_segment);
         self.runtime.lock().unwrap().dispatch_message(message);
         return Ok(());
+    }
+
+    fn handle_disconnected(&mut self, _w: &mut Writer, _:disconnected::Reader)
+        -> Result<(), capnp::Error>
+    {
+        println!("DISCONNEcTING");
+        Ok(())
     }
 }

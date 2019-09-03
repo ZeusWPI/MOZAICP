@@ -1,10 +1,10 @@
-@0xad560d3d7666face;
+@0xad560d5d7666face;
 
 struct MozaicMessage {
     sender @0: Data;
     receiver @1: Data;
     typeId @2: UInt64;
-    payload @3: AnyPointer; 
+    payload @3: AnyPointer;
 }
 
 struct TerminateStream {}
@@ -30,4 +30,8 @@ struct Greeting {
 
 struct ActorJoined {
     id @0: Data;
+}
+
+struct Identify {
+    key @0: Data;
 }

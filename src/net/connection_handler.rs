@@ -12,7 +12,7 @@ use capnp::any_pointer;
 use capnp::traits::{Owned, HasTypeId};
 use capnp::message::{ReaderOptions, Reader, Builder, HeapAllocator, ReaderSegments};
 
-use network_capnp::{network_message, publish};
+use network_capnp::{network_message, publish, disconnected};
 use messaging::types::{Message, Handler, AnyPtrHandler};
 
 
@@ -35,12 +35,14 @@ impl<S> ConnectionHandler<S> {
         };
     }
 
+    /// Wrap generic message in network_capnp::publish and send it over the wire
     fn forward_messages(&mut self) -> Poll<(), ()> {
         while let Some(msg) = try_ready!(self.rx.poll()) {
             self.handler.writer().write(publish::Owned, |b| {
                 let mut publish: publish::Builder = b.init_as();
                 publish.set_message(msg.bytes());
             });
+            println!("Forwarding msg");
         }
         return Ok(Async::Ready(()))
     }
@@ -56,10 +58,17 @@ impl<S> Future for ConnectionHandler<S> {
 
     fn poll(&mut self) -> Poll<(), ()> {
         if self.forward_messages()?.is_ready() {
+            println!("Forward messages is ready");
             return Ok(Async::Ready(()));
         }
 
-        if self.handler.poll_stream().unwrap().is_ready() {
+        if self.handler.poll_stream().expect("poll_stream failed").is_ready() {
+            println!("Poll stream is ready");
+
+            self.handler.writer().write(disconnected::Owned, |b| {
+                let mut publish: disconnected::Builder = b.init_as();
+            });
+
             return Ok(Async::Ready(()));
         }
 
@@ -154,9 +163,12 @@ impl<S> StreamHandler<S> {
             write_queue: &mut self.write_queue,
         };
         let reader = builder.get_root::<network_message::Reader>()?;
+
         return self.core.handle(&mut writer, reader);
     }
 
+    // Stream.poll() -> Result<Async<T>, capnp::Error>
+    /// self.transport.poll will finish with Err(disconnected), I think
     fn poll_transport(&mut self) -> Poll<(), capnp::Error> {
         while let Some(reader) = try_ready!(self.transport.poll()) {
             self.handle_message(reader)?;

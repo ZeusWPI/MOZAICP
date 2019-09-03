@@ -18,3 +18,7 @@ struct Connect {
 struct Connected {
     id @0: Data;
 }
+
+struct Disconnected {
+    id @0: Data;
+}

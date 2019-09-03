@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 
 use super::connection_handler::*;
 
-use network_capnp::{connect, connected, publish};
+use network_capnp::{connect, connected, publish, disconnected};
 use core_capnp::{actor_joined};
 
 
@@ -29,6 +29,8 @@ impl ServerHandler {
             });
             handler.on(publish::Owned, MsgHandler::new(Self::publish_message));
             handler.on(connect::Owned, MsgHandler::new(Self::handle_connect));
+            handler.on(disconnected::Owned, MsgHandler::new(Self::handle_disconnected));
+
             return handler;
         })
     }
@@ -57,6 +59,13 @@ impl ServerHandler {
         let vec_segment = VecSegment::from_bytes(r.get_message()?);
         let message = Message::from_segment(vec_segment);
         self.broker.dispatch_message(message);
+        return Ok(());
+    }
+
+    fn handle_disconnected(&mut self, _w: &mut Writer, r: disconnected::Reader)
+        -> Result<(), capnp::Error>
+    {
+        println!("DISCONNECTED HERE");
         return Ok(());
     }
 }
