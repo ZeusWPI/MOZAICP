@@ -123,6 +123,7 @@ impl WelcomerRuntimeLink {
         let mut joined = MsgBuffer::<actor_joined::Owned>::new();
         joined.build(|b| b.set_id(id.bytes()));
         handle.send_internal(joined)?;
+
         return Ok(());
     }
 }

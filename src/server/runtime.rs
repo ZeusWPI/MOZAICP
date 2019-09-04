@@ -16,7 +16,7 @@ use messaging::reactor::*;
 use modules;
 use log_capnp::{open_log_link};
 use errors::ErrorKind::{NoSuchReactorError, MozaicError};
-use errors::{self, Consumable, ResultExt};
+use errors::{self, Consumable, ResultExt, Result};
 
 /// The main runtime
 pub struct Runtime;
@@ -27,7 +27,7 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new() -> errors::Result<BrokerHandle> {
+    pub fn new() -> Result<BrokerHandle> {
         let id: ReactorId = rand::thread_rng().gen();
 
         let broker = Broker {
@@ -41,7 +41,7 @@ impl Broker {
         return Ok(broker);
     }
 
-    fn dispatch_message(&mut self, message: Message) -> R<()>{
+    fn dispatch_message(&mut self, message: Message) -> Result<()>{
         let receiver_id: ReactorId = message.reader()
             .get()?
             .get_receiver()?
@@ -70,7 +70,7 @@ impl BrokerHandle {
         self.broker.lock().unwrap().runtime_id.clone()
     }
 
-    pub fn dispatch_message(&mut self, message: Message) -> R<()> {
+    pub fn dispatch_message(&mut self, message: Message) -> Result<()> {
         let mut broker = self.broker.lock().unwrap();
         broker.dispatch_message(message)
     }
@@ -86,7 +86,7 @@ impl BrokerHandle {
     }
 
 
-    pub fn send_message_self<M, F>(&mut self, target: &ReactorId, m: M, initializer: F) -> R<()>
+    pub fn send_message_self<M, F>(&mut self, target: &ReactorId, m: M, initializer: F) -> Result<()>
         where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
               M: Owned<'static>,
               <M as Owned<'static>>::Builder: HasTypeId,
@@ -94,7 +94,7 @@ impl BrokerHandle {
         self.send_message(&self.get_runtime_id(), target, m, initializer)
     }
 
-    pub fn send_message<M, F>(&mut self, sender: &ReactorId, target: &ReactorId, _m: M, initializer: F) -> R<()>
+    pub fn send_message<M, F>(&mut self, sender: &ReactorId, target: &ReactorId, _m: M, initializer: F) -> Result<()>
         where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
               M: Owned<'static>,
               <M as Owned<'static>>::Builder: HasTypeId,
@@ -124,7 +124,7 @@ impl BrokerHandle {
         broker.dispatch_message(msg)
     }
 
-    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str) -> R<()>
+    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str) -> Result<()>
         where S: 'static + Send
     {
         let mut driver = {
@@ -257,20 +257,18 @@ pub struct DriverHandle<'a> {
     broker: &'a mut BrokerHandle,
 }
 
-
-use errors::Result as R;
 impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
 
-    fn dispatch_internal(&mut self, msg: Message) -> R<()> {
+    fn dispatch_internal(&mut self, msg: Message) -> Result<()> {
         self.internal_queue.push_back(InternalOp::Message(msg));
         Ok(())
     }
 
-    fn dispatch_external(&mut self, msg: Message) -> R<()> {
+    fn dispatch_external(&mut self, msg: Message) -> Result<()> {
         self.broker.dispatch_message(msg)
     }
 
-    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, name: &str) -> R<ReactorId>
+    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, name: &str) -> Result<ReactorId>
         where T: 'static + Send
     {
         let id: ReactorId = rand::thread_rng().gen();
@@ -278,14 +276,14 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         Ok(id)
     }
 
-    fn open_link<T>(&mut self, params: LinkParams<T, Runtime>) -> R<()>
+    fn open_link<T>(&mut self, params: LinkParams<T, Runtime>) -> Result<()>
         where T: 'static + Send
     {
         self.internal_queue.push_back(InternalOp::OpenLink(Box::new(params)));
         Ok(())
     }
 
-    fn close_link(&mut self, id: &ReactorId) -> R<()> {
+    fn close_link(&mut self, id: &ReactorId) -> Result<()> {
         self.internal_queue.push_back(InternalOp::CloseLink(id.clone()));
         Ok(())
     }
