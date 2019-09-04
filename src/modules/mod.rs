@@ -32,7 +32,7 @@ pub fn log_reactor<C: Ctx>(
     joined.build(|b| {
         b.set_log(&msg);
     });
-    handle.send_internal(joined);
+    handle.send_internal(joined).unwrap();
 }
 
 /// Function to log with a link handle.
@@ -44,5 +44,5 @@ pub fn log_handle<C: Ctx>(
     joined.build(|b| {
         b.set_log(&msg);
     });
-    handle.send_internal(joined);
+    handle.send_internal(joined).unwrap();
 }

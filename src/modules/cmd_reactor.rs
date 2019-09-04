@@ -44,9 +44,9 @@ impl CmdReactor {
         _: initialize::Reader,
     ) -> Result<(), errors::Error>
     {
-        handle.open_link(CmdLink.params(handle.id().clone()));
+        handle.open_link(CmdLink.params(handle.id().clone()))?;
 
-        handle.open_link(ForeignLink.params(self.foreign_id.clone()));
+        handle.open_link(ForeignLink.params(self.foreign_id.clone()))?;
 
         setup_async_stdin(self.broker.clone(), handle.id().clone());
 
@@ -96,7 +96,7 @@ impl CmdLink {
 
         let mut joined = MsgBuffer::<cmd_input::Owned>::new();
         joined.build(|b| b.set_input(msg));
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
 
         Ok(())
     }
@@ -134,7 +134,7 @@ impl ForeignLink {
 
         let mut joined = MsgBuffer::<cmd_input::Owned>::new();
         joined.build(|b| b.set_input(&msg));
-        handle.send_message(joined);
+        handle.send_message(joined)?;
 
         Ok(())
     }
@@ -148,7 +148,7 @@ impl ForeignLink {
 
         let mut joined = MsgBuffer::<cmd_return::Owned>::new();
         joined.build(|b| b.set_message(&message));
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
 
         Ok(())
     }
@@ -184,7 +184,7 @@ fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
                     let mut msg: cmd_input::Builder = b.init_as();
                     msg.set_input(&string);
                 }
-            );
+            ).unwrap();
             Ok(())
         })
         .wait()

@@ -36,7 +36,7 @@ impl LogReactor {
         _: initialize::Reader,
     ) -> Result<(), errors::Error> {
         // Open link with foreign
-        self.open_link(handle, self.foreign.clone());
+        self.open_link(handle, self.foreign.clone())?;
 
         Ok(())
     }
@@ -50,7 +50,7 @@ impl LogReactor {
         let name = r.get_name()?;
         let id = r.get_id()?;
 
-        self.open_link(handle, (ReactorId::from(id), name.to_string()));
+        self.open_link(handle, (ReactorId::from(id), name.to_string()))?;
 
         Ok(())
     }
@@ -59,10 +59,10 @@ impl LogReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         user: (ReactorId, String)
-    ) {
+    ) -> Result<(), errors::Error> {
         handle.open_link(
             LogLink::params(user)
-        );
+        )
     }
 
     fn handle_log<C: Ctx>(
@@ -104,7 +104,7 @@ impl Link {
         joined.build(|b| {
             b.set_log(&msg);
         });
-        handle.send_message(joined);
+        handle.send_message(joined)?;
 
         Ok(())
     }
@@ -145,7 +145,7 @@ impl LogLink {
             b.set_log(&msg);
             b.set_name(&self.name);
         });
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
 
         Ok(())
     }
@@ -163,7 +163,7 @@ impl LogLink {
             b.set_id(id);
             b.set_name(name);
         });
-        handle.send_internal(joined);
+        handle.send_internal(joined)?;
 
         Ok(())
     }
