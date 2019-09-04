@@ -67,16 +67,12 @@ impl ServerHandler {
     fn handle_disconnected(&mut self, _w: &mut Writer, _: disconnected::Reader)
         -> Result<(), errors::Error>
     {
-        println!("DISCONNECTED HERE");
-
 
         if let Some(sender) = &self.connecting_id {
             self.broker.send_message(&sender, &self.welcomer_id, disconnected::Owned, |b| {
                 let mut joined: disconnected::Builder = b.init_as();
                 joined.set_id(sender.bytes());
             })?;
-
-            // self.broker.unregister(&sender);
         }
 
         return Ok(());

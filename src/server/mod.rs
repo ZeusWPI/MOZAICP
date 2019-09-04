@@ -66,10 +66,7 @@ impl TcpServer {
                 self.broker.clone(),
                 self.greeter_id.clone()
             );
-            tokio::spawn(handler.then(|e| {
-                println!("This one is done {:?}", e);
-                Ok(())
-            }));
+            tokio::spawn(handler);
         }
     }
 }

@@ -120,7 +120,7 @@ impl<S, C: Ctx> Reactor<S, C> {
         } else {
             // I've spent too much time on this print statement
             let err: Result<()> = errors::Result::Err(
-                errors::Error::from_kind(MozaicError("No link external handler found"))
+                errors::Error::from_kind(MozaicError("No reactor internal handler found"))
             );
 
             err.consume();

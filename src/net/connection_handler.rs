@@ -42,7 +42,6 @@ impl<S> ConnectionHandler<S> {
                 let mut publish: publish::Builder = b.init_as();
                 publish.set_message(msg.bytes());
             });
-            println!("Forwarding msg");
         }
         return Ok(Async::Ready(()))
     }
@@ -58,12 +57,10 @@ impl<S> Future for ConnectionHandler<S> {
 
     fn poll(&mut self) -> Poll<(), ()> {
         if self.forward_messages()?.is_ready() {
-            println!("Forward messages is ready");
             return Ok(Async::Ready(()));
         }
 
         if self.handler.poll_stream().expect("poll_stream failed").is_ready() {
-            println!("Poll stream is ready");
 
             let mut msg = Builder::new_default();
 

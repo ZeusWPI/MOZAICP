@@ -67,7 +67,8 @@ impl Welcomer {
     {
         //? id is the id of the client reactor on the other side of the interwebs
         let id: ReactorId = r.get_id()?.into();
-        println!("welcoming {:?}", id);
+
+        log_reactor(handle, &format!("Welcomming client {:?}", id));
 
         let link = WelcomerGreeterLink {};
         handle.open_link(link.params(id))?;
@@ -89,11 +90,15 @@ impl Welcomer {
 
     fn handle_chat_message<C: Ctx>(
         &mut self,
-        _: &mut ReactorHandle<C>,
+        handle: &mut ReactorHandle<C>,
         msg: chat::chat_message::Reader,
     ) -> Result<(), errors::Error>
     {
-        println!("{}: {}",msg.get_user()? ,msg.get_message()?);
+        let user = msg.get_user()?;
+        let message = msg.get_message()?;
+
+        log_reactor(handle, &format!("Client {} sent {}", user, message));
+
         return Ok(());
     }
 }
@@ -207,14 +212,8 @@ impl WelcomerGreeterLink {
             b.set_id(id);
         });
 
-        eprintln!("Im HERE FIRST");
-
-
         handle.send_internal(disconnected)?;
-        eprintln!("Im HERE");
-
         handle.close_link()?;
-        eprintln!("Closed link");
 
         return Ok(());
     }
