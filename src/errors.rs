@@ -1,4 +1,4 @@
-
+use std::io::{self, Write};
 
 use messaging::types::ReactorId;
 
@@ -25,3 +25,43 @@ error_chain!{
         }
     }
 }
+
+
+pub fn print_error(e: Error) {
+    let mut stderr = io::stderr();
+
+    for er in e.iter() {
+        let _ = writeln!(stderr, "{}", er);
+    }
+}
+
+pub struct ErrWrapper(Option<Error>);
+
+impl<T> From<Result<T>> for ErrWrapper {
+    fn from(e: Result<T>) -> Self {
+        ErrWrapper(e.err())
+    }
+}
+
+pub trait Consumable {
+    fn consume(self);
+}
+
+impl<T> Consumable for T
+    where T: Into<ErrWrapper> {
+
+    fn consume(self) {
+        self.into().consume();
+    }
+}
+
+impl ErrWrapper {
+    pub fn consume(self) {
+        match self.0 {
+            None => {},
+            Some(inner) => print_error(inner),
+        }
+    }
+}
+
+pub use errors;

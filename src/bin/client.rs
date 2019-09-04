@@ -16,7 +16,7 @@ use mozaic::chat_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
-use mozaic::errors;
+use mozaic::errors::*;
 
 
 use std::thread;
@@ -112,7 +112,7 @@ impl ClientReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         // open link with chat server
         let link = (ServerLink {}).params(self.greeter_id.clone());
@@ -163,7 +163,7 @@ impl ServerLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         send_message: chat_capnp::send_message::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let message = send_message.get_message()?;
         let user = send_message.get_user()?;
@@ -186,7 +186,7 @@ impl ServerLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         chat_message: chat_capnp::chat_message::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
@@ -198,7 +198,6 @@ impl ServerLink {
         });
         handle.send_internal(chat_message)?;
 
-
         return Ok(());
     }
 
@@ -206,7 +205,7 @@ impl ServerLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: terminate_stream::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         // also close our end of the stream
         handle.close_link()?;
@@ -246,7 +245,7 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: chat_capnp::connect_to_gui::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let connect = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
         handle.send_message(connect)?;
@@ -258,7 +257,7 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         chat_message: chat_capnp::chat_message::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let message = chat_message.get_message()?;
         let user = chat_message.get_user()?;
@@ -277,7 +276,7 @@ impl RuntimeLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         input: chat_capnp::user_input::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let message = input.get_text()?;
 
@@ -297,7 +296,7 @@ mod runtime {
     use capnp::any_pointer;
     use capnp::traits::{Owned, HasTypeId};
     use mozaic::chat_capnp;
-    use mozaic::errors;
+    use mozaic::errors::*;
 
     use cursive::{Cursive, CbSink};
     use cursive::views::{TextView, EditView};
@@ -374,7 +373,7 @@ mod runtime {
     fn rt_connect_to_gui(
         ctx: &mut RtHandlerCtx<HandlerState>,
         _: chat_capnp::connect_to_gui::Reader
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let reactor_id = ctx.sender_id.clone();
         let runtime = ctx.state.runtime.clone();
@@ -388,7 +387,7 @@ mod runtime {
                         |b| {
                             let mut input: chat_capnp::user_input::Builder = b.init_as();
                             input.set_text(input_text);
-                        }).unwrap();
+                        }).consume();
                     cursive.call_on_id("input", |view: &mut EditView| {
                         view.set_content("");
                     });
@@ -402,7 +401,7 @@ mod runtime {
     fn rt_display_chat_message(
         ctx: &mut RtHandlerCtx<HandlerState>,
         msg: chat_capnp::chat_message::Reader
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let message = msg.get_message()?.to_string();
         let user = msg.get_user()?.to_string();
@@ -456,7 +455,7 @@ mod runtime {
         }
 
         pub fn handle(&mut self, message: &Message)
-            -> Result<(), errors::Error>
+            -> Result<()>
         {
             let reader = message.reader();
             let type_id = reader.get()?.get_type_id();

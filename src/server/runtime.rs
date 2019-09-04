@@ -16,7 +16,7 @@ use messaging::reactor::*;
 use modules;
 use log_capnp::{open_log_link};
 use errors::ErrorKind::{NoSuchReactorError, MozaicError};
-use errors;
+use errors::{self, Consumable, ResultExt};
 
 /// The main runtime
 pub struct Runtime;
@@ -43,18 +43,15 @@ impl Broker {
 
     fn dispatch_message(&mut self, message: Message) -> R<()>{
         let receiver_id: ReactorId = message.reader()
-            .get()
-            .unwrap()
-            .get_receiver()
-            .unwrap()
+            .get()?
+            .get_receiver()?
             .into();
 
         let receiver = self.actors.get_mut(&receiver_id.clone()).ok_or(
             errors::Error::from_kind(NoSuchReactorError(receiver_id))
         )?;
 
-        receiver.tx.unbounded_send(message)
-            .expect("send failed");
+        receiver.tx.unbounded_send(message).map_err(|_| "send failed")?;
         Ok(())
     }
 }
@@ -198,7 +195,7 @@ impl<S: 'static> ReactorDriver<S> {
             broker: &mut self.broker,
         };
         self.reactor.handle_external_message(&mut handle, message)
-            .expect("handling failed");
+            .chain_err(|| "handling failed").consume();
     }
 
     fn handle_internal_queue(&mut self) {
@@ -210,7 +207,7 @@ impl<S: 'static> ReactorDriver<S> {
                         broker: &mut self.broker,
                     };
                     self.reactor.handle_internal_message(&mut handle, msg)
-                        .expect("handling failed");
+                        .chain_err(|| "handling failed").consume();
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();

@@ -1,6 +1,7 @@
 
 use messaging::reactor::*;
 use messaging::types::*;
+use errors::Consumable;
 
 use log_capnp::{log};
 
@@ -32,7 +33,7 @@ pub fn log_reactor<C: Ctx>(
     joined.build(|b| {
         b.set_log(&msg);
     });
-    handle.send_internal(joined).unwrap();
+    handle.send_internal(joined).consume();
 }
 
 /// Function to log with a link handle.
@@ -44,5 +45,5 @@ pub fn log_handle<C: Ctx>(
     joined.build(|b| {
         b.set_log(&msg);
     });
-    handle.send_internal(joined).unwrap();
+    handle.send_internal(joined).consume();
 }

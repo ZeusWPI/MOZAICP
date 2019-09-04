@@ -12,7 +12,7 @@ use mozaic::match_control_capnp::{start_game};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::server::runtime::{Broker, BrokerHandle};
-use mozaic::errors;
+use mozaic::errors::*;
 
 use rand::Rng;
 
@@ -39,8 +39,8 @@ fn main() {
     tokio::run(futures::lazy(move || {
         let mut broker = Broker::new().unwrap();
 
-        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main").unwrap();
-        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd").unwrap();
+        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main").consume();
+        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd").consume();
 
         return Ok(());
     }));
@@ -73,7 +73,7 @@ impl Reactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         // open link with command line
         handle.open_link(CmdLink.params(self.cmd_id.clone()))?;
@@ -87,12 +87,11 @@ impl Reactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _r: start_game::Reader,
-    ) -> Result<(), errors::Error> {
+    ) -> Result<()> {
         modules::log_reactor(handle, "Creating new game!!");
 
         Ok(())
     }
-
 }
 
 /// Listen for command line messages and handle them.
@@ -118,7 +117,7 @@ impl CmdLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_input::Reader,
-    ) -> Result<(), errors::Error> {
+    ) -> Result<()> {
 
         // TODO: make fancy
         // Parse the input
@@ -157,7 +156,7 @@ impl CmdLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         r: cmd_return::Reader,
-    ) -> Result<(), errors::Error> {
+    ) -> Result<()> {
         let msg = r.get_message()?;
 
         let mut joined = MsgBuffer::<cmd_return::Owned>::new();

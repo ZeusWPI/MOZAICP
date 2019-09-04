@@ -14,7 +14,7 @@ use rand::Rng;
 use messaging::types::*;
 use messaging::reactor::*;
 
-use errors::{Result as R, self};
+use errors::*;
 use errors::ErrorKind::MozaicError;
 
 pub struct Runtime;
@@ -68,7 +68,7 @@ impl RuntimeState {
         }
     }
 
-    pub fn dispatch_message(&mut self, message: Message) -> R<()> {
+    pub fn dispatch_message(&mut self, message: Message) -> Result<()> {
         let receiver_id = message.reader()
             .get()
             .unwrap()
@@ -79,16 +79,16 @@ impl RuntimeState {
         if receiver_id == self.runtime_id {
             if let Some(ref mut worker) = self.runtime_worker {
                 worker.unbounded_send(message)
-                    .expect("failed to send");
+                    .map_err(|_| "failed to send".into()).consume();
             } else {
                 eprintln!("worker not running");
             }
         } else if let Some(receiver) = self.actors.get_mut(&receiver_id) {
             receiver.tx.unbounded_send(message)
-                .expect("send failed");
+                .map_err(|_|"send failed".into()).consume();
         } else if let Some(ref mut server_link) = self.server_link {
             server_link.unbounded_send(message)
-                .expect("send failed");
+                .map_err(|_|"send failed".into()).consume();
         } else {
             return Err(errors::Error::from_kind(MozaicError("server link closed")));
         }
@@ -96,7 +96,7 @@ impl RuntimeState {
         Ok(())
     }
 
-    pub fn send_message<M, F>(&mut self, target: &ReactorId, _m: M, initializer: F) -> R<()>
+    pub fn send_message<M, F>(&mut self, target: &ReactorId, _m: M, initializer: F) -> Result<()>
         where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
               M: Owned<'static>,
               <M as Owned<'static>>::Builder: HasTypeId,
@@ -130,7 +130,7 @@ pub fn spawn_reactor<S>(
     runtime_state: &Arc<Mutex<RuntimeState>>,
     id: ReactorId,
     core_params: CoreParams<S, Runtime>,
-) -> R<()> where S: 'static + Send
+) -> Result<()> where S: 'static + Send
 {
     let mut runtime = runtime_state.lock().unwrap();
 
@@ -188,7 +188,7 @@ impl<S: 'static> ReactorDriver<S> {
             runtime: &mut self.runtime,
         };
         self.reactor.handle_external_message(&mut handle, message)
-            .expect("handling failed");
+            .chain_err(|| "handling failed").consume();
     }
 
     fn handle_internal_queue(&mut self) {
@@ -200,7 +200,7 @@ impl<S: 'static> ReactorDriver<S> {
                         runtime: &mut self.runtime,
                     };
                     self.reactor.handle_internal_message(&mut handle, msg)
-                        .expect("handling failed");
+                        .chain_err(||"handling failed").consume();
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();
@@ -252,17 +252,17 @@ pub struct DriverHandle<'a> {
 
 impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
 
-    fn dispatch_internal(&mut self, msg: Message) -> R<()> {
+    fn dispatch_internal(&mut self, msg: Message) -> Result<()> {
         self.internal_queue.push_back(InternalOp::Message(msg));
 
         Ok(())
     }
 
-    fn dispatch_external(&mut self, msg: Message) -> R<()> {
+    fn dispatch_external(&mut self, msg: Message) -> Result<()> {
         self.runtime.lock().unwrap().dispatch_message(msg)
     }
 
-    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, _: &str) -> R<ReactorId>
+    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, _: &str) -> Result<ReactorId>
         where T: 'static + Send
     {
         let id: ReactorId = rand::thread_rng().gen();
@@ -270,14 +270,14 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         return Ok(id);
     }
 
-    fn open_link<T>(&mut self, params: LinkParams<T, Runtime>) -> R<()>
+    fn open_link<T>(&mut self, params: LinkParams<T, Runtime>) -> Result<()>
         where T: 'static + Send
     {
         self.internal_queue.push_back(InternalOp::OpenLink(Box::new(params)));
         Ok(())
     }
 
-    fn close_link(&mut self, id: &ReactorId) -> R<()> {
+    fn close_link(&mut self, id: &ReactorId) -> Result<()> {
         self.internal_queue.push_back(InternalOp::CloseLink(id.clone()));
         Ok(())
     }

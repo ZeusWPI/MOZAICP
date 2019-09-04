@@ -3,7 +3,7 @@ use super::types::*;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
 
-use errors;
+use errors::{self, Consumable};
 use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 
 use core_capnp::{mozaic_message, terminate_stream};
@@ -104,6 +104,7 @@ impl<S, C: Ctx> Reactor<S, C> {
 
         let msg = reader.get()?;
 
+
         if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
@@ -117,7 +118,12 @@ impl<S, C: Ctx> Reactor<S, C> {
 
             handler.handle(&mut handler_ctx, msg.get_payload())?;
         } else {
-            eprintln!("No reactor internal handler found");
+            // I've spent too much time on this print statement
+            let err: errors::Result<()> = errors::Result::Err(
+                errors::Error::from_kind(MozaicError("No link external handler found"))
+            );
+
+            err.consume();
         }
 
         for link in self.links.values_mut() {
@@ -126,7 +132,7 @@ impl<S, C: Ctx> Reactor<S, C> {
                 ctx: ctx_handle,
             };
 
-            link.handle_internal(&mut reactor_handle, msg)?;
+            link.handle_internal(&mut reactor_handle, msg).consume();
         }
 
         return Ok(());
@@ -223,16 +229,18 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
         msg: mozaic_message::Reader<'a>,
     ) -> errors::Result<()>
     {
-        if let Some(handler) = self.external_handlers.get(&msg.get_type_id()) {
-            let mut ctx = HandlerCtx {
-                state: &mut self.state,
-                handle: link_handle,
-            };
-            handler.handle(&mut ctx, msg.get_payload())?
-        } else {
-            eprintln!("No link external handler found");
-        }
-        return Ok(());
+        let handler = self.external_handlers.get(&msg.get_type_id()).ok_or(
+            errors::Error::from_kind(MozaicError("No link external handler found"))
+        )?;
+
+        let mut ctx = HandlerCtx {
+            state: &mut self.state,
+            handle: link_handle,
+        };
+
+        handler.handle(&mut ctx, msg.get_payload())?;
+
+        Ok(())
     }
 
     fn handle_internal<'a>(
@@ -251,7 +259,8 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
             handle: link_handle,
         };
         handler.handle(&mut ctx, msg.get_payload())?;
-        return Ok(());
+
+        Ok(())
     }
 }
 
@@ -283,7 +292,7 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
     pub fn send_internal<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
         let mut builder = msg_buffer.into_builder();
         {
-            let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
+            let mut msg: mozaic_message::Builder = builder.get_root()?;
 
             msg.set_sender(self.id.bytes());
             msg.set_receiver(self.id.bytes());
@@ -326,7 +335,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
     pub fn send_internal<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
         let mut builder = msg_buffer.into_builder();
         {
-            let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
+            let mut msg: mozaic_message::Builder = builder.get_root()?;
 
             msg.set_sender(self.id.bytes());
             msg.set_receiver(self.id.bytes());
@@ -340,7 +349,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
     pub fn send_message<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
         let mut builder = msg_buffer.into_builder();
         {
-            let mut msg: mozaic_message::Builder = builder.get_root().unwrap();
+            let mut msg: mozaic_message::Builder = builder.get_root()?;
 
             msg.set_sender(self.id.bytes());
             msg.set_receiver(self.remote_id.bytes());

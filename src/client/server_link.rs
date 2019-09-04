@@ -43,7 +43,6 @@ impl<S> LinkHandler<S>
     ) -> ConnectionHandler<Self>
         where F: 'static + Send + Fn(ClientParams) -> CoreParams<S, Runtime>
     {
-        println!("This is never called");
         let client_id: ReactorId = rand::thread_rng().gen();
 
         let mut h = ConnectionHandler::new(stream, |tx| {

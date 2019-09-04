@@ -1,6 +1,6 @@
 use messaging::reactor::*;
 use messaging::types::*;
-use errors;
+use errors::{self, Consumable};
 use core_capnp::{initialize};
 
 use mozaic_cmd_capnp::{cmd_input, cmd_return};
@@ -184,7 +184,7 @@ fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
                     let mut msg: cmd_input::Builder = b.init_as();
                     msg.set_input(&string);
                 }
-            ).unwrap();
+            ).consume();
             Ok(())
         })
         .wait()
