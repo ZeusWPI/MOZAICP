@@ -39,8 +39,8 @@ fn main() {
     tokio::run(futures::lazy(move || {
         let mut broker = Broker::new().unwrap();
 
-        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main").consume();
-        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd").consume();
+        broker.spawn(stupid_id.clone(), Reactor::params(cmd_id.clone(), broker.clone()), "Main").display();
+        broker.spawn(cmd_id.clone(), modules::CmdReactor::new(broker.clone(), stupid_id.clone()).params(), "Cmd").display();
 
         return Ok(());
     }));

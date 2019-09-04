@@ -184,7 +184,7 @@ fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
                     let mut msg: cmd_input::Builder = b.init_as();
                     msg.set_input(&string);
                 }
-            ).consume();
+            ).display();
             Ok(())
         })
         .wait()

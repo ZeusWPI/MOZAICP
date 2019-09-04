@@ -123,7 +123,7 @@ impl<S, C: Ctx> Reactor<S, C> {
                 errors::Error::from_kind(MozaicError("No reactor internal handler found"))
             );
 
-            err.consume();
+            err.display();
         }
 
         for link in self.links.values_mut() {
@@ -132,7 +132,7 @@ impl<S, C: Ctx> Reactor<S, C> {
                 ctx: ctx_handle,
             };
 
-            link.handle_internal(&mut reactor_handle, msg).consume();
+            link.handle_internal(&mut reactor_handle, msg).display();
         }
 
         return Ok(());
@@ -365,7 +365,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         }
 
         let msg = MsgBuffer::<terminate_stream::Owned>::new();
-        self.send_message(msg).consume();
+        self.send_message(msg).display();
 
         self.link_state.local_closed = true;
 

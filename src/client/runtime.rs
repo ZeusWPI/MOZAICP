@@ -79,16 +79,16 @@ impl RuntimeState {
         if receiver_id == self.runtime_id {
             if let Some(ref mut worker) = self.runtime_worker {
                 worker.unbounded_send(message)
-                    .map_err(|_| "failed to send".into()).consume();
+                    .map_err(|_| "failed to send".into()).display();
             } else {
                 eprintln!("worker not running");
             }
         } else if let Some(receiver) = self.actors.get_mut(&receiver_id) {
             receiver.tx.unbounded_send(message)
-                .map_err(|_|"send failed".into()).consume();
+                .map_err(|_|"send failed".into()).display();
         } else if let Some(ref mut server_link) = self.server_link {
             server_link.unbounded_send(message)
-                .map_err(|_|"send failed".into()).consume();
+                .map_err(|_|"send failed".into()).display();
         } else {
             return Err(errors::Error::from_kind(MozaicError("server link closed")));
         }
@@ -188,7 +188,7 @@ impl<S: 'static> ReactorDriver<S> {
             runtime: &mut self.runtime,
         };
         self.reactor.handle_external_message(&mut handle, message)
-            .chain_err(|| "handling failed").consume();
+            .chain_err(|| "handling failed").display();
     }
 
     fn handle_internal_queue(&mut self) {
@@ -200,7 +200,7 @@ impl<S: 'static> ReactorDriver<S> {
                         runtime: &mut self.runtime,
                     };
                     self.reactor.handle_internal_message(&mut handle, msg)
-                        .chain_err(||"handling failed").consume();
+                        .chain_err(||"handling failed").display();
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();

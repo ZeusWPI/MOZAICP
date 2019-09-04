@@ -195,7 +195,7 @@ impl<S: 'static> ReactorDriver<S> {
             broker: &mut self.broker,
         };
         self.reactor.handle_external_message(&mut handle, message)
-            .chain_err(|| "handling failed").consume();
+            .chain_err(|| "handling failed").display();
     }
 
     fn handle_internal_queue(&mut self) {
@@ -207,7 +207,7 @@ impl<S: 'static> ReactorDriver<S> {
                         broker: &mut self.broker,
                     };
                     self.reactor.handle_internal_message(&mut handle, msg)
-                        .chain_err(|| "handling failed").consume();
+                        .chain_err(|| "handling failed").display();
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();

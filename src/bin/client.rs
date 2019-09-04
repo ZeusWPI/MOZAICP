@@ -387,7 +387,7 @@ mod runtime {
                         |b| {
                             let mut input: chat_capnp::user_input::Builder = b.init_as();
                             input.set_text(input_text);
-                        }).consume();
+                        }).display();
                     cursive.call_on_id("input", |view: &mut EditView| {
                         view.set_content("");
                     });

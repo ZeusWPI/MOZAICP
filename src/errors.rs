@@ -44,19 +44,27 @@ impl<T> From<Result<T>> for ErrWrapper {
 }
 
 pub trait Consumable {
-    fn consume(self);
+    fn display(self);
+    fn ignore(self);
 }
 
 impl<T> Consumable for T
     where T: Into<ErrWrapper> {
 
-    fn consume(self) {
-        self.into().consume();
+    fn display(self) {
+        self.into().display();
+    }
+
+    fn ignore(self) {
+        match self.into().0 {
+            None => {},
+            Some(_) => {},
+        }
     }
 }
 
 impl ErrWrapper {
-    pub fn consume(self) {
+    pub fn display(self) {
         match self.0 {
             None => {},
             Some(inner) => print_error(inner),
