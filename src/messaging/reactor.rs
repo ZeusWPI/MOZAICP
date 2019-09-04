@@ -189,7 +189,6 @@ impl<C> Link<C>
             .link_handle(&self.remote_id, &mut self.link_state);
         return self.reducer.handle_internal(&mut link_handle, msg);
     }
-
 }
 
 pub struct LinkReducer<S, C>
@@ -250,15 +249,15 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
     ) -> errors::Result<()>
     {
 
-        let handler = self.internal_handlers.get(&msg.get_type_id()).ok_or(
-            errors::Error::from_kind(MozaicError("No link internal handler found"))
-        )?;
+        if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
 
-        let mut ctx = HandlerCtx {
-            state: &mut self.state,
-            handle: link_handle,
-        };
-        handler.handle(&mut ctx, msg.get_payload())?;
+            let mut ctx = HandlerCtx {
+                state: &mut self.state,
+                handle: link_handle,
+            };
+            handler.handle(&mut ctx, msg.get_payload())?;
+
+        }
 
         Ok(())
     }
@@ -347,6 +346,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
 
     /// ? Send message to the other side of the link
     pub fn send_message<T>(&mut self, msg_buffer: MsgBuffer<T>) -> errors::Result<()> {
+
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root()?;
@@ -365,10 +365,11 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         }
 
         let msg = MsgBuffer::<terminate_stream::Owned>::new();
-        self.send_message(msg)?;
+        self.send_message(msg).consume();
 
         self.link_state.local_closed = true;
 
+        self.ctx.close_link(&self.remote_id)?;
         Ok(())
     }
 }

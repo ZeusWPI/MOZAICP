@@ -9,10 +9,13 @@ extern crate capnp;
 
 use std::net::SocketAddr;
 use mozaic::core_capnp::{initialize, actor_joined};
+use mozaic::network_capnp::{disconnected};
 use mozaic::messaging::types::*;
 use mozaic::messaging::reactor::*;
 use mozaic::server::run_server;
 use mozaic::errors;
+
+use mozaic::modules::log_reactor;
 
 // TODO: Find from where to get disconnect event something something
 
@@ -39,6 +42,8 @@ impl Welcomer {
             chat::chat_message::Owned,
             CtxHandler::new(Self::handle_chat_message)
         );
+
+        params.handler(disconnected::Owned, CtxHandler::new(Self::handle_disconnected));
         return params;
     }
 
@@ -67,6 +72,19 @@ impl Welcomer {
         let link = WelcomerGreeterLink {};
         handle.open_link(link.params(id))?;
         return Ok(());
+    }
+
+    fn handle_disconnected<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        r: disconnected::Reader,
+    ) -> Result<(), errors::Error> {
+
+        let id = r.get_id()?;
+
+        log_reactor(handle, &format!("Client {:?} disconnected", id));
+
+        Ok(())
     }
 
     fn handle_chat_message<C: Ctx>(
@@ -118,6 +136,12 @@ impl WelcomerGreeterLink {
             chat::chat_message::Owned,
             CtxHandler::new(Self::e_handle_chat_msg_resv),
         );
+
+        params.external_handler(
+            disconnected::Owned,
+            CtxHandler::new(Self::e_handle_disconnected),
+        );
+
         params.internal_handler(
             chat::chat_message::Owned,
             CtxHandler::new(Self::i_handle_chat_msg_send),
@@ -141,6 +165,7 @@ impl WelcomerGreeterLink {
             b.set_message(content);
             b.set_user(user);
         });
+
         handle.send_message(chat_message)?;
 
         return Ok(());
@@ -164,6 +189,31 @@ impl WelcomerGreeterLink {
         });
 
         handle.send_internal(chat_message)?;
+
+        return Ok(());
+    }
+
+    fn e_handle_disconnected<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        message: disconnected::Reader,
+    ) -> Result<(), errors::Error>
+    {
+        let id = message.get_id()?;
+
+        let mut disconnected = MsgBuffer::<disconnected::Owned>::new();
+        disconnected.build(|b| {
+            b.set_id(id);
+        });
+
+        eprintln!("Im HERE FIRST");
+
+
+        handle.send_internal(disconnected)?;
+        eprintln!("Im HERE");
+
+        handle.close_link()?;
+        eprintln!("Closed link");
 
         return Ok(());
     }

@@ -48,10 +48,10 @@ impl Broker {
             .into();
 
         let receiver = self.actors.get_mut(&receiver_id.clone()).ok_or(
-            errors::Error::from_kind(NoSuchReactorError(receiver_id))
+            errors::Error::from_kind(NoSuchReactorError(receiver_id.clone()))
         )?;
 
-        receiver.tx.unbounded_send(message).map_err(|_| "send failed")?;
+        receiver.tx.unbounded_send(message).map_err(move |_| format!("send failed {:?}", receiver_id))?;
         Ok(())
     }
 }
@@ -234,6 +234,7 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 // all internal ops have been handled and no new messages can
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
+                eprintln!("Disconnected reactor {:?}", self.reactor.id);
                 return Ok(Async::Ready(()));
             }
 
