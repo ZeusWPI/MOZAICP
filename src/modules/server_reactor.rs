@@ -11,6 +11,9 @@ use client_capnp::{client_send, client_message, client_disconnected, client_conn
 
 use server::runtime::BrokerHandle;
 
+use server::TcpServer;
+use std::net::SocketAddr;
+
 use std::collections::{HashMap, VecDeque};
 
 mod util {
@@ -118,24 +121,23 @@ impl ClientController {
 /// Main connection manager, creates handles for as many players as asked for
 /// Handles disconnects, reconnects etc, host can always send messages to everybody
 pub struct ConnectionManager {
-    // broker: BrokerHandle,
-    runtime_id: ReactorId,
+    broker: BrokerHandle,
 
     client_controllers: HashMap<Identifier, ClientController>,   // handle send to clients
 
     foreign_id: ReactorId,
+    addr: SocketAddr,
 }
-
 
 impl ConnectionManager {
 
-    pub fn params<C: Ctx>(runtime_id: ReactorId, ids: Vec<(Identifier, PlayerId)>, foreign_id: ReactorId) -> CoreParams<Self, C> {
+    pub fn params<C: Ctx>(broker: BrokerHandle, ids: Vec<(Identifier, PlayerId)>, foreign_id: ReactorId, addr: SocketAddr) -> CoreParams<Self, C> {
         let client_controllers = ids.iter().cloned()
             .map(|(id, player_id)| (id, ClientController::new(player_id, id)))
             .collect();
 
         let server_reactor = Self {
-            runtime_id, client_controllers, foreign_id
+            broker, client_controllers, foreign_id, addr
         };
 
         let mut params = CoreParams::new(server_reactor);
@@ -158,7 +160,10 @@ impl ConnectionManager {
     ) -> Result<()>
     {
         handle.open_link(HostLink::params(self.foreign_id.clone()))?;
-        handle.open_link(CreationLink.params(self.runtime_id.clone()))?;
+        handle.open_link(CreationLink.params(handle.id().clone()))?;
+
+        tokio::spawn(TcpServer::new(self.broker.clone(), handle.id().clone(), &self.addr));
+
         Ok(())
     }
 
