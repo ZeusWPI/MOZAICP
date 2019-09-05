@@ -80,6 +80,8 @@ impl ClientController {
     }
 
     fn handle_message<C: Ctx>(&mut self, handle: &mut ReactorHandle<C>, state: String) -> Result<()> {
+        println!("Handling msg {}", state);
+
         self.queue.push_back(state);
 
         self.empty_queue(handle)?;
@@ -102,6 +104,8 @@ impl ClientController {
     }
 
     fn client_connected<C: Ctx> (&mut self, handle: &mut ReactorHandle<C>) -> Result<()> {
+        println!("MY CLIENT CONNECTED {:?} {:?}", self.id, self.key);
+
         self.connected = true;
         self.empty_queue(handle)?;
         Ok(())

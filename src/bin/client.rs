@@ -118,7 +118,7 @@ impl ClientReactor {
     ) -> Result<()>
     {
         // open link with chat server
-        let link = (ServerLink {id: self.id}).params(self.greeter_id.clone());
+        let link = (ServerLink {}).params(self.greeter_id.clone());
         handle.open_link(link)?;
 
         // open link with runtime, for communicating with chat GUI
@@ -131,13 +131,18 @@ impl ClientReactor {
         let msg = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
         handle.send_internal(msg)?;
 
+        let mut chat_message = MsgBuffer::<identify::Owned>::new();
+        chat_message.build(|b| {
+            b.set_key(self.id);
+        });
+        handle.send_internal(chat_message).display();
+
         return Ok(());
     }
 }
 
 // Handler for the connection with the chat server
 struct ServerLink {
-    id: u64,
 }
 
 impl ServerLink {
@@ -160,25 +165,27 @@ impl ServerLink {
         );
 
         params.internal_handler(
-            initialize::Owned,
-            CtxHandler::new(Self::initialize),
+            identify::Owned,
+            CtxHandler::new(Self::identify),
         );
 
         return params;
     }
 
-    fn initialize<C: Ctx>(
+    fn identify<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        _: initialize::Reader,
+        id: identify::Reader,
     ) -> Result<()> {
+        let id = id.get_key();
 
         let mut chat_message = MsgBuffer::<identify::Owned>::new();
         chat_message.build(|b| {
-            b.set_key(self.id);
+            b.set_key(id);
         });
-        handle.send_message(chat_message).display();
+        println!("IDing with {}", id);
 
+        handle.send_message(chat_message).display();
         Ok(())
     }
 
@@ -191,12 +198,11 @@ impl ServerLink {
     ) -> Result<()>
     {
         let message = send_message.get_message()?;
-        let user = send_message.get_user()?;
+        // let user = send_message.get_user()?;
 
-        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<client_send::Owned>::new();
         chat_message.build(|b| {
-            b.set_message(message);
-            b.set_user(user);
+            b.set_data(message);
         });
 
         handle.send_message(chat_message)?;
