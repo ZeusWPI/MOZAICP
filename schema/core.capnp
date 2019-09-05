@@ -1,4 +1,4 @@
-@0xad560d5d7666face;
+@0xad560a5d7666face;
 
 struct MozaicMessage {
     sender @0: Data;
@@ -33,5 +33,5 @@ struct ActorJoined {
 }
 
 struct Identify {
-    key @0: Data;
+    key @0: UInt64;
 }

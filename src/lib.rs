@@ -58,3 +58,7 @@ pub mod mozaic_cmd_capnp {
 pub mod log_capnp {
     include!(concat!(env!("OUT_DIR"), "/mozaic/logging_capnp.rs"));
 }
+
+pub mod client_capnp {
+    include!(concat!(env!("OUT_DIR"), "/mozaic/client_capnp.rs"));
+}

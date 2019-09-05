@@ -8,7 +8,7 @@ use log_capnp::{log};
 mod cmd_reactor;
 mod server_reactor;
 pub use self::cmd_reactor::CmdReactor;
-pub use self::server_reactor::ServerReactor;
+pub use self::server_reactor::ConnectionManager;
 
 mod logging;
 pub use self::logging::{LogReactor, Link as LogLink};

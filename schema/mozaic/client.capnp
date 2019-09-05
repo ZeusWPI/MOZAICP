@@ -1,4 +1,4 @@
-@0xad541d4e7666fbef;
+@0xad530d6f7666fafb;
 
 # A client sends some data to the server.
 # This event is dispatched by a client.
@@ -9,13 +9,18 @@ struct ClientSend {
 # A struct was received from a client.
 # This event is emitted by a client handler when it recieves a ClientSend.
 struct ClientMessage {
-    clientId @0 :UInt32;
+    clientId @0 :UInt64;
     data @1 :Text;
 }
 
-
-# A client had disconnected.
+# A client was disconnected.
 # Emitted by the client handler.
 struct ClientDisconnected {
+    clientId @0 :UInt64;
+}
+
+# A client has connected.
+# Emitted by the client handler.
+struct ClientConnected {
     clientId @0 :UInt64;
 }
