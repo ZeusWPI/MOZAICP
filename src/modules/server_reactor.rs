@@ -14,7 +14,6 @@ use server::runtime::BrokerHandle;
 use std::collections::{HashMap, VecDeque};
 
 mod util {
-
     use std::ops::Deref;
 
     #[derive(Clone, Debug, Hash, Eq, PartialEq, Copy)]
@@ -54,11 +53,13 @@ mod util {
             self.0
         }
     }
-
 }
+
 
 use self::util::{Identifier, PlayerId};
 
+/// Client Controller implementation, this should be a reactor but yeah
+/// Always accept messages, buffering them when the client is not connected
 struct ClientController {
     connected: bool,        // Is there curerntly a link to the client
     queue: VecDeque<String>, // Queue used when client is not connected
@@ -113,6 +114,9 @@ impl ClientController {
 }
 
 // TODO: TIMEOUTS?
+// TODO: Now only distributed messages are supported, add one on one conversation options
+/// Main connection manager, creates handles for as many players as asked for
+/// Handles disconnects, reconnects etc, host can always send messages to everybody
 pub struct ConnectionManager {
     // broker: BrokerHandle,
     runtime_id: ReactorId,
@@ -222,6 +226,7 @@ impl ConnectionManager {
     }
 }
 
+/// Creation link to pass through actor joined from hopefully self
 struct CreationLink;
 
 impl CreationLink {
@@ -251,6 +256,7 @@ impl CreationLink {
     }
 }
 
+/// The main link with the host, passing through all messages
 struct HostLink;
 
 impl HostLink {
@@ -302,7 +308,7 @@ impl HostLink {
     }
 }
 
-
+/// Link with the client, passing though disconnects and messages
 struct ClientLink {
     key: Option<Identifier>,
 }
