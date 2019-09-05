@@ -11,13 +11,13 @@ use tokio::net::TcpStream;
 use futures::sync::mpsc;
 use futures::Future;
 
-use mozaic::core_capnp::{initialize, terminate_stream};
+use mozaic::core_capnp::{initialize, terminate_stream, identify};
 use mozaic::chat_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
 use mozaic::errors::*;
-
+use mozaic::client_capnp::{client_send};
 
 use std::thread;
 use std::env;
@@ -35,7 +35,8 @@ use cursive::views::{TextView, EditView, LinearLayout};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let user = args.get(1).unwrap_or(&"Ben".to_string()).clone();
+    let id = args.get(1).unwrap().parse().unwrap();
+    let user = args.get(2).unwrap_or(&"Ben".to_string()).clone();
 
     // Creates the cursive root - required for every application.
     let mut siv = Cursive::default();
@@ -78,6 +79,7 @@ fn main() {
                             greeter_id: params.greeter_id,
                             runtime_id: params.runtime_id,
                             user: user.clone(),
+                            id,
                         };
                         return r.params();
                     })
@@ -98,6 +100,7 @@ struct ClientReactor {
     greeter_id: ReactorId,
     runtime_id: ReactorId,
     user: String,
+    id: u64,
 }
 
 impl ClientReactor {
@@ -115,7 +118,7 @@ impl ClientReactor {
     ) -> Result<()>
     {
         // open link with chat server
-        let link = (ServerLink {}).params(self.greeter_id.clone());
+        let link = (ServerLink {id: self.id}).params(self.greeter_id.clone());
         handle.open_link(link)?;
 
         // open link with runtime, for communicating with chat GUI
@@ -133,7 +136,9 @@ impl ClientReactor {
 }
 
 // Handler for the connection with the chat server
-struct ServerLink {}
+struct ServerLink {
+    id: u64,
+}
 
 impl ServerLink {
     fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
@@ -145,7 +150,7 @@ impl ServerLink {
         );
 
         params.external_handler(
-            chat_capnp::chat_message::Owned,
+            client_send::Owned,
             CtxHandler::new(Self::receive_chat_message),
         );
 
@@ -154,7 +159,27 @@ impl ServerLink {
             CtxHandler::new(Self::send_chat_message),
         );
 
+        params.internal_handler(
+            initialize::Owned,
+            CtxHandler::new(Self::initialize),
+        );
+
         return params;
+    }
+
+    fn initialize<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        _: initialize::Reader,
+    ) -> Result<()> {
+
+        let mut chat_message = MsgBuffer::<identify::Owned>::new();
+        chat_message.build(|b| {
+            b.set_key(self.id);
+        });
+        handle.send_message(chat_message).display();
+
+        Ok(())
     }
 
     // pick up a 'send_message' event from the reactor, and put it to effect
@@ -185,16 +210,15 @@ impl ServerLink {
     fn receive_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        chat_message: chat_capnp::chat_message::Reader,
+        chat_message: client_send::Reader,
     ) -> Result<()>
     {
-        let message = chat_message.get_message()?;
-        let user = chat_message.get_user()?;
+        let message = chat_message.get_data()?;
 
         let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
         chat_message.build(|b| {
             b.set_message(message);
-            b.set_user(user);
+            b.set_user("");
         });
         handle.send_internal(chat_message)?;
 
