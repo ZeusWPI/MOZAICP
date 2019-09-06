@@ -7,7 +7,7 @@ use core_capnp::{initialize};
 
 use core_capnp::{actor_joined, identify};
 use network_capnp::{disconnected};
-use client_capnp::{client_send, client_message, client_disconnected, client_connected};
+use client_capnp::{from_client, client_message, to_client, host_message, client_disconnected, client_connected};
 
 use server::runtime::BrokerHandle;
 
@@ -91,13 +91,12 @@ impl ClientController {
     fn empty_queue<C: Ctx>(&mut self, handle: &mut ReactorHandle<C>) -> Result<()> {
         if self.connected {
             while let Some(s) = self.queue.pop_front() {
-                let mut joined = MsgBuffer::<client_message::Owned>::new();
+                let mut joined = MsgBuffer::<to_client::Owned>::new();
                 joined.build(|b| {
-                    b.set_client_id(self.key.into());
+                    b.set_client_key(self.key.into());
                     b.set_data(&s);
                 });
                 handle.send_internal(joined).display();
-                // TODO: really send this state to the client
             }
         }
         Ok(())
@@ -150,7 +149,7 @@ impl ConnectionManager {
         params.handler(actor_joined::Owned, CtxHandler::new(Self::handle_actor_joined));
         params.handler(client_connected::Owned, CtxHandler::new(Self::handle_connect));
         params.handler(client_disconnected::Owned, CtxHandler::new(Self::handle_disconnect));
-        params.handler(client_send::Owned, CtxHandler::new(Self::handle_host_msg));
+        params.handler(host_message::Owned, CtxHandler::new(Self::handle_host_msg));
 
         return params;
     }
@@ -222,7 +221,7 @@ impl ConnectionManager {
     fn handle_host_msg<C: Ctx> (
         &mut self,
         handle: &mut ReactorHandle<C>,
-        r: client_send::Reader,
+        r: host_message::Reader,
     ) -> Result<()>
     {
         let msg = r.get_data()?;
@@ -274,9 +273,9 @@ impl HostLink {
 
         let mut params = LinkParams::new(foreign_id, me);
 
-        params.external_handler(client_send::Owned, CtxHandler::new(Self::e_handle_message));
+        params.external_handler(host_message::Owned, CtxHandler::new(Self::e_handle_message));
 
-        params.internal_handler(client_message::Owned, CtxHandler::new(Self::i_handle_message));
+        params.internal_handler(from_client::Owned, CtxHandler::new(Self::i_handle_message));
 
         return params;
     }
@@ -285,11 +284,11 @@ impl HostLink {
     fn e_handle_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        r: client_send::Reader,
+        r: host_message::Reader,
     ) -> Result<()> {
         let msg = r.get_data()?;
 
-        let mut joined = MsgBuffer::<client_send::Owned>::new();
+        let mut joined = MsgBuffer::<host_message::Owned>::new();
         joined.build(|b| b.set_data(msg));
         handle.send_internal(joined)?;
 
@@ -300,13 +299,13 @@ impl HostLink {
     fn i_handle_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        r: client_message::Reader,
+        r: from_client::Reader,
     ) -> Result<()> {
 
         let id = r.get_client_id();
         let msg = r.get_data()?;
 
-        let mut joined = MsgBuffer::<client_message::Owned>::new();
+        let mut joined = MsgBuffer::<from_client::Owned>::new();
         joined.build(|b| {
             b.set_client_id(id);
             b.set_data(msg);
@@ -336,7 +335,7 @@ impl ClientLink {
         );
 
         params.external_handler(
-            client_send::Owned,
+            client_message::Owned,
             CtxHandler::new(Self::e_handle_message),
         );
 
@@ -346,7 +345,7 @@ impl ClientLink {
         );
 
         params.internal_handler(
-            client_message::Owned,
+            to_client::Owned,
             CtxHandler::new(Self::i_handle_msg),
         );
 
@@ -372,12 +371,12 @@ impl ClientLink {
     fn e_handle_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        msg: client_send::Reader,
+        msg: client_message::Reader,
     ) -> Result<()> {
         let msg = msg.get_data()?;
 
         if let Some(key) = self.key {
-            let mut inner_msg = MsgBuffer::<client_message::Owned>::new();
+            let mut inner_msg = MsgBuffer::<from_client::Owned>::new();
             inner_msg.build(|b| {
                 b.set_client_id(key.into());
                 b.set_data(msg);
@@ -411,17 +410,17 @@ impl ClientLink {
     fn i_handle_msg<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        msg: client_message::Reader,
+        msg: to_client::Reader,
     ) -> Result<()> {
 
         if let Some(key) = self.key {
-            let send_key: u64 = msg.get_client_id();
+            let send_key: u64 = msg.get_client_key();
             let my_key: u64 = key.into();
 
             if send_key == my_key {
                 let msg = msg.get_data()?;
 
-                let mut inner_msg = MsgBuffer::<client_send::Owned>::new();
+                let mut inner_msg = MsgBuffer::<host_message::Owned>::new();
 
                 inner_msg.build(|b| {
                     b.set_data(msg);

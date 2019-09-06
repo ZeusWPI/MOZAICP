@@ -14,7 +14,7 @@ use mozaic::messaging::reactor::*;
 use mozaic::errors;
 
 use mozaic::modules::log_reactor;
-use mozaic::client_capnp::{client_message, client_send};
+use mozaic::client_capnp::{from_client, host_message};
 
 // TODO: Find from where to get disconnect event something something
 
@@ -41,7 +41,7 @@ impl Welcomer {
         let mut params = CoreParams::new(me);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         params.handler(
-            client_message::Owned,
+            from_client::Owned,
             CtxHandler::new(Self::handle_chat_message)
         );
 
@@ -64,7 +64,7 @@ impl Welcomer {
     fn handle_chat_message<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
-        msg: client_message::Reader,
+        msg: from_client::Reader,
     ) -> Result<(), errors::Error>
     {
         let user = msg.get_client_id();
@@ -76,7 +76,7 @@ impl Welcomer {
 
         if !message.contains("kaka") {
 
-            let mut chat_message = MsgBuffer::<client_send::Owned>::new();
+            let mut chat_message = MsgBuffer::<host_message::Owned>::new();
             chat_message.build(|b| {
                 b.set_data(&message);
             });
@@ -95,12 +95,12 @@ impl WelcomerConnectionLink {
     fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
         params.external_handler(
-            client_message::Owned,
+            from_client::Owned,
             CtxHandler::new(Self::e_handle_client_message),
         );
 
         params.internal_handler(
-            client_send::Owned,
+            host_message::Owned,
             CtxHandler::new(Self::i_handle_chat_msg_send),
         );
 
@@ -111,12 +111,12 @@ impl WelcomerConnectionLink {
     fn i_handle_chat_msg_send<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: client_send::Reader,
+        message: host_message::Reader,
     ) -> Result<(), errors::Error>
     {
         let content = message.get_data()?;
 
-        let mut chat_message = MsgBuffer::<client_send::Owned>::new();
+        let mut chat_message = MsgBuffer::<host_message::Owned>::new();
         chat_message.build(|b| {
             b.set_data(content);
         });
@@ -131,13 +131,13 @@ impl WelcomerConnectionLink {
     fn e_handle_client_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: client_message::Reader,
+        message: from_client::Reader,
     ) -> Result<(), errors::Error>
     {
         let content = message.get_data()?;
         let user = message.get_client_id();
 
-        let mut chat_message = MsgBuffer::<client_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<from_client::Owned>::new();
         chat_message.build(|b| {
             b.set_data(content);
             b.set_client_id(user);
