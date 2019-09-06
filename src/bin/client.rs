@@ -17,7 +17,7 @@ use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
 use mozaic::errors::*;
-use mozaic::client_capnp::{client_send};
+use mozaic::client_capnp::{client_message, host_message};
 
 use std::thread;
 use std::env;
@@ -155,7 +155,7 @@ impl ServerLink {
         );
 
         params.external_handler(
-            client_send::Owned,
+            host_message::Owned,
             CtxHandler::new(Self::receive_chat_message),
         );
 
@@ -200,7 +200,7 @@ impl ServerLink {
         let message = send_message.get_message()?;
         // let user = send_message.get_user()?;
 
-        let mut chat_message = MsgBuffer::<client_send::Owned>::new();
+        let mut chat_message = MsgBuffer::<client_message::Owned>::new();
         chat_message.build(|b| {
             b.set_data(message);
         });
@@ -216,7 +216,7 @@ impl ServerLink {
     fn receive_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        chat_message: client_send::Reader,
+        chat_message: host_message::Reader,
     ) -> Result<()>
     {
         let message = chat_message.get_data()?;
