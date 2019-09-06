@@ -79,7 +79,7 @@ impl<S> LinkHandler<S>
 
         let greeter_id: ReactorId = r.get_id()?.into();
 
-        println!("connected to {:?}!", greeter_id);
+        // println!("connected to {:?}!", greeter_id);
 
         let r = spawner(ClientParams {
             runtime_id: self.runtime.lock().unwrap().runtime_id().clone(),

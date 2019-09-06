@@ -6,6 +6,10 @@ struct ClientSend {
     data @0 :Text;
 }
 
+struct HostSend {
+    data @0 :Text;
+}
+
 # A struct was received from a client.
 # This event is emitted by a client handler when it recieves a ClientSend.
 struct ClientMessage {

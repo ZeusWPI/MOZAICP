@@ -183,7 +183,7 @@ impl ServerLink {
         chat_message.build(|b| {
             b.set_key(id);
         });
-        println!("IDing with {}", id);
+        // println!("IDing with {}", id);
 
         handle.send_message(chat_message).display();
         Ok(())

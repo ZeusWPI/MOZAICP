@@ -14,7 +14,7 @@ use mozaic::messaging::reactor::*;
 use mozaic::errors;
 
 use mozaic::modules::log_reactor;
-use mozaic::client_capnp::{client_message, client_send};
+use mozaic::client_capnp::{client_message, client_send, host_send};
 
 // TODO: Find from where to get disconnect event something something
 
@@ -67,23 +67,22 @@ impl Welcomer {
         msg: client_message::Reader,
     ) -> Result<(), errors::Error>
     {
+        println!("host handling chat message");
         let user = msg.get_client_id();
         let message = msg.get_data()?;
 
         let message = format!("Client {} sent {}", user, message);
 
         log_reactor(handle, &message);
+        println!("{}", message);
 
-        if !message.contains("kaka") {
-
-            let mut chat_message = MsgBuffer::<client_send::Owned>::new();
-            chat_message.build(|b| {
-                b.set_data(&message);
-            });
-            handle.send_internal(
-                chat_message
-            )?;
-        }
+        let mut chat_message = MsgBuffer::<host_send::Owned>::new();
+        chat_message.build(|b| {
+            b.set_data(&message);
+        });
+        handle.send_internal(
+            chat_message
+        )?;
 
         return Ok(());
     }
@@ -100,7 +99,7 @@ impl WelcomerConnectionLink {
         );
 
         params.internal_handler(
-            client_send::Owned,
+            host_send::Owned,
             CtxHandler::new(Self::i_handle_chat_msg_send),
         );
 
@@ -111,12 +110,12 @@ impl WelcomerConnectionLink {
     fn i_handle_chat_msg_send<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: client_send::Reader,
+        message: host_send::Reader,
     ) -> Result<(), errors::Error>
     {
         let content = message.get_data()?;
 
-        let mut chat_message = MsgBuffer::<client_send::Owned>::new();
+        let mut chat_message = MsgBuffer::<host_send::Owned>::new();
         chat_message.build(|b| {
             b.set_data(content);
         });
@@ -142,6 +141,8 @@ impl WelcomerConnectionLink {
             b.set_data(content);
             b.set_client_id(user);
         });
+
+        println!("host got msg {}", content);
 
         handle.send_internal(chat_message)?;
 

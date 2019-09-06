@@ -7,7 +7,7 @@ use core_capnp::{initialize};
 
 use core_capnp::{actor_joined, identify};
 use network_capnp::{disconnected};
-use client_capnp::{client_send, client_message, client_disconnected, client_connected};
+use client_capnp::{client_send, client_message, client_disconnected, client_connected, host_send};
 
 use server::runtime::BrokerHandle;
 
@@ -80,8 +80,6 @@ impl ClientController {
     }
 
     fn handle_message<C: Ctx>(&mut self, handle: &mut ReactorHandle<C>, state: String) -> Result<()> {
-        println!("Handling msg {}", state);
-
         self.queue.push_back(state);
 
         self.empty_queue(handle)?;
@@ -91,6 +89,8 @@ impl ClientController {
     fn empty_queue<C: Ctx>(&mut self, handle: &mut ReactorHandle<C>) -> Result<()> {
         if self.connected {
             while let Some(s) = self.queue.pop_front() {
+                println!("Handling msg {} for {:?}", s, self.id);
+
                 let mut joined = MsgBuffer::<client_message::Owned>::new();
                 joined.build(|b| {
                     b.set_client_id(self.key.into());
@@ -150,7 +150,7 @@ impl ConnectionManager {
         params.handler(actor_joined::Owned, CtxHandler::new(Self::handle_actor_joined));
         params.handler(client_connected::Owned, CtxHandler::new(Self::handle_connect));
         params.handler(client_disconnected::Owned, CtxHandler::new(Self::handle_disconnect));
-        params.handler(client_send::Owned, CtxHandler::new(Self::handle_host_msg));
+        params.handler(host_send::Owned, CtxHandler::new(Self::handle_host_msg));
 
         return params;
     }
@@ -222,14 +222,16 @@ impl ConnectionManager {
     fn handle_host_msg<C: Ctx> (
         &mut self,
         handle: &mut ReactorHandle<C>,
-        r: client_send::Reader,
+        r: host_send::Reader,
     ) -> Result<()>
     {
         let msg = r.get_data()?;
+        println!("Distributing msg {}", msg);
 
         for cc in self.client_controllers.values_mut() {
             cc.handle_message(handle, msg.to_string()).display();
         }
+
 
         Ok(())
     }
@@ -274,7 +276,7 @@ impl HostLink {
 
         let mut params = LinkParams::new(foreign_id, me);
 
-        params.external_handler(client_send::Owned, CtxHandler::new(Self::e_handle_message));
+        params.external_handler(host_send::Owned, CtxHandler::new(Self::e_handle_message));
 
         params.internal_handler(client_message::Owned, CtxHandler::new(Self::i_handle_message));
 
@@ -285,11 +287,13 @@ impl HostLink {
     fn e_handle_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        r: client_send::Reader,
+        r: host_send::Reader,
     ) -> Result<()> {
         let msg = r.get_data()?;
 
-        let mut joined = MsgBuffer::<client_send::Owned>::new();
+        println!("Got msg from host {}", msg);
+
+        let mut joined = MsgBuffer::<host_send::Owned>::new();
         joined.build(|b| b.set_data(msg));
         handle.send_internal(joined)?;
 
@@ -297,6 +301,8 @@ impl HostLink {
     }
 
     /// Pass msg sent from client through to the host
+    // TODO this is the problem, this gets send also from the cc
+    // TODO client_message.client_id isn't changed by the cc
     fn i_handle_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
@@ -305,6 +311,8 @@ impl HostLink {
 
         let id = r.get_client_id();
         let msg = r.get_data()?;
+
+        println!("sending msg to host {}", msg);
 
         let mut joined = MsgBuffer::<client_message::Owned>::new();
         joined.build(|b| {
