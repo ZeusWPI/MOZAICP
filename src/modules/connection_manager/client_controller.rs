@@ -252,20 +252,10 @@ impl ClientLink {
         let mut params = LinkParams::new(foreign_id, me);
 
 
-        params.external_handler(
-            client_message::Owned,
-            CtxHandler::new(Self::e_handle_message),
-        );
+        params.external_handler(client_message::Owned, CtxHandler::new(Self::e_handle_message));
 
-        params.internal_handler(
-            client_disconnected::Owned,
-            CtxHandler::new(Self::i_handle_disconnect),
-        );
-
-        params.internal_handler(
-            inner_to_client::Owned,
-            CtxHandler::new(Self::i_handle_msg),
-        );
+        params.internal_handler(client_disconnected::Owned, CtxHandler::new(Self::i_handle_disconnect));
+        params.internal_handler(inner_to_client::Owned, CtxHandler::new(Self::i_handle_msg));
 
         return params;
     }

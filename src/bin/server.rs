@@ -14,8 +14,8 @@ use mozaic::messaging::reactor::*;
 use mozaic::errors;
 
 use mozaic::modules::log_reactor;
+use mozaic::modules::{Aggregator};
 use mozaic::client_capnp::{from_client, host_message, to_client};
-use mozaic::core_capnp::actors_joined;
 
 pub mod chat {
     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
@@ -28,13 +28,13 @@ fn main() {
 
 
 struct Welcomer {
-    connection_manager: ReactorId,
+    aggregator: ReactorId,
 }
 
 impl Welcomer {
-    fn params<C: Ctx>(connection_manager: ReactorId) -> CoreParams<Self, C> {
+    fn params<C: Ctx>(aggregator: ReactorId) -> CoreParams<Self, C> {
         let me = Self {
-            connection_manager,
+            aggregator,
         };
 
         let mut params = CoreParams::new(me);
@@ -42,10 +42,6 @@ impl Welcomer {
         params.handler(
             from_client::Owned,
             CtxHandler::new(Self::handle_chat_message)
-        );
-        params.handler(
-            actors_joined::Owned,
-            CtxHandler::new(Self::handle_actors_joined),
         );
 
         return params;
@@ -57,9 +53,7 @@ impl Welcomer {
         _: initialize::Reader,
     ) -> Result<(), errors::Error>
     {
-        let link = WelcomerConnectionLink {};
-
-        handle.open_link(link.params(self.connection_manager.clone()))?;
+        handle.open_link(ClientLink::params(self.aggregator.clone()))?;
 
         return Ok(());
     }
@@ -92,49 +86,8 @@ impl Welcomer {
 
         return Ok(());
     }
-
-    fn handle_actors_joined<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        msg: actors_joined::Reader,
-    ) -> Result<(), errors::Error>
-    {
-        for id in msg.get_ids()?.iter() {
-            let id = id.unwrap();
-            let client_id = ReactorId::from(id);
-            handle.open_link(ClientLink::params(client_id)).unwrap();
-        }
-        Ok(())
-    }
 }
 
-struct WelcomerConnectionLink {}
-
-impl WelcomerConnectionLink {
-    fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(foreign_id, self);
-        params.external_handler(
-            actors_joined::Owned,
-            CtxHandler::new(Self::e_handle_actors_joined),
-        );
-
-        return params;
-    }
-
-    fn e_handle_actors_joined<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: actors_joined::Reader,
-    ) -> errors::Result<()> {
-        let ids = r.get_ids()?;
-
-        let mut joined = MsgBuffer::<actors_joined::Owned>::new();
-        joined.build(|b| b.set_ids(ids).expect("Fuck off"));
-        handle.send_internal(joined)?;
-
-        Ok(())
-    }
-}
 
 /// Link with client controller
 struct ClientLink;
@@ -222,6 +175,7 @@ pub fn run(args : Vec<String>) {
 
     let manager_id: ReactorId = rand::thread_rng().gen();
     let welcomer_id: ReactorId = rand::thread_rng().gen();
+    let aggregator_id: ReactorId = rand::thread_rng().gen();
 
     let number_of_clients = args.get(1).map(|x| x.parse().unwrap_or(1)).unwrap_or(1);
 
@@ -232,10 +186,11 @@ pub fn run(args : Vec<String>) {
     tokio::run(futures::lazy(move || {
         let mut broker = Broker::new().unwrap();
 
-        broker.spawn(welcomer_id.clone(), Welcomer::params(manager_id.clone()), "Main").display();
+        broker.spawn(welcomer_id.clone(), Welcomer::params(aggregator_id.clone()), "Main").display();
+        broker.spawn(aggregator_id.clone(), Aggregator::params(manager_id.clone(), welcomer_id.clone()), "Aggregator").display();
         broker.spawn(
             manager_id.clone(),
-            ConnectionManager::params(broker.clone(), ids, welcomer_id.clone(), addr),
+            ConnectionManager::params(broker.clone(), ids, aggregator_id.clone(), addr),
             "Connection Manager"
         ).display();
 

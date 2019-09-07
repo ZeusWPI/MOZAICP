@@ -7,7 +7,7 @@ use log_capnp::{log};
 
 mod cmd_reactor;
 mod connection_manager;
-pub use self::connection_manager::ConnectionManager;
+pub use self::connection_manager::{ConnectionManager, Aggregator};
 pub use self::cmd_reactor::CmdReactor;
 
 mod logging;
