@@ -14,9 +14,8 @@ use mozaic::messaging::reactor::*;
 use mozaic::errors;
 
 use mozaic::modules::log_reactor;
-use mozaic::client_capnp::{from_client, host_message};
-
-// TODO: Find from where to get disconnect event something something
+use mozaic::client_capnp::{from_client, host_message, to_client};
+use mozaic::core_capnp::actors_joined;
 
 pub mod chat {
     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
@@ -29,13 +28,13 @@ fn main() {
 
 
 struct Welcomer {
-    connection_id: ReactorId,
+    connection_manager: ReactorId,
 }
 
 impl Welcomer {
-    fn params<C: Ctx>(connection_id: ReactorId) -> CoreParams<Self, C> {
+    fn params<C: Ctx>(connection_manager: ReactorId) -> CoreParams<Self, C> {
         let me = Self {
-            connection_id,
+            connection_manager,
         };
 
         let mut params = CoreParams::new(me);
@@ -43,6 +42,10 @@ impl Welcomer {
         params.handler(
             from_client::Owned,
             CtxHandler::new(Self::handle_chat_message)
+        );
+        params.handler(
+            actors_joined::Owned,
+            CtxHandler::new(Self::handle_actors_joined),
         );
 
         return params;
@@ -56,7 +59,7 @@ impl Welcomer {
     {
         let link = WelcomerConnectionLink {};
 
-        handle.open_link(link.params(self.connection_id.clone()))?;
+        handle.open_link(link.params(self.connection_manager.clone()))?;
 
         return Ok(());
     }
@@ -89,6 +92,20 @@ impl Welcomer {
 
         return Ok(());
     }
+
+    fn handle_actors_joined<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        msg: actors_joined::Reader,
+    ) -> Result<(), errors::Error>
+    {
+        for id in msg.get_ids()?.iter() {
+            let id = id.unwrap();
+            let client_id = ReactorId::from(id);
+            handle.open_link(ClientLink::params(client_id)).unwrap();
+        }
+        Ok(())
+    }
 }
 
 struct WelcomerConnectionLink {}
@@ -97,59 +114,100 @@ impl WelcomerConnectionLink {
     fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
         params.external_handler(
-            from_client::Owned,
-            CtxHandler::new(Self::e_handle_client_message),
-        );
-
-        params.internal_handler(
-            host_message::Owned,
-            CtxHandler::new(Self::i_handle_chat_msg_send),
+            actors_joined::Owned,
+            CtxHandler::new(Self::e_handle_actors_joined),
         );
 
         return params;
     }
 
-    //? Listen for local chat messages and resend them trough the interwebs
-    fn i_handle_chat_msg_send<C: Ctx>(
+    fn e_handle_actors_joined<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: host_message::Reader,
-    ) -> Result<(), errors::Error>
-    {
-        let content = message.get_data()?;
+        r: actors_joined::Reader,
+    ) -> errors::Result<()> {
+        let ids = r.get_ids()?;
 
-        let mut chat_message = MsgBuffer::<host_message::Owned>::new();
-        chat_message.build(|b| {
-            b.set_data(content);
-        });
+        let mut joined = MsgBuffer::<actors_joined::Owned>::new();
+        joined.build(|b| b.set_ids(ids).expect("Fuck off"));
+        handle.send_internal(joined)?;
 
-        handle.send_message(chat_message)?;
+        Ok(())
+    }
+}
 
-        return Ok(());
+/// Link with client controller
+struct ClientLink;
+impl ClientLink {
+    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(remote_id, ClientLink);
+
+        params.internal_handler(
+            host_message::Owned,
+            CtxHandler::new(Self::i_handle_host_msg),
+        );
+
+        params.internal_handler(
+            to_client::Owned,
+            CtxHandler::new(Self::i_handle_to_client),
+        );
+
+        params.external_handler(
+            from_client::Owned,
+            CtxHandler::new(Self::e_handle_from_client),
+        );
+
+        return params;
     }
 
-    //? Handle chat messages by sending them internally so everybody can hear them
-    //? Including you self
-    fn e_handle_client_message<C: Ctx>(
+    fn i_handle_host_msg<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        message: from_client::Reader,
-    ) -> Result<(), errors::Error>
-    {
-        let content = message.get_data()?;
-        let user = message.get_client_id();
+        r: host_message::Reader,
+    ) -> errors::Result<()> {
+        let msg = r.get_data()?;
 
-        let mut chat_message = MsgBuffer::<from_client::Owned>::new();
-        chat_message.build(|b| {
-            b.set_data(content);
-            b.set_client_id(user);
+        let mut joined = MsgBuffer::<host_message::Owned>::new();
+        joined.build(|b| b.set_data(msg));
+        handle.send_message(joined)?;
+
+        Ok(())
+    }
+
+    fn i_handle_to_client<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: to_client::Reader,
+    ) -> errors::Result<()> {
+        let id = r.get_client_id();
+        let msg = r.get_data()?;
+
+        let mut joined = MsgBuffer::<to_client::Owned>::new();
+        joined.build(|b| {
+            b.set_data(msg);
+            b.set_client_id(id);
         });
+        handle.send_message(joined)?;
 
-        println!("host got msg {}", content);
+        Ok(())
+    }
 
-        handle.send_internal(chat_message)?;
+    fn e_handle_from_client<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: from_client::Reader,
+    ) -> errors::Result<()> {
+        let id = r.get_client_id();
+        let msg = r.get_data()?;
 
-        return Ok(());
+        let mut joined = MsgBuffer::<from_client::Owned>::new();
+        joined.build(|b| {
+            b.set_data(msg);
+            b.set_client_id(id);
+        });
+        handle.send_internal(joined)?;
+
+        Ok(())
     }
 }
 
@@ -167,7 +225,7 @@ pub fn run(args : Vec<String>) {
 
     let number_of_clients = args.get(1).map(|x| x.parse().unwrap_or(1)).unwrap_or(1);
 
-    let ids = (0..number_of_clients).map(|x| (x.into(), x.into())).collect();
+    let ids = (0..number_of_clients).map(|x| (x.into(), (10 - x).into())).collect();
 
     println!("Ids: {:?}", ids);
 
@@ -178,7 +236,8 @@ pub fn run(args : Vec<String>) {
         broker.spawn(
             manager_id.clone(),
             ConnectionManager::params(broker.clone(), ids, welcomer_id.clone(), addr),
-            "Connection Manager").display();
+            "Connection Manager"
+        ).display();
 
         Ok(())
     }));

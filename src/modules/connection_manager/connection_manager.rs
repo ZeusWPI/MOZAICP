@@ -70,8 +70,7 @@ impl ConnectionManager {
             let mut ids_builder = b.reborrow().init_ids(ids.len().try_into().unwrap());
 
             for (i, id) in ids.iter().enumerate() {
-                let id_builder: &mut [u8] = ids_builder.reborrow().get(i.try_into().unwrap()).unwrap();
-                id_builder.copy_from_slice(id.bytes());
+                ids_builder.set(i.try_into().unwrap(), id.bytes());
             }
         });
 
@@ -189,6 +188,7 @@ impl ClientControllerLink {
         handle: &mut LinkHandle<C>,
         r: client_connected::Reader,
     ) -> Result<()> {
+
         let key = r.get_client_key();
         let self_key: u64 = self.key.into();
 
@@ -197,14 +197,14 @@ impl ClientControllerLink {
 
             let mut joined = MsgBuffer::<actor_joined::Owned>::new();
             joined.build(|b| b.set_id(id));
-            handle.send_message(joined)?;
+            handle.send_message(joined).display();
 
             let mut host_joined = MsgBuffer::<host_connected::Owned>::new();
             host_joined.build(|b| {
                 b.set_client_key(key);
                 b.set_id(handle.remote_uuid().bytes());
             });
-            handle.send_internal(host_joined)?;
+            handle.send_internal(host_joined).display();
         }
 
         Ok(())
@@ -274,6 +274,8 @@ impl ClientLink {
         });
         handle.send_internal(joined)?;
 
+        self.key = Some(Identifier::from(key));
+
         Ok(())
     }
 
@@ -310,12 +312,14 @@ impl ClientLink {
             if key == self_key {
                 let id = r.get_id()?;
 
+                println!("Sending actor joined event to the client");
+
                 let mut joined = MsgBuffer::<actor_joined::Owned>::new();
 
                 joined.build(|b| {
                     b.set_id(id);
                 });
-                handle.send_internal(joined)?;
+                handle.send_message(joined)?;
             }
         }
 

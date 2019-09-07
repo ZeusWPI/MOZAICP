@@ -11,7 +11,7 @@ use tokio::net::TcpStream;
 use futures::sync::mpsc;
 use futures::Future;
 
-use mozaic::core_capnp::{initialize, terminate_stream, identify};
+use mozaic::core_capnp::{initialize, terminate_stream, identify, actor_joined};
 use mozaic::chat_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
@@ -107,6 +107,7 @@ impl ClientReactor {
     fn params<C: Ctx>(self) -> CoreParams<Self, C> {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::initialize));
+        params.handler(actor_joined::Owned, CtxHandler::new(Self::open_host));
         return params;
     }
 
@@ -131,13 +132,26 @@ impl ClientReactor {
         let msg = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
         handle.send_internal(msg)?;
 
-        let mut chat_message = MsgBuffer::<identify::Owned>::new();
-        chat_message.build(|b| {
+        let mut identify = MsgBuffer::<identify::Owned>::new();
+        identify.build(|b| {
             b.set_key(self.id);
         });
-        handle.send_internal(chat_message).display();
+        handle.send_internal(identify).display();
 
         return Ok(());
+    }
+
+    fn open_host<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        r: actor_joined::Reader,
+    ) -> Result<()>
+    {
+        let id = r.get_id()?;
+
+        handle.open_link(HostLink::params(ReactorId::from(id)))?;
+
+        Ok(())
     }
 }
 
@@ -155,13 +169,8 @@ impl ServerLink {
         );
 
         params.external_handler(
-            host_message::Owned,
-            CtxHandler::new(Self::receive_chat_message),
-        );
-
-        params.internal_handler(
-            chat_capnp::send_message::Owned,
-            CtxHandler::new(Self::send_chat_message),
+            actor_joined::Owned,
+            CtxHandler::new(Self::handle_actor_joined),
         );
 
         params.internal_handler(
@@ -170,6 +179,20 @@ impl ServerLink {
         );
 
         return params;
+    }
+
+    fn handle_actor_joined<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        id: actor_joined::Reader,
+    ) -> Result<()> {
+        let id = id.get_id()?;
+
+        let mut joined = MsgBuffer::<actor_joined::Owned>::new();
+        joined.build(|b| b.set_id(id));
+        handle.send_internal(joined)?;
+
+        Ok(())
     }
 
     fn identify<C: Ctx>(
@@ -183,10 +206,40 @@ impl ServerLink {
         chat_message.build(|b| {
             b.set_key(id);
         });
-        // println!("IDing with {}", id);
 
         handle.send_message(chat_message).display();
         Ok(())
+    }
+
+    fn close_handler<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        _: terminate_stream::Reader,
+    ) -> Result<()>
+    {
+        // also close our end of the stream
+        handle.close_link()?;
+        return Ok(());
+    }
+}
+
+struct HostLink;
+
+impl HostLink {
+    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(remote_id, HostLink);
+
+        params.external_handler(
+            host_message::Owned,
+            CtxHandler::new(Self::receive_chat_message),
+        );
+
+        params.internal_handler(
+            chat_capnp::send_message::Owned,
+            CtxHandler::new(Self::send_chat_message),
+        );
+
+        return params;
     }
 
     // pick up a 'send_message' event from the reactor, and put it to effect
@@ -208,7 +261,6 @@ impl ServerLink {
         handle.send_message(chat_message)?;
 
         return Ok(());
-
     }
 
     // receive a chat message from the chat server, and broadcast it on the
@@ -230,18 +282,6 @@ impl ServerLink {
 
         return Ok(());
     }
-
-    fn close_handler<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        _: terminate_stream::Reader,
-    ) -> Result<()>
-    {
-        // also close our end of the stream
-        handle.close_link()?;
-        return Ok(());
-    }
-
 }
 
 //
