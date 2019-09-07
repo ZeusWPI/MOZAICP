@@ -13,9 +13,14 @@ struct FromClient {
     data @1 :Text;
 }
 
+# client message only for internal use in the ClientControllerReactor
+struct InnerToClient {
+    data @0 :Text;
+}
+
 # Msg from client with specific client in mind.
 struct ToClient {
-    clientKey @0 :UInt64;
+    clientId @0 :UInt64;
     data @1 :Text;
 }
 
@@ -28,11 +33,17 @@ struct HostMessage {
 # A client was disconnected.
 # Emitted by the client handler.
 struct ClientDisconnected {
-    clientId @0 :UInt64;
+    clientKey @0 :UInt64;
 }
 
 # A client has connected.
 # Emitted by the client handler.
 struct ClientConnected {
-    clientId @0 :UInt64;
+    clientKey @0 :UInt64;
+    id @1 :Data;
+}
+
+struct HostConnected {
+    clientKey @0 :UInt64;
+    id @1 :Data;
 }

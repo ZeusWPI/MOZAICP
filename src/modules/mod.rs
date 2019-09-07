@@ -6,9 +6,9 @@ use errors::Consumable;
 use log_capnp::{log};
 
 mod cmd_reactor;
-mod server_reactor;
+mod connection_manager;
+pub use self::connection_manager::ConnectionManager;
 pub use self::cmd_reactor::CmdReactor;
-pub use self::server_reactor::ConnectionManager;
 
 mod logging;
 pub use self::logging::{LogReactor, Link as LogLink};

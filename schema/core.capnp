@@ -32,6 +32,11 @@ struct ActorJoined {
     id @0: Data;
 }
 
+struct ActorsJoined {
+    ids @0: List(Data);
+}
+
 struct Identify {
     key @0: UInt64;
 }
+
