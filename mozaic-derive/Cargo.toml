@@ -7,6 +7,6 @@ authors = ["Ilion Beyst <ilion.beyst@gmail.com>"]
 proc_macro = true
 
 [dependencies]
-proc-macro2 = "0.4"
-quote = "0.6"
-syn = "0.14.5"
+proc-macro2 = "1.0.3"
+quote = "1.0.2"
+syn = "1.0.5"

@@ -1,4 +1,5 @@
 extern crate proc_macro;
+#[macro_use]
 extern crate syn;
 #[macro_use]
 extern crate quote;
@@ -36,22 +37,22 @@ fn get_meta_items(ast: &syn::DeriveInput) -> HashMap<String, syn::Lit> {
 
     for attr in ast.attrs.iter() {
         if path_equals(&attr.path, "mozaic_event") {
-            let meta_list = match attr.interpret_meta() {
-                None => panic!("could not interpret meta"),
-                Some(syn::Meta::List(list)) => list,
-                Some(_) => panic!("expected MetaList"),
+            let meta_list = match attr.parse_meta() {
+                Err(_) => panic!("could not interpret meta"),
+                Ok(syn::Meta::List(list)) => list,
+                Ok(_) => panic!("expected MetaList"),
             };
 
             for nested_meta in meta_list.nested.iter() {
                 let meta = match nested_meta {
-                    &syn::NestedMeta::Literal(_) => panic!("unexpected literal"),
+                    &syn::NestedMeta::Lit(_) => panic!("unexpected literal"),
                     &syn::NestedMeta::Meta(ref meta) => meta,
                 };
 
                 match meta {
                     &syn::Meta::NameValue(ref name_value) => {
                         items.insert(
-                            name_value.ident.to_string(),
+                            name_value.path.get_ident().unwrap().to_string(),
                             name_value.lit.clone(),
                         );
                     },
@@ -66,4 +67,33 @@ fn get_meta_items(ast: &syn::DeriveInput) -> HashMap<String, syn::Lit> {
 
 fn path_equals(path: &syn::Path, s: &str) -> bool {
     path.segments.len() == 1 && path.segments[0].ident == s
+}
+
+use syn::parse::{Result, ParseStream};
+
+struct  Combinations {
+    name: syn::Ident,
+    n: syn::LitInt,
+}
+
+impl syn::parse::Parse for Combinations {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name = input.parse()?;
+        input.parse::<syn::Token![,]>()?;
+        let n = input.parse()?;
+        if !input.is_empty() {
+            return Err(input.error("Did not consume entire parse stream"));
+        }
+        Ok(Combinations { name, n })
+    }
+}
+
+#[proc_macro]
+pub fn minimal(input: TokenStream) -> TokenStream {
+    let Combinations { name, n } = parse_macro_input!(input as Combinations);
+    (quote!{
+        fn #name() -> i32 {
+            #n
+        }
+    }).into()
 }
