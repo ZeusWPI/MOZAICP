@@ -72,28 +72,34 @@ fn path_equals(path: &syn::Path, s: &str) -> bool {
 use syn::parse::{Result, ParseStream};
 
 struct  Combinations {
-    name: syn::Ident,
-    n: syn::LitInt,
+    reader: syn::Type,
+    owned: syn::Type,
 }
 
 impl syn::parse::Parse for Combinations {
     fn parse(input: ParseStream) -> Result<Self> {
-        let name = input.parse()?;
+        let reader = input.parse()?;
         input.parse::<syn::Token![,]>()?;
-        let n = input.parse()?;
+        let owned = input.parse()?;
         if !input.is_empty() {
             return Err(input.error("Did not consume entire parse stream"));
         }
-        Ok(Combinations { name, n })
+        Ok(Combinations { reader, owned })
     }
 }
 
 #[proc_macro]
 pub fn minimal(input: TokenStream) -> TokenStream {
-    let Combinations { name, n } = parse_macro_input!(input as Combinations);
+    let Combinations { reader, owned } = parse_macro_input!(input as Combinations);
     (quote!{
-        fn #name() -> i32 {
-            #n
+        pub fn e_to_i<C: ::messaging::reactor::Ctx, T>(
+            _: &mut T,
+            h: &mut ::messaging::reactor::LinkHandle<C>,
+            r: #reader) -> ::errors::Result<()>
+        {
+            let m = ::messaging::types::MsgBuffer::<#owned>::from_reader(r)?;
+            h.send_internal(m)?;
+            Ok(())
         }
     }).into()
 }

@@ -55,6 +55,17 @@ impl Aggregator {
     }
 }
 
+// pub fn e_to_i<C: ::messaging::reactor::Ctx, T>(
+//     _: &mut T,
+//     h: &mut ::messaging::reactor::LinkHandle<C>,
+//     r:host_message::Reader) -> ::errors::Result<()>
+// {
+//     let m = ::messaging::types::MsgBuffer::<host_message::Owned>::from_reader(r)?;
+//     h.send_internal(m)?;
+//     Ok(())
+// }
+
+minimal!(host_message::Reader, host_message::Owned);
 
 struct HostLink;
 impl HostLink {

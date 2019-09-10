@@ -255,6 +255,16 @@ impl<T> MsgBuffer<T>
         let mut builder = self.get_builder();
         f(&mut builder);
     }
+
+    pub fn from_reader<'a>(reader: <T as Owned<'a>>::Reader) -> ::errors::Result<Self> {
+
+        let mut me = MsgBuffer::new();
+
+        let msg = me.builder.get_root::<mozaic_message::Builder>().unwrap();
+        msg.init_payload().set_as(reader).expect("Tha fuq");
+
+        Ok(me)
+    }
 }
 
 impl<T> MsgBuffer<T> {
