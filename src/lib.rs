@@ -33,8 +33,22 @@ pub mod modules;
 
 pub mod errors;
 
+mod testering {
+    maximal!(
+        pub mod here {
+            struct Here();
+        }
+
+        pub mod there {
+            struct There();
+        }
+    );
+}
+
 pub mod core_capnp {
-    include!(concat!(env!("OUT_DIR"), "/core_capnp.rs"));
+    maximal!(
+        include!(concat!(env!("OUT_DIR"), "/core_capnp.rs"));
+    );
 }
 
 pub mod chat_capnp {

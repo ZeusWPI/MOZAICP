@@ -65,7 +65,7 @@ impl Aggregator {
 //     Ok(())
 // }
 
-minimal!(host_message::Reader, host_message::Owned);
+minimal!(host_message);
 
 struct HostLink;
 impl HostLink {
