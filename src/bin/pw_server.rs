@@ -1,4 +1,3 @@
-#![feature(slice_patterns)]
 
 extern crate mozaic;
 extern crate tokio;
@@ -123,7 +122,7 @@ impl CmdLink {
         // Parse the input
         let split: Vec<&str> = r.get_input()?.split(" ").collect();
         let error_msg = match split[..] {
-            ["start", turn_count, path, ..] => {
+            ["start", turn_count, path] => {
                 if let Ok(turn_count) = turn_count.parse() {
                     let mut joined = MsgBuffer::<start_game::Owned>::new();
 
