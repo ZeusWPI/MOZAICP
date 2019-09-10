@@ -2,21 +2,11 @@
 
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{Result, Consumable};
+use errors::{Result};
 use core_capnp::{initialize};
 
-use core_capnp::{actor_joined, actors_joined, identify};
-use network_capnp::{disconnected};
-use client_capnp::{from_client, client_message, to_client, host_message, client_disconnected, inner_to_client};
-
-use server::runtime::BrokerHandle;
-
-use server::TcpServer;
-use std::net::SocketAddr;
-
-use std::collections::{HashMap};
-
-use super::util::{Identifier, PlayerId};
+use core_capnp::{actors_joined};
+use client_capnp::{from_client, to_client, host_message};
 
 pub struct Aggregator {
     connection_manager: ReactorId,
