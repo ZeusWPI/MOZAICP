@@ -62,7 +62,8 @@ impl HostLink {
 
         let mut params = LinkParams::new(remote_id, HostLink);
 
-        params.external_handler(host_message::Owned, CtxHandler::new(Self::e_handle_message));
+        // params.external_handler(host_message::Owned, CtxHandler::new(Self::e_handle_message));
+        params.send_external_to_internal(host_message::Owned);
         params.external_handler(to_client::Owned, CtxHandler::new(Self::e_handle_to_client));
 
         params.internal_handler(from_client::Owned, CtxHandler::new(Self::i_handle_message));

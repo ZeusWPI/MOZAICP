@@ -411,7 +411,6 @@ impl<M, F> CtxHandler<M, F> {
     }
 }
 
-
 impl<'a, S, H, M, F, T, E> Handler<'a, HandlerCtx<'a, S, H>, M> for CtxHandler<M, F>
     where F: Fn(&mut S, &mut H, <M as Owned<'a>>::Reader) -> std::result::Result<T, E>,
           F: Send,
@@ -425,6 +424,38 @@ impl<'a, S, H, M, F, T, E> Handler<'a, HandlerCtx<'a, S, H>, M> for CtxHandler<M
     {
         let (state, handle) = ctx.split();
         (self.function)(state, handle, reader)
+    }
+}
+
+
+
+pub struct CtxHandlerWithoutState<M, F> {
+    message_type: PhantomData<M>,
+    function: F,
+}
+
+impl<M, F> CtxHandlerWithoutState<M, F> {
+    pub fn new(function: F) -> Self {
+        CtxHandlerWithoutState {
+            message_type: PhantomData,
+            function,
+        }
+    }
+}
+
+impl<'a, S, H, M, F, T, E> Handler<'a, HandlerCtx<'a, S, H>, M> for CtxHandlerWithoutState<M, F>
+    where F: Fn(&mut H, <M as Owned<'a>>::Reader) -> std::result::Result<T, E>,
+          F: Send,
+          M: Owned<'a> + 'static + Send
+{
+    type Output = T;
+    type Error = E;
+
+    fn handle(&self, ctx: &mut HandlerCtx<'a, S, H>, reader: <M as Owned<'a>>::Reader)
+        -> std::result::Result<T, E>
+    {
+        let handle = ctx.handle();
+        (self.function)(handle, reader)
     }
 }
 
@@ -549,7 +580,46 @@ impl<S, C: Ctx> LinkParams<S, C> {
             boxed,
         );
     }
+
+    pub fn send_external_to_internal<M>(&mut self, m: M,)
+        where M: for<'a> Owned<'a> + Send + 'static,
+             <M as Owned<'static>>::Reader: HasTypeId,
+             <M as Owned<'static>>::Builder: HasTypeId,
+        {
+
+        self.external_handler(m, CtxHandlerWithoutState::new(e_to_i::<C, M>));
+    }
+
+    // pub fn send_internal_to_external<M>(&mut self, m: M)
+    //     where M: for<'a> Owned<'a> + Send + 'static,
+    //          <M as Owned<'static>>::Reader: HasTypeId,
+    //           <M as Owned<'static>>::Builder : capnp::traits::HasTypeId {
+
+    //     self.internal_handler(m, CtxHandler::new(i_to_e::<S, C, M>));
+    // }
 }
+
+fn e_to_i<C:Ctx, M>(handle: &mut LinkHandle<C>, msg: <M as Owned<'_>>::Reader) -> errors::Result<()>
+    where
+        M: for<'a> Owned<'a> + Send + 'static,
+        <M as Owned<'static>>::Reader: HasTypeId,
+        <M as Owned<'static>>::Builder: HasTypeId,
+    {
+
+    let msg = MsgBuffer::<M>::from_reader(msg)?;
+    handle.send_internal(msg)?;
+
+    return Ok(())
+}
+
+// fn i_to_e<S, C:Ctx, M>(_ :&mut S, handle: & mut LinkHandle<C>, msg: <M as Owned>::Reader) -> errors::Result<()>
+//     where M: for<'a> Owned<'a> + Send + 'static,
+//           <M as Owned<'static>>::Reader: HasTypeId,
+//           <M as Owned<'static>>::Builder: HasTypeId {
+//     let msg = MsgBuffer::<M>::from_reader(msg)?;
+//     handle.send_message(msg)?;
+//     return Ok(())
+// }
 
 pub trait LinkParamsTrait<C: Ctx>: 'static + Send {
     fn remote_id<'a>(&'a self) -> &'a ReactorId;
