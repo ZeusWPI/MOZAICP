@@ -132,9 +132,9 @@ impl syn::parse::Parse for All {
             idents.push(
                 input.parse()?
             );
-            blocks.push(
-                input.parse()?
-            );
+            // blocks.push(
+            //     input.parse()?
+            // );
         }
         Ok(Self { idents, blocks })
     }
