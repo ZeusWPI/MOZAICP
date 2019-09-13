@@ -21,7 +21,7 @@ pub struct Steplock {
     players: Vec<PlayerId>,
     host_id: ReactorId,
     client_id: ReactorId,
-    timer: Option<mpsc::UnboundedSender<TimerAction>>,
+    timer: Option<mpsc::Sender<TimerAction>>,
 }
 
 impl Steplock {
@@ -70,8 +70,6 @@ impl Steplock {
                 Timer::new(self.broker.clone(), timeout, handle.id().clone())
             );
         }
-
-        self.set_timout();
 
         Ok(())
     }
@@ -194,16 +192,16 @@ use futures::future::Future;
 
 struct Timer {
     inner: Option<Delay>,
-    rx: mpsc::UnboundedReceiver<TimerAction>,
+    rx: mpsc::Receiver<TimerAction>,
     broker: BrokerHandle,
     timeout: u64,
     id: ReactorId,
 }
 
 impl Timer {
-    fn new(broker: BrokerHandle, timeout: u64, id: ReactorId) -> mpsc::UnboundedSender<TimerAction> {
+    fn new(broker: BrokerHandle, timeout: u64, id: ReactorId) -> mpsc::Sender<TimerAction> {
         let inner = None;
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(20);
 
         let me = Self {
             inner, rx, broker, timeout, id
@@ -229,7 +227,6 @@ impl Future for Timer {
                             Delay::new(Instant::now() + Duration::from_millis(self.timeout))
                         );
                         println!("RESETTING");
-
                     },
                     TimerAction::Halt => {
                         self.inner = None;
