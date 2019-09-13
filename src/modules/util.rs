@@ -39,3 +39,17 @@ impl Into<u64> for PlayerId {
         self.0
     }
 }
+
+impl Into<u64> for &PlayerId {
+    fn into(self) -> u64 {
+        self.0
+    }
+}
+
+impl Deref for PlayerId {
+    type Target = u64;
+
+    fn deref(& self) -> &u64 {
+        &self.0
+    }
+}
