@@ -27,12 +27,12 @@ pub trait GameController {
 }
 
 pub struct GameReactor {
-    game_controller: Box<dyn GameController>,
+    game_controller: Box<dyn GameController + Send>,
     clients_id: ReactorId,
 }
 
 impl GameReactor {
-    pub fn params<C: Ctx>(clients_id: ReactorId, game_controller: Box<dyn GameController>) -> CoreParams<Self, C> {
+    pub fn params<C: Ctx>(clients_id: ReactorId, game_controller: Box<dyn GameController + Send>) -> CoreParams<Self, C> {
         let me = Self {
             clients_id, game_controller
         };
