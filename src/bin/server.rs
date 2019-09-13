@@ -1,21 +1,16 @@
-use std::env;
 
-extern crate serde_json;
 extern crate tokio;
 extern crate futures;
 extern crate mozaic;
 extern crate rand;
 extern crate capnp;
 
+use std::env;
 use std::net::SocketAddr;
 use mozaic::messaging::types::*;
 use mozaic::errors;
 
 use mozaic::modules::{Aggregator, Steplock, game};
-
-pub mod chat {
-    include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
-}
 
 // Load the config and start the game.
 fn main() {
