@@ -174,27 +174,12 @@ impl HostLink {
 
         let mut params = LinkParams::new(foreign_id, me);
 
-        params.external_handler(host_message::Owned, CtxHandler::new(Self::e_handle_message));
+        params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
         params.external_handler(to_client::Owned, CtxHandler::new(Self::e_handle_to_client));
 
         params.internal_handler(client_message::Owned, CtxHandler::new(Self::i_handle_message));
 
         return params;
-    }
-
-    /// Pass through client send from host
-    fn e_handle_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: host_message::Reader,
-    ) -> Result<()> {
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<host_message::Owned>::new();
-        joined.build(|b| b.set_data(msg));
-        handle.send_internal(joined)?;
-
-        Ok(())
     }
 
     /// Pass through client send from host
@@ -214,7 +199,6 @@ impl HostLink {
             joined.build(|b| b.set_data(msg));
             handle.send_internal(joined)?;
         }
-
 
         Ok(())
     }
@@ -242,38 +226,20 @@ impl HostLink {
 
 
 /// Link with the client, passing though disconnects and messages
-struct ClientLink {
-}
+struct ClientLink;
 
 impl ClientLink {
     pub fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
-        let me = Self { };
+        let me = Self;
 
         let mut params = LinkParams::new(foreign_id, me);
 
-
-        params.external_handler(client_message::Owned, CtxHandler::new(Self::e_handle_message));
+        params.external_handler(client_message::Owned, CtxHandler::new(client_message::e_to_i));
 
         params.internal_handler(client_disconnected::Owned, CtxHandler::new(Self::i_handle_disconnect));
         params.internal_handler(inner_to_client::Owned, CtxHandler::new(Self::i_handle_msg));
 
         return params;
-    }
-
-    fn e_handle_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        msg: client_message::Reader,
-    ) -> Result<()> {
-        let msg = msg.get_data()?;
-
-        let mut inner_msg = MsgBuffer::<client_message::Owned>::new();
-        inner_msg.build(|b| {
-            b.set_data(msg);
-        });
-        handle.send_internal(inner_msg)?;
-
-        Ok(())
     }
 
     fn i_handle_disconnect<C: Ctx>(

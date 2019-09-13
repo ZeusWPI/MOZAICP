@@ -79,26 +79,9 @@ struct CmdLink;
 impl CmdLink {
     pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
-        params.external_handler(
-            cmd_input::Owned,
-            CtxHandler::new(Self::e_handle_cmd),
-        );
+        params.external_handler(cmd_input::Owned, CtxHandler::new(cmd_input::e_to_i), );
 
         return params;
-    }
-
-    fn e_handle_cmd<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: cmd_input::Reader,
-    ) -> Result<(), errors::Error> {
-        let msg = r.get_input()?;
-
-        let mut joined = MsgBuffer::<cmd_input::Owned>::new();
-        joined.build(|b| b.set_input(msg));
-        handle.send_internal(joined)?;
-
-        Ok(())
     }
 }
 
@@ -113,44 +96,16 @@ impl ForeignLink {
         let mut params = LinkParams::new(foreign_id, self);
         params.internal_handler(
             cmd_input::Owned,
-            CtxHandler::new(Self::i_handle_cmd),
+            CtxHandler::new(cmd_input::i_to_e),
         );
 
         params.external_handler(
             cmd_return::Owned,
-            CtxHandler::new(Self::e_handle_return)
+            CtxHandler::new(cmd_return::e_to_i)
         );
 
 
         return params;
-    }
-
-    fn i_handle_cmd<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: cmd_input::Reader,
-    ) -> Result<(), errors::Error> {
-        let msg = r.get_input()?;
-
-        let mut joined = MsgBuffer::<cmd_input::Owned>::new();
-        joined.build(|b| b.set_input(&msg));
-        handle.send_message(joined)?;
-
-        Ok(())
-    }
-
-    fn e_handle_return<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: cmd_return::Reader,
-    ) -> Result<(), errors::Error> {
-        let message = r.get_message()?;
-
-        let mut joined = MsgBuffer::<cmd_return::Owned>::new();
-        joined.build(|b| b.set_message(&message));
-        handle.send_internal(joined)?;
-
-        Ok(())
     }
 }
 

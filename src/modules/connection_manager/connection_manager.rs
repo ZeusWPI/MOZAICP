@@ -101,29 +101,9 @@ impl HostLink {
     fn params<C: Ctx>(host: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(host, HostLink);
 
-        params.internal_handler(
-            actors_joined::Owned,
-            CtxHandler::new(Self::i_handle),
-        );
+        params.internal_handler(actors_joined::Owned, CtxHandler::new(actors_joined::i_to_e),);
 
         return params;
-    }
-
-    /// Pass through actor joined events
-    fn i_handle<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: actors_joined::Reader,
-    ) -> Result<()> {
-        let ids = r.get_ids()?;
-
-        let mut joined = MsgBuffer::<actors_joined::Owned>::new();
-        joined.build(|b| {
-            b.set_ids(ids).expect("HELP ME");
-        });
-        handle.send_message(joined)?;
-
-        Ok(())
     }
 }
 
@@ -136,25 +116,10 @@ impl CreationLink {
 
         params.external_handler(
             actor_joined::Owned,
-            CtxHandler::new(Self::e_handle_joined),
+            CtxHandler::new(actor_joined::e_to_i),
         );
 
         return params;
-    }
-
-    /// Pass through actor joined events
-    fn e_handle_joined<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: actor_joined::Reader,
-    ) -> Result<()> {
-        let id = r.get_id()?;
-
-        let mut joined = MsgBuffer::<actor_joined::Owned>::new();
-        joined.build(|b| b.set_id(id));
-        handle.send_internal(joined)?;
-
-        Ok(())
     }
 }
 

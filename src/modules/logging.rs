@@ -87,26 +87,10 @@ impl Link {
 
         params.internal_handler(
             log::Owned,
-            CtxHandler::new(Self::i_handle_log)
+            CtxHandler::new(log::i_to_e)
         );
 
         return params;
-    }
-
-    fn i_handle_log<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: log::Reader,
-    ) -> Result<(), errors::Error> {
-        let msg = r.get_log()?;
-
-        let mut joined = MsgBuffer::<log::Owned>::new();
-        joined.build(|b| {
-            b.set_log(&msg);
-        });
-        handle.send_message(joined)?;
-
-        Ok(())
     }
 }
 
@@ -127,7 +111,7 @@ impl LogLink {
 
         params.external_handler(
             open_log_link::Owned,
-            CtxHandler::new(Self::e_handle_open)
+            CtxHandler::new(open_log_link::e_to_i)
         );
 
         return params;
@@ -144,24 +128,6 @@ impl LogLink {
         joined.build(|b| {
             b.set_log(&msg);
             b.set_name(&self.name);
-        });
-        handle.send_internal(joined)?;
-
-        Ok(())
-    }
-
-    fn e_handle_open<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: open_log_link::Reader,
-    ) -> Result<(), errors::Error> {
-        let name = r.get_name()?;
-        let id = r.get_id()?;
-
-        let mut joined = MsgBuffer::<open_log_link::Owned>::new();
-        joined.build(|b| {
-            b.set_id(id);
-            b.set_name(name);
         });
         handle.send_internal(joined)?;
 

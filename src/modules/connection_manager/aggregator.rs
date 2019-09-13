@@ -62,65 +62,11 @@ impl HostLink {
         let mut params = LinkParams::new(remote_id, HostLink);
 
         params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
-        params.external_handler(to_client::Owned, CtxHandler::new(Self::e_handle_to_client));
+        params.external_handler(to_client::Owned, CtxHandler::new(to_client::e_to_i));
 
-        params.internal_handler(from_client::Owned, CtxHandler::new(Self::i_handle_message));
+        params.internal_handler(from_client::Owned, CtxHandler::new(from_client::i_to_e));
 
         return params;
-    }
-
-    /// Pass through client send from host
-    fn e_handle_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: host_message::Reader,
-    ) -> Result<()> {
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<host_message::Owned>::new();
-        joined.build(|b| b.set_data(msg));
-        handle.send_internal(joined)?;
-
-        Ok(())
-    }
-
-    /// Pass through client send from host
-    fn e_handle_to_client<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: to_client::Reader,
-    ) -> Result<()> {
-        let id = r.get_client_id();
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<to_client::Owned>::new();
-        joined.build(|b| {
-            b.set_data(msg);
-            b.set_client_id(id);
-        });
-        handle.send_internal(joined)?;
-
-        Ok(())
-    }
-
-    /// Pass msg sent from client through to the host
-    fn i_handle_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: from_client::Reader,
-    ) -> Result<()> {
-
-        let id = r.get_client_id().into();
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<from_client::Owned>::new();
-        joined.build(|b| {
-            b.set_client_id(id);
-            b.set_data(msg);
-        });
-        handle.send_message(joined)?;
-
-        Ok(())
     }
 }
 
@@ -132,24 +78,10 @@ impl ConnectionsLink {
 
         params.external_handler(
             actors_joined::Owned,
-            CtxHandler::new(Self::e_handle_actors_joined),
+            CtxHandler::new(actors_joined::e_to_i),
         );
 
         return params;
-    }
-
-    fn e_handle_actors_joined<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: actors_joined::Reader,
-    ) -> Result<()> {
-        let ids = r.get_ids()?;
-
-        let mut joined = MsgBuffer::<actors_joined::Owned>::new();
-        joined.build(|b| b.set_ids(ids).expect("Fuck off here"));
-        handle.send_internal(joined)?;
-
-        Ok(())
     }
 }
 
@@ -157,62 +89,11 @@ struct ClientLink;
 impl ClientLink {
     fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(remote_id, ClientLink);
-        params.internal_handler(host_message::Owned, CtxHandler::new(Self::i_handle_message));
-        params.internal_handler(to_client::Owned, CtxHandler::new(Self::i_handle_to_client));
+        params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
+        params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
 
-        params.external_handler(from_client::Owned, CtxHandler::new(Self::e_handle_message));
+        params.external_handler(from_client::Owned, CtxHandler::new(from_client::e_to_i));
 
         return params;
-    }
-
-    fn i_handle_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: host_message::Reader,
-    ) -> Result<()> {
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<host_message::Owned>::new();
-        joined.build(|b| b.set_data(msg));
-        handle.send_message(joined)?;
-
-        Ok(())
-    }
-
-    fn i_handle_to_client<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: to_client::Reader,
-    ) -> Result<()> {
-        let id = r.get_client_id();
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<to_client::Owned>::new();
-        joined.build(|b| {
-            b.set_data(msg);
-            b.set_client_id(id);
-        });
-        handle.send_message(joined)?;
-
-        Ok(())
-    }
-
-    fn e_handle_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: from_client::Reader,
-    ) -> Result<()> {
-
-        let id = r.get_client_id();
-        let msg = r.get_data()?;
-
-        let mut joined = MsgBuffer::<from_client::Owned>::new();
-        joined.build(|b| {
-            b.set_client_id(id);
-            b.set_data(msg);
-        });
-        handle.send_internal(joined)?;
-
-        Ok(())
     }
 }
