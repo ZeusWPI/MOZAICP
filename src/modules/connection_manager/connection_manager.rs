@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 
 use std::collections::{HashMap};
 
-use super::util::{Identifier, PlayerId};
+use modules::util::{Identifier, PlayerId};
 use super::client_controller::CCReactor;
 
 // TODO: TIMEOUTS?

@@ -11,7 +11,7 @@ use client_capnp::{from_client, client_message, to_client, host_message, client_
 
 use std::collections::{VecDeque};
 
-use super::util::{PlayerId};
+use modules::util::{PlayerId};
 
 pub struct CCReactor {
     connected: bool,
