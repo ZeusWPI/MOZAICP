@@ -55,25 +55,13 @@ impl Aggregator {
     }
 }
 
-// pub fn e_to_i<C: ::messaging::reactor::Ctx, T>(
-//     _: &mut T,
-//     h: &mut ::messaging::reactor::LinkHandle<C>,
-//     r:host_message::Reader) -> ::errors::Result<()>
-// {
-//     let m = ::messaging::types::MsgBuffer::<host_message::Owned>::from_reader(r)?;
-//     h.send_internal(m)?;
-//     Ok(())
-// }
-
-minimal!(host_message);
-
 struct HostLink;
 impl HostLink {
     fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
 
         let mut params = LinkParams::new(remote_id, HostLink);
 
-        params.external_handler(host_message::Owned, CtxHandler::new(Self::e_handle_message));
+        params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
         params.external_handler(to_client::Owned, CtxHandler::new(Self::e_handle_to_client));
 
         params.internal_handler(from_client::Owned, CtxHandler::new(Self::i_handle_message));
