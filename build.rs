@@ -25,30 +25,21 @@ fn main() -> std::io::Result<()> {
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let lib_file = env::var("CARGO_MANIFEST_DIR").unwrap() + "/src/lib.rs";
-    let back_lib_file = lib_file.clone() + ".back";
-
-    {
-        if Path::new(&back_lib_file).exists() {
-            fs::rename(
-                &back_lib_file,
-                &lib_file,
-            )?;
-        }
-    }
+    let back_lib_file = env::var("CARGO_MANIFEST_DIR").unwrap() + "/src/back_lib.rs";
 
     let mut contents = String::new();
     {
-        let mut file = OpenOptions::new()
-                    .read(true)
-                    .open(&lib_file)?;
-        file.read_to_string(&mut contents)?;
-    }
-
-    {
-        fs::rename(
-            &lib_file,
-            &back_lib_file,
-        )?;
+        if Path::new(&back_lib_file).exists() {
+            let mut file = OpenOptions::new()
+                        .read(true)
+                        .open(&back_lib_file)?;
+            file.read_to_string(&mut contents)?;
+        } else {
+            let mut file = OpenOptions::new()
+                        .read(true)
+                        .open(&lib_file)?;
+            file.read_to_string(&mut contents)?;
+        }
     }
 
     let contents: String = contents.split("%%").enumerate().map(|(i, content)| {
