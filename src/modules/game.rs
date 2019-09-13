@@ -25,14 +25,15 @@ pub enum Update {
 pub trait GameController {
     fn step<'a>(&mut self, turns: Vec<PlayerTurn<'a>>) -> Vec<Update>;
 }
+pub type GameBox = Box<dyn GameController + Send>;
 
 pub struct GameReactor {
-    game_controller: Box<dyn GameController + Send>,
+    game_controller: GameBox,
     clients_id: ReactorId,
 }
 
 impl GameReactor {
-    pub fn params<C: Ctx>(clients_id: ReactorId, game_controller: Box<dyn GameController + Send>) -> CoreParams<Self, C> {
+    pub fn params<C: Ctx>(clients_id: ReactorId, game_controller: GameBox) -> CoreParams<Self, C> {
         let me = Self {
             clients_id, game_controller
         };
