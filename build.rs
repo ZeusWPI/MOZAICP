@@ -1,7 +1,7 @@
 extern crate capnpc;
 
 use std::path::Path;
-use std::fs::{File, OpenOptions, self};
+use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::env;
 

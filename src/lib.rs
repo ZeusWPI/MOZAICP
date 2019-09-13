@@ -20,7 +20,6 @@ extern crate serde_derive;
 extern crate capnp;
 extern crate capnp_futures;
 
-#[macro_use]
 extern crate mozaic_derive;
 
 pub mod messaging;
