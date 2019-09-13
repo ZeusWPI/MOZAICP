@@ -1,6 +1,5 @@
 extern crate capnpc;
 
-use std::path::Path;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::env;
@@ -25,22 +24,24 @@ fn main() -> std::io::Result<()> {
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let lib_file = env::var("CARGO_MANIFEST_DIR").unwrap() + "/src/lib.rs";
-    let back_lib_file = env::var("CARGO_MANIFEST_DIR").unwrap() + "/src/back_lib.rs";
+    let _back_lib_file = env::var("CARGO_MANIFEST_DIR").unwrap() + "/src/back_lib.rs";
 
     let mut contents = String::new();
     {
-        if Path::new(&back_lib_file).exists() {
-            let mut file = OpenOptions::new()
-                        .read(true)
-                        .open(&back_lib_file)?;
-            file.read_to_string(&mut contents)?;
-        } else {
+        // if Path::new(&back_lib_file).exists() {
+        //     let mut file = OpenOptions::new()
+        //                 .read(true)
+        //                 .open(&back_lib_file)?;
+        //     file.read_to_string(&mut contents)?;
+        // } else {
             let mut file = OpenOptions::new()
                         .read(true)
                         .open(&lib_file)?;
             file.read_to_string(&mut contents)?;
-        }
+        // }
     }
+
+    let mut changed = false;
 
     let contents: String = contents.split("%%").enumerate().map(|(i, content)| {
         if i % 2 == 0 {
@@ -50,15 +51,21 @@ fn main() -> std::io::Result<()> {
         let mut file = File::open(out_dir.clone()+content).unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
+
+        changed = true;
+
         contents
     }).collect();
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(&lib_file)?;
 
-    file.write_all(contents.as_bytes()).unwrap();
+    if changed {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&lib_file)?;
+
+        file.write_all(contents.as_bytes()).unwrap();
+    }
 
     Ok(())
 }
