@@ -15,7 +15,7 @@ use modules::util::{PlayerId};
 
 pub struct CCReactor {
     connected: bool,
-    queue: VecDeque<String>,
+    queue: VecDeque<Vec<u8>>,
     id: PlayerId,
     connection_manager: ReactorId,
     host: ReactorId,
@@ -105,7 +105,7 @@ impl CCReactor {
     {
         let msg = msg.get_data()?;
 
-        self.queue.push_back(msg.to_string());
+        self.queue.push_back(msg.to_vec());
 
         self.empty_queue(handle)?;
 

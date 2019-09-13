@@ -3,31 +3,31 @@
 # A client sends some data to the server.
 # This event is dispatched by a client.
 struct ClientMessage {
-    data @0 :Text;
+    data @0 :Data;
 }
 
 # A struct was received from a client.
 # This event is emitted by a client handler when it recieves a ClientSend.
 struct FromClient {
     clientId @0 :UInt64;
-    data @1 :Text;
+    data @1 :Data;
 }
 
 # client message only for internal use in the ClientControllerReactor
 struct InnerToClient {
-    data @0 :Text;
+    data @0 :Data;
 }
 
 # Msg from client with specific client in mind.
 struct ToClient {
     clientId @0 :UInt64;
-    data @1 :Text;
+    data @1 :Data;
 }
 
 # Msg from the host.
 # To be distributed.
 struct HostMessage {
-    data @0 :Text;
+    data @0 :Data;
 }
 
 # A client was disconnected.

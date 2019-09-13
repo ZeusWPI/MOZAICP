@@ -22,6 +22,7 @@ use mozaic::client_capnp::{client_message, host_message};
 use std::thread;
 use std::env;
 use std::sync::{Arc, Mutex};
+use std::str;
 
 use cursive::align::VAlign;
 use cursive::Cursive;
@@ -255,7 +256,7 @@ impl HostLink {
 
         let mut chat_message = MsgBuffer::<client_message::Owned>::new();
         chat_message.build(|b| {
-            b.set_data(message);
+            b.set_data(message.as_bytes());
         });
 
         handle.send_message(chat_message)?;
@@ -275,7 +276,7 @@ impl HostLink {
 
         let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
         chat_message.build(|b| {
-            b.set_message(message);
+            b.set_message(str::from_utf8(message).unwrap());
             b.set_user("");
         });
         handle.send_internal(chat_message)?;

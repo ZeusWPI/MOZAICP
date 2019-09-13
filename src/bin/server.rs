@@ -66,7 +66,7 @@ impl Welcomer {
     {
         println!("host handling chat message");
         let user = msg.get_client_id();
-        let message = msg.get_data()?;
+        let message = String::from_utf8(msg.get_data()?.to_vec()).unwrap();
 
         let message = format!("Client {} sent {}", user, message);
 
@@ -77,7 +77,7 @@ impl Welcomer {
 
             let mut chat_message = MsgBuffer::<host_message::Owned>::new();
             chat_message.build(|b| {
-                b.set_data(&message);
+                b.set_data(message.as_bytes());
             });
             handle.send_internal(
                 chat_message
