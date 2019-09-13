@@ -6,6 +6,8 @@ use messaging::types::ReactorId;
 error_chain!{
     foreign_links {
         Capnp(::capnp::Error);
+        NotInSchema(::capnp::NotInSchema);
+
     }
 
     errors {
