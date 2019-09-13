@@ -40,3 +40,5 @@ struct Identify {
     key @0: UInt64;
 }
 
+struct Timeout { }
+struct SetTimeout { }

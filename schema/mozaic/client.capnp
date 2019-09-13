@@ -6,6 +6,18 @@ struct ClientMessage {
     data @0 :Data;
 }
 
+struct ClientStep {
+    data @0 :List(ClientTurn);
+}
+
+struct ClientTurn {
+    clientId @0 :UInt64;
+    union {
+        timeout @1 :Void;
+        turn @2 :Data;
+    }
+}
+
 # A struct was received from a client.
 # This event is emitted by a client handler when it recieves a ClientSend.
 struct FromClient {
