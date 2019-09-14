@@ -67,7 +67,7 @@ pub fn run(args : Vec<String>) {
         let mut broker = Broker::new().unwrap();
 
         broker.spawn(welcomer_id.clone(), game::GameReactor::params(steplock_id.clone(), Box::new(Server)), "Main").display();
-        broker.spawn(steplock_id.clone(), Steplock::new(broker.clone(), ids.values().cloned().collect(), welcomer_id.clone(), aggregator_id.clone()).with_timeout(5000).params(), "Steplock").display();
+        broker.spawn(steplock_id.clone(), Steplock::new(broker.clone(), ids.values().cloned().collect(), welcomer_id.clone(), aggregator_id.clone()).with_timeout(5000).with_initial_timeout(500).params(), "Steplock").display();
         broker.spawn(aggregator_id.clone(), Aggregator::params(manager_id.clone(), steplock_id.clone()), "Aggregator").display();
         broker.spawn(
             manager_id.clone(),

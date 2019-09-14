@@ -12,7 +12,7 @@ use messaging::reactor::{CoreParams};
 
 use self::runtime::{Broker, BrokerHandle, Runtime};
 
-use net::server::ServerHandler;
+use net::server::{ServerHandler, ClientHandler};
 
 pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
     where F: Send + 'static + FnOnce(ReactorId) -> CoreParams<S, Runtime>,
@@ -36,13 +36,22 @@ pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
     }));
 }
 
+pub fn connect_to_server(broker: BrokerHandle, greeter_id: ReactorId, addr: &SocketAddr) -> impl Future<Item=(), Error=()> {
+    tokio::net::TcpStream::connect(addr).map(|stream| {
+        let handler = ClientHandler::new(
+            stream,
+            broker,
+            greeter_id,
+        );
+        tokio::spawn(handler);
+    }).map_err(|e| eprintln!("{:?}", e))
+}
+
 pub struct TcpServer {
     listener: TcpListener,
     broker: BrokerHandle,
-    runtime_id: ReactorId,
     greeter_id: ReactorId,
 }
-
 
 impl TcpServer {
     pub fn new(broker: BrokerHandle, greeter_id: ReactorId, addr: &SocketAddr)
@@ -52,7 +61,6 @@ impl TcpServer {
 
         return TcpServer {
             listener,
-            runtime_id: broker.get_runtime_id(),
             broker,
             greeter_id,
         };

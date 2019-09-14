@@ -102,7 +102,7 @@ impl<S> LinkHandler<S>
     fn handle_disconnected(&mut self, _w: &mut Writer, _:disconnected::Reader)
         -> Result<(), errors::Error>
     {
-        println!("DISCONNEcTING");
+        println!("DISCONNECTING");
         Ok(())
     }
 }
