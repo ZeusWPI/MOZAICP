@@ -3,7 +3,6 @@ extern crate tokio;
 extern crate futures;
 extern crate mozaic;
 extern crate rand;
-extern crate capnp;
 
 use std::env;
 use std::net::SocketAddr;

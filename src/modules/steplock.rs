@@ -17,6 +17,7 @@ use tokio::sync::mpsc;
 pub struct Steplock {
     broker: BrokerHandle,
     timeout: Option<u64>,
+    initial_timeout: Option<u64>,
     msgs: HashMap<PlayerId, Vec<u8>>,
     players: Vec<PlayerId>,
     host_id: ReactorId,
@@ -29,6 +30,7 @@ impl Steplock {
         Self {
             broker,
             timeout: None,
+            initial_timeout: None,
             msgs: HashMap::new(),
             timer: None,
             players,
@@ -39,6 +41,11 @@ impl Steplock {
 
     pub fn with_timeout(mut self, timeout: u64) -> Self {
         self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_initial_timeout(mut self, initial_timeout: u64) -> Self {
+        self.initial_timeout = Some(initial_timeout);
         self
     }
 
@@ -64,18 +71,20 @@ impl Steplock {
         handle.open_link(ClientsLink::params(self.client_id.clone()))?;
         handle.open_link(HostLink::params(self.host_id.clone()))?;
 
-        if let Some(timeout) = self.timeout {
-            // Open timeout shit
-            self.timer = Some(
-                Timer::new(self.broker.clone(), timeout, handle.id().clone())
-            );
+        // Open timeout shit
+        self.timer = Some(
+            Timer::new(self.broker.clone(), handle.id().clone())
+        );
+
+        if let Some(timeout) = self.initial_timeout {
+            self.set_timout(timeout);
         }
 
         Ok(())
     }
 
-    pub fn set_timout(&mut self) {
-        self.timer.as_mut().map(|tx| tx.try_send(TimerAction::Reset).unwrap());
+    pub fn set_timout(&mut self, timeout: u64) {
+        self.timer.as_mut().map(|tx| tx.try_send(TimerAction::Reset(timeout)).unwrap());
     }
 
     pub fn stop_timeout(&mut self) {
@@ -88,7 +97,9 @@ impl Steplock {
         _: set_timeout::Reader,
     ) -> Result<()>
     {
-        self.set_timout();
+        if let Some(timeout) = self.timeout {
+            self.set_timout(timeout);
+        }
 
         Ok(())
     }
@@ -194,17 +205,16 @@ struct Timer {
     inner: Option<Delay>,
     rx: mpsc::Receiver<TimerAction>,
     broker: BrokerHandle,
-    timeout: u64,
     id: ReactorId,
 }
 
 impl Timer {
-    fn new(broker: BrokerHandle, timeout: u64, id: ReactorId) -> mpsc::Sender<TimerAction> {
+    fn new(broker: BrokerHandle, id: ReactorId) -> mpsc::Sender<TimerAction> {
         let inner = None;
         let (tx, rx) = mpsc::channel(20);
 
         let me = Self {
-            inner, rx, broker, timeout, id
+            inner, rx, broker, id
         };
 
         tokio::spawn(me);
@@ -222,15 +232,13 @@ impl Future for Timer {
             match result {
                 None => return Ok(Async::Ready(())),
                 Some(action) => match action {
-                    TimerAction::Reset => {
+                    TimerAction::Reset(timeout) => {
                         self.inner = Some(
-                            Delay::new(Instant::now() + Duration::from_millis(self.timeout))
+                            Delay::new(Instant::now() + Duration::from_millis(timeout))
                         );
-                        println!("RESETTING");
                     },
                     TimerAction::Halt => {
                         self.inner = None;
-                        println!("Halting");
                     }
                 }
             }
@@ -244,8 +252,6 @@ impl Future for Timer {
                 timeout::Owned,
                 |_| { }
             ).display();
-
-            println!("TIMEOUT");
         }
 
         Ok(Async::NotReady)
@@ -254,6 +260,6 @@ impl Future for Timer {
 
 #[derive(Debug, Clone)]
 enum TimerAction {
-    Reset,
+    Reset(u64),
     Halt,
 }
