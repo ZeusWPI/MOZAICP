@@ -6,7 +6,7 @@ use errors::{Result};
 use core_capnp::{initialize};
 
 use core_capnp::{actors_joined};
-use client_capnp::{from_client, to_client, host_message};
+use client_capnp::{from_client, to_client, host_message, client_kicked};
 
 pub struct Aggregator {
     connection_manager: ReactorId,
@@ -63,6 +63,7 @@ impl HostLink {
 
         params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
         params.external_handler(to_client::Owned, CtxHandler::new(to_client::e_to_i));
+        params.external_handler(client_kicked::Owned, CtxHandler::new(client_kicked::e_to_i));
 
         params.internal_handler(from_client::Owned, CtxHandler::new(from_client::i_to_e));
 
@@ -91,6 +92,7 @@ impl ClientLink {
         let mut params = LinkParams::new(remote_id, ClientLink);
         params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
         params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
+        params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
 
         params.external_handler(from_client::Owned, CtxHandler::new(from_client::e_to_i));
 

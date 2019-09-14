@@ -4,7 +4,7 @@ use messaging::reactor::*;
 use messaging::types::*;
 use errors::{Result};
 use core_capnp::{initialize, set_timeout};
-use client_capnp::{from_client, to_client, host_message, client_step, client_turn};
+use client_capnp::{from_client, to_client, host_message, client_step, client_turn, client_kicked};
 
 use modules::util::{PlayerId};
 
@@ -20,6 +20,7 @@ pub type PlayerTurn<'a> = (PlayerId, Turn<'a>);
 pub enum Update {
     Global(Vec<u8>),
     Player(PlayerId, Vec<u8>),
+    Kick(PlayerId),
 }
 
 pub trait GameController {
@@ -113,6 +114,13 @@ impl GameReactor {
                     });
                     handle.send_internal(to_client)?;
                 },
+                Update::Kick(id) => {
+                    let mut to_client = MsgBuffer::<client_kicked::Owned>::new();
+                    to_client.build(|b| {
+                        b.set_id(**id);
+                    });
+                    handle.send_internal(to_client)?;
+                }
             }
         }
         handle.send_internal(MsgBuffer::<set_timeout::Owned>::new())?;
@@ -126,6 +134,7 @@ impl ClientLink {
         let mut params = LinkParams::new(remote_id, ClientLink);
         params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
         params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
+        params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
         params.internal_handler(set_timeout::Owned, CtxHandler::new(set_timeout::i_to_e));
 
         params.external_handler(from_client::Owned, CtxHandler::new(from_client::e_to_i));

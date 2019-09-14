@@ -6,7 +6,7 @@ use core_capnp::{initialize};
 use server::runtime::{BrokerHandle};
 
 use core_capnp::{timeout, set_timeout};
-use client_capnp::{from_client, to_client, host_message, client_step};
+use client_capnp::{from_client, to_client, host_message, client_step, client_kicked};
 use super::util::{PlayerId};
 
 use std::collections::HashMap;
@@ -56,6 +56,7 @@ impl Steplock {
         params.handler(timeout::Owned, CtxHandler::new(Self::handle_timeout));
         params.handler(from_client::Owned, CtxHandler::new(Self::handle_from_client));
         params.handler(set_timeout::Owned, CtxHandler::new(Self::handle_set_timeout));
+        params.handler(client_kicked::Owned, CtxHandler::new(Self::handle_client_kicked));
 
         return params;
     }
@@ -100,6 +101,23 @@ impl Steplock {
         if let Some(timeout) = self.timeout {
             self.set_timout(timeout);
         }
+
+        Ok(())
+    }
+
+    fn handle_client_kicked<C: Ctx>(
+        &mut self,
+        _handle: &mut ReactorHandle<C>,
+        c: client_kicked::Reader,
+    ) -> Result<()>
+    {
+        let id = c.get_id();
+
+        if let Some(pos) = self.players.iter().position(|x| **x == id) {
+            self.players.remove(pos);
+        }
+        self.msgs.remove(&id.into());
+        // Else player is already kicked or something
 
         Ok(())
     }
@@ -178,6 +196,8 @@ impl ClientsLink {
         params.external_handler(from_client::Owned, CtxHandler::new(from_client::e_to_i));
         params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
         params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
+        params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
+
         params
     }
 }
@@ -190,6 +210,8 @@ impl HostLink {
         params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
         params.external_handler(to_client::Owned, CtxHandler::new(to_client::e_to_i));
         params.external_handler(set_timeout::Owned, CtxHandler::new(set_timeout::e_to_i));
+        params.external_handler(client_kicked::Owned, CtxHandler::new(client_kicked::e_to_i));
+
         params
     }
 }

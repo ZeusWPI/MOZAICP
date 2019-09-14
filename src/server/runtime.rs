@@ -14,7 +14,7 @@ use rand::Rng;
 use messaging::types::*;
 use messaging::reactor::*;
 use modules;
-use log_capnp::{open_log_link};
+// use log_capnp::{open_log_link};
 use errors::ErrorKind::{NoSuchReactorError, MozaicError};
 use errors::{self, Consumable, ResultExt, Result};
 
@@ -124,7 +124,7 @@ impl BrokerHandle {
         broker.dispatch_message(msg)
     }
 
-    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str) -> Result<()>
+    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, _name: &str) -> Result<()>
         where S: 'static + Send
     {
         let mut driver = {
@@ -148,11 +148,11 @@ impl BrokerHandle {
             }
         };
 
-        self.send_message_self(&modules::logger_id(), open_log_link::Owned, |b| {
-            let mut msg: open_log_link::Builder = b.init_as();
-            msg.set_id(id.bytes());
-            msg.set_name(name);
-        })?;
+        // self.send_message_self(&modules::logger_id(), open_log_link::Owned, |b| {
+        //     let mut msg: open_log_link::Builder = b.init_as();
+        //     msg.set_id(id.bytes());
+        //     msg.set_name(name);
+        // })?;
 
         {
             let mut ctx_handle = DriverHandle {
@@ -161,7 +161,7 @@ impl BrokerHandle {
             };
 
             let mut reactor_handle = driver.reactor.handle(&mut ctx_handle);
-            reactor_handle.open_link(modules::LogLink::params(modules::logger_id()))?;
+            // reactor_handle.open_link(modules::LogLink::params(modules::logger_id()))?;
 
             let initialize = MsgBuffer::<initialize::Owned>::new();
             reactor_handle.send_internal(initialize)?;

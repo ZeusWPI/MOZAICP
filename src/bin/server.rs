@@ -31,6 +31,10 @@ impl game::GameController for Server {
             let msg = format!("{}: {}", **id, postfix);
 
             out.push(game::Update::Global(msg.as_bytes().to_vec()));
+
+            if postfix == "stop" {
+                out.push(game::Update::Kick(*id));
+            }
         }
 
         return out;

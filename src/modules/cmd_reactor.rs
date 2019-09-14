@@ -104,7 +104,6 @@ impl ForeignLink {
             CtxHandler::new(cmd_return::e_to_i)
         );
 
-
         return params;
     }
 }

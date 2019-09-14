@@ -6,7 +6,7 @@ use errors::{Result, Consumable};
 use core_capnp::{initialize};
 
 use core_capnp::{actor_joined};
-use client_capnp::{from_client, client_message, to_client, host_message, client_disconnected, inner_to_client};
+use client_capnp::{from_client, client_message, to_client, host_message, client_disconnected, inner_to_client, client_kicked};
 
 
 use std::collections::{VecDeque};
@@ -124,39 +124,18 @@ impl ConnectionManagerLink {
 
         let mut params = LinkParams::new(foreign_id, me);
 
-        params.external_handler(client_disconnected::Owned, CtxHandler::new(Self::e_handle_disconnect));
-        params.external_handler(actor_joined::Owned, CtxHandler::new(Self::e_handle_connect));
-
+        params.external_handler(client_disconnected::Owned, CtxHandler::new(client_disconnected::e_to_i));
+        params.external_handler(actor_joined::Owned, CtxHandler::new(actor_joined::e_to_i));
+        params.internal_handler(client_kicked::Owned, CtxHandler::new(Self::handle_kicked));
         return params;
     }
 
-    /// Pass through client send from host
-    fn e_handle_disconnect<C: Ctx>(
+    fn handle_kicked<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        _: client_disconnected::Reader,
+        _: client_kicked::Reader,
     ) -> Result<()> {
-
-        let joined = MsgBuffer::<client_disconnected::Owned>::new();
-        handle.send_internal(joined)?;
-
-        Ok(())
-    }
-
-    /// Pass through client send from host
-    fn e_handle_connect<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        r: actor_joined::Reader,
-    ) -> Result<()> {
-
-        let id = r.get_id()?;
-
-        // Only pass message throug if it is ment for my client
-        let mut joined = MsgBuffer::<actor_joined::Owned>::new();
-        joined.build(|b| b.set_id(id));
-        handle.send_internal(joined)?;
-
+        handle.close_link()?;
         Ok(())
     }
 }
@@ -176,6 +155,7 @@ impl HostLink {
 
         params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
         params.external_handler(to_client::Owned, CtxHandler::new(Self::e_handle_to_client));
+        params.external_handler(client_kicked::Owned, CtxHandler::new(Self::e_handle_client_kicked));
 
         params.internal_handler(client_message::Owned, CtxHandler::new(Self::i_handle_message));
 
@@ -198,6 +178,28 @@ impl HostLink {
             let mut joined = MsgBuffer::<host_message::Owned>::new();
             joined.build(|b| b.set_data(msg));
             handle.send_internal(joined)?;
+        }
+
+        Ok(())
+    }
+
+    /// Pass through client send from host
+    fn e_handle_client_kicked<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: client_kicked::Reader,
+    ) -> Result<()> {
+        let id = r.get_id();
+        let self_id: u64 = self.client_id.into();
+
+        // Only pass message throug if it is ment for my client
+        if id == self_id {
+
+            let mut joined = MsgBuffer::<client_kicked::Owned>::new();
+            joined.build(|b| b.set_id(id));
+            handle.send_internal(joined)?;
+
+            handle.close_link()?;
         }
 
         Ok(())
@@ -238,6 +240,7 @@ impl ClientLink {
 
         params.internal_handler(client_disconnected::Owned, CtxHandler::new(Self::i_handle_disconnect));
         params.internal_handler(inner_to_client::Owned, CtxHandler::new(Self::i_handle_msg));
+        params.internal_handler(client_kicked::Owned, CtxHandler::new(Self::handle_kicked));
 
         return params;
     }
@@ -267,6 +270,18 @@ impl ClientLink {
         });
         handle.send_message(inner_msg)?;
 
+        Ok(())
+    }
+
+    fn handle_kicked<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        _: client_kicked::Reader,
+    ) -> Result<()> {
+        let inner_msg = MsgBuffer::<client_kicked::Owned>::new();
+
+        handle.send_message(inner_msg).display();
+        handle.close_link().display();
         Ok(())
     }
 }

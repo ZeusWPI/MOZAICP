@@ -59,3 +59,7 @@ struct HostConnected {
     clientKey @0 :UInt64;
     id @1 :Data;
 }
+
+struct ClientKicked {
+    id @0 :UInt64;
+}

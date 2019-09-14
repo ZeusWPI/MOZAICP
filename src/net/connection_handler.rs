@@ -60,7 +60,7 @@ impl<S> Future for ConnectionHandler<S> {
             return Ok(Async::Ready(()));
         }
 
-        if self.handler.poll_stream().expect("poll_stream failed").is_ready() {
+        if self.handler.poll_stream().unwrap_or(Async::Ready(())).is_ready() {
 
             let mut msg = Builder::new_default();
 

@@ -17,7 +17,7 @@ use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
 use mozaic::errors::*;
-use mozaic::client_capnp::{client_message, host_message};
+use mozaic::client_capnp::{client_message, host_message, client_kicked};
 
 use std::thread;
 use std::env;
@@ -240,6 +240,11 @@ impl HostLink {
             CtxHandler::new(Self::send_chat_message),
         );
 
+        params.external_handler(
+            client_kicked::Owned,
+            CtxHandler::new(Self::client_kicked),
+        );
+
         return params;
     }
 
@@ -260,6 +265,29 @@ impl HostLink {
         });
 
         handle.send_message(chat_message)?;
+
+        return Ok(());
+    }
+
+    // pick up a 'send_message' event from the reactor, and put it to effect
+    // by constructing the chat message and sending it to the chat server.
+    fn client_kicked<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        _: client_kicked::Reader,
+    ) -> Result<()>
+    {
+        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
+        chat_message.build(|b| {
+            b.set_message("You got kicked");
+            b.set_user("");
+        });
+        handle.send_internal(chat_message)?;
+
+        let chat_message = MsgBuffer::<client_kicked::Owned>::new();
+        handle.send_internal(chat_message)?;
+
+        handle.close_link()?;
 
         return Ok(());
     }
