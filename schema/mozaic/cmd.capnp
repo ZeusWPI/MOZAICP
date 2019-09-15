@@ -9,9 +9,9 @@ struct CmdReturn {
 }
 
 struct BotInput {
-    input @0: Text;
+    input @0: Data;
 }
 
 struct BotReturn {
-    message @0: Text;
+    message @0: Data;
 }

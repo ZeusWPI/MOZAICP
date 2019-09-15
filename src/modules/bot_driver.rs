@@ -1,23 +1,22 @@
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{self, Consumable};
+use errors::*;
 use core_capnp::{initialize};
 
-use mozaic_cmd_capnp::{bot_input, bot_return};
+use mozaic_cmd_capnp::{bot_return, bot_input};
 
 use std::process::{Command, Stdio};
-use std::io::{Write};
 use std::io::BufReader;
 
 use server::runtime::BrokerHandle;
 
 use futures::{Future, Stream};
 
-use tokio_process::{ChildStdin, ChildStdout, CommandExt};
+use tokio_process::{ChildStdout, CommandExt};
 
 enum Bot {
     ToSpawn(Vec<String>),
-    Spawned(ChildStdin),
+    Spawned(mpsc::Sender<Vec<u8>>),
 }
 
 /// Reactor to handle cmd input
@@ -33,13 +32,12 @@ impl BotReactor {
         Self {
             broker, foreign_id, bot: Bot::ToSpawn(bot_cmd)
         }
-
     }
 
     pub fn params<C: Ctx>(self) -> CoreParams<Self, C> {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
-        params.handler(bot_return::Owned, CtxHandler::new(Self::handle_return));
+        params.handler(bot_input::Owned, CtxHandler::new(Self::handle_return));
 
         return params;
     }
@@ -48,7 +46,7 @@ impl BotReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), errors::Error>
+    ) -> Result<()>
     {
         let args = match &self.bot {
             Bot::ToSpawn(v) => v,
@@ -77,7 +75,7 @@ impl BotReactor {
         tokio::spawn(child_future);
 
 
-        self.bot = Bot::Spawned(stdin);
+        self.bot = Bot::Spawned(BotSink::new(stdin));
 
         handle.open_link(BotLink::params(handle.id().clone()))?;
         handle.open_link(ForeignLink::params(self.foreign_id.clone()))?;
@@ -89,13 +87,19 @@ impl BotReactor {
     fn handle_return<C: Ctx>(
         &mut self,
         _: &mut ReactorHandle<C>,
-        r: bot_return::Reader,
-    ) -> Result<(), errors::Error> {
+        r: bot_input::Reader,
+    ) -> Result<()> {
 
         if let Bot::Spawned(ref mut stdin) = self.bot {
-            let msg = r.get_message()?;
-            stdin.write_all(msg.as_bytes())?;
-            stdin.flush()?;
+            let msg = r.get_input()?;
+            let mut msg = msg.to_vec();
+            msg.push(b'\n');
+
+            stdin.try_send(msg)
+                .expect("Damm it");
+
+            println!("Done");
+            // stdin.flush()?;
         }
 
         Ok(())
@@ -110,13 +114,13 @@ impl ForeignLink {
     pub fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, Self);
         params.internal_handler(
-            bot_input::Owned,
-            CtxHandler::new(bot_input::i_to_e),
+            bot_return::Owned,
+            CtxHandler::new(bot_return::i_to_e),
         );
 
         params.external_handler(
-            bot_return::Owned,
-            CtxHandler::new(bot_return::e_to_i)
+            bot_input::Owned,
+            CtxHandler::new(bot_input::e_to_i)
         );
 
         return params;
@@ -128,7 +132,7 @@ struct BotLink;
 impl BotLink {
     pub fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, Self);
-        params.external_handler(bot_input::Owned, CtxHandler::new(bot_input::e_to_i), );
+        params.external_handler(bot_return::Owned, CtxHandler::new(bot_return::e_to_i), );
         return params;
     }
 }
@@ -139,16 +143,99 @@ fn setup_async_bot_stdout(mut broker: BrokerHandle, id: ReactorId, stdout: Child
             // Convert any io::Error into a failure::Error for better flexibility
             .map_err(|e| eprintln!("{:?}", e))
             .for_each(move |input| {
-                    broker.send_message(
+                println!("Got msg {}", input);
+                broker.send_message(
                     &id,
                     &id,
-                    bot_input::Owned,
+                    bot_return::Owned,
                     move |b| {
-                        let mut msg: bot_input::Builder = b.init_as();
-                        msg.set_input(&input);
+                        let mut msg: bot_return::Builder = b.init_as();
+                        msg.set_message(&input.as_bytes());
                     }
                 ).display();
                 Ok(())
             })
     );
+}
+
+use tokio::sync::mpsc;
+use std::io::Cursor;
+use std::collections::VecDeque;
+
+use tokio::io::AsyncWrite;
+use tokio::prelude::*;
+
+struct BotSink<A> {
+    rx: mpsc::Receiver<Vec<u8>>,
+    current: Option<Cursor<Vec<u8>>>,
+    write: A,
+    queue: VecDeque<Vec<u8>>,
+}
+
+impl<A> BotSink<A>
+    where A: AsyncWrite + Send + 'static {
+
+    fn new(write: A) -> mpsc::Sender<Vec<u8>> {
+        let (tx, rx) = mpsc::channel(10);
+
+        let me = Self {
+            rx,
+            current: None,
+            write,
+            queue: VecDeque::new(),
+        };
+
+        tokio::spawn(me);
+
+        tx
+    }
+}
+
+use bytes::Buf;
+impl<A> Future for BotSink<A>
+    where A: AsyncWrite {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        while let Ok(Async::Ready(result)) = self.rx.poll() {
+            match result {
+                None => return Ok(Async::Ready(())),
+                Some(vec) => {
+                    println!("Got message putting it on queue");
+                    self.queue.push_back(vec);
+                },
+            }
+        }
+
+        loop {
+            match self.write.poll_flush() {
+                Err(_) => return Ok(Async::Ready(())),
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                _ => {}
+            }
+
+            if self.current.is_none() {
+                self.current = self.queue.pop_front().map(|v| Cursor::new(v));
+            }
+
+            let current = match &mut self.current {
+                None => return Ok(Async::NotReady),
+                Some(ref mut c) => c,
+            };
+
+            println!("Lets try send cursor");
+
+            match self.write.write_buf(current) {
+                Err(_) => return Ok(Async::Ready(())),
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Ok(Async::Ready(count)) => {
+                    println!("Send {} bytes", count);
+                    if !current.has_remaining() {
+                        self.current = None;
+                    }
+                }
+            }
+        }
+    }
 }

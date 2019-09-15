@@ -4381,7 +4381,7 @@ pub mod bot_input {
       self.reader.total_size()
     }
     #[inline]
-    pub fn get_input(self) -> ::capnp::Result<::capnp::text::Reader<'a>> {
+    pub fn get_input(self) -> ::capnp::Result<::capnp::data::Reader<'a>> {
       ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::std::option::Option::None)
     }
     pub fn has_input(&self) -> bool {
@@ -4438,16 +4438,16 @@ pub mod bot_input {
       self.builder.into_reader().total_size()
     }
     #[inline]
-    pub fn get_input(self) -> ::capnp::Result<::capnp::text::Builder<'a>> {
+    pub fn get_input(self) -> ::capnp::Result<::capnp::data::Builder<'a>> {
       ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::std::option::Option::None)
     }
     #[inline]
-    pub fn set_input(&mut self, value: ::capnp::text::Reader)  {
-      self.builder.get_pointer_field(0).set_text(value);
+    pub fn set_input(&mut self, value: ::capnp::data::Reader)  {
+      self.builder.get_pointer_field(0).set_data(value);
     }
     #[inline]
-    pub fn init_input(self, size: u32) -> ::capnp::text::Builder<'a> {
-      self.builder.get_pointer_field(0).init_text(size)
+    pub fn init_input(self, size: u32) -> ::capnp::data::Builder<'a> {
+      self.builder.get_pointer_field(0).init_data(size)
     }
     pub fn has_input(&self) -> bool {
       !self.builder.get_pointer_field(0).is_null()
@@ -4516,7 +4516,7 @@ pub mod bot_return {
       self.reader.total_size()
     }
     #[inline]
-    pub fn get_message(self) -> ::capnp::Result<::capnp::text::Reader<'a>> {
+    pub fn get_message(self) -> ::capnp::Result<::capnp::data::Reader<'a>> {
       ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::std::option::Option::None)
     }
     pub fn has_message(&self) -> bool {
@@ -4573,16 +4573,16 @@ pub mod bot_return {
       self.builder.into_reader().total_size()
     }
     #[inline]
-    pub fn get_message(self) -> ::capnp::Result<::capnp::text::Builder<'a>> {
+    pub fn get_message(self) -> ::capnp::Result<::capnp::data::Builder<'a>> {
       ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::std::option::Option::None)
     }
     #[inline]
-    pub fn set_message(&mut self, value: ::capnp::text::Reader)  {
-      self.builder.get_pointer_field(0).set_text(value);
+    pub fn set_message(&mut self, value: ::capnp::data::Reader)  {
+      self.builder.get_pointer_field(0).set_data(value);
     }
     #[inline]
-    pub fn init_message(self, size: u32) -> ::capnp::text::Builder<'a> {
-      self.builder.get_pointer_field(0).init_text(size)
+    pub fn init_message(self, size: u32) -> ::capnp::data::Builder<'a> {
+      self.builder.get_pointer_field(0).init_data(size)
     }
     pub fn has_message(&self) -> bool {
       !self.builder.get_pointer_field(0).is_null()

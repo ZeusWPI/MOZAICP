@@ -1,36 +1,24 @@
 extern crate mozaic;
 extern crate hex;
 extern crate tokio;
-#[macro_use]
 extern crate futures;
 extern crate rand;
 extern crate cursive;
 extern crate capnp;
 
-use tokio::net::TcpStream;
-use futures::sync::mpsc;
-use futures::Future;
-
 use mozaic::core_capnp::{initialize, terminate_stream, identify, actor_joined};
-use mozaic::chat_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
-use mozaic::client::{LinkHandler, RuntimeState};
+use mozaic::modules::BotReactor;
 use mozaic::errors::*;
 use mozaic::client_capnp::{client_message, host_message, client_kicked};
-use mozaic::server::runtime::{Broker};
+use mozaic::mozaic_cmd_capnp::{bot_input, bot_return};
+use mozaic::server::runtime::{Broker, BrokerHandle};
 use mozaic::server;
 
 use rand::Rng;
 
-use std::thread;
 use std::env;
-use std::sync::{Arc, Mutex};
-use std::str;
-
-// pub mod chat {
-//     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
-// }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -44,8 +32,9 @@ fn main() {
         let reactor = ClientReactor {
             connected: false,
             id,
+            broker: broker.clone(),
         };
-        broker.spawn(self_id.clone(), reactor.params(), "main");
+        broker.spawn(self_id.clone(), reactor.params(), "main").display();
 
         tokio::spawn(server::connect_to_server(broker, self_id, &addr));
 
@@ -60,6 +49,7 @@ fn main() {
 struct ClientReactor {
     connected: bool,
     id: u64,
+    broker: BrokerHandle,
 }
 
 impl ClientReactor {
@@ -81,6 +71,10 @@ impl ClientReactor {
         let runtime_link = RuntimeLink::params(handle.id().clone());
         handle.open_link(runtime_link)?;
 
+        let bot = BotReactor::new(self.broker.clone(), handle.id().clone(), vec!["bash".to_string(), "reader.sh".to_string()]);
+        let bot_id = handle.spawn(bot.params(), "Bot Driver")?;
+
+        handle.open_link(BotLink::params(bot_id))?;
 
         return Ok(());
     }
@@ -91,9 +85,12 @@ impl ClientReactor {
         r: actor_joined::Reader,
     ) -> Result<()>
     {
+
         let id = r.get_id()?;
 
         if !self.connected {
+            println!("Opening link to server {:?}", id);
+
             handle.open_link(ServerLink::params(id.into()))?;
             self.connected = true;
 
@@ -104,9 +101,9 @@ impl ClientReactor {
             handle.send_internal(identify).display();
 
         } else {
+            println!("Opening link to host {:?}", id);
             handle.open_link(HostLink::params(ReactorId::from(id)))?;
         }
-
 
         Ok(())
     }
@@ -179,7 +176,6 @@ impl ServerLink {
 }
 
 struct HostLink;
-
 impl HostLink {
     fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(remote_id, HostLink);
@@ -190,7 +186,7 @@ impl HostLink {
         );
 
         params.internal_handler(
-            chat_capnp::send_message::Owned,
+            bot_return::Owned,
             CtxHandler::new(Self::send_chat_message),
         );
 
@@ -207,15 +203,16 @@ impl HostLink {
     fn send_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        send_message: chat_capnp::send_message::Reader,
+        send_message: bot_return::Reader,
     ) -> Result<()>
     {
+        println!("Handling bot return");
         let message = send_message.get_message()?;
         // let user = send_message.get_user()?;
 
         let mut chat_message = MsgBuffer::<client_message::Owned>::new();
         chat_message.build(|b| {
-            b.set_data(message.as_bytes());
+            b.set_data(message);
         });
 
         handle.send_message(chat_message)?;
@@ -255,9 +252,25 @@ impl HostLink {
     {
         let message = chat_message.get_data()?;
 
-        println!("{}", str::from_utf8(message).unwrap());
+        let mut chat_message = MsgBuffer::<bot_input::Owned>::new();
+        chat_message.build(|b| {
+            b.set_input(message);
+        });
+        handle.send_internal(chat_message)?;
 
         return Ok(());
+    }
+}
+
+struct BotLink;
+impl BotLink {
+    fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, Self);
+
+        params.external_handler(bot_return::Owned, CtxHandler::new(bot_return::e_to_i));
+        params.internal_handler(bot_input::Owned, CtxHandler::new(bot_input::i_to_e));
+
+        return params;
     }
 }
 
