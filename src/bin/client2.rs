@@ -30,7 +30,7 @@ fn main() {
     tokio::run(futures::lazy(move || {
         let mut broker = Broker::new().unwrap();
         let reactor = ClientReactor {
-            connected: false,
+            server: None,
             id,
             broker: broker.clone(),
         };
@@ -47,7 +47,7 @@ fn main() {
 /// ? runtime_id is your own runtime, to handle visualisation etc
 /// ? user are you  ...
 struct ClientReactor {
-    connected: bool,
+    server: Option<ReactorId>,
     id: u64,
     broker: BrokerHandle,
 }
@@ -88,11 +88,14 @@ impl ClientReactor {
 
         let id = r.get_id()?;
 
-        if !self.connected {
-            println!("Opening link to server {:?}", id);
+        if let Some(server) = &self.server {
+            handle.open_link(HostLink::params(ReactorId::from(id)))?;
+            self.broker.register_as(id.into(), server.clone());
+
+        } else {
 
             handle.open_link(ServerLink::params(id.into()))?;
-            self.connected = true;
+            self.server = Some(id.into());
 
             let mut identify = MsgBuffer::<identify::Owned>::new();
             identify.build(|b| {
@@ -100,9 +103,6 @@ impl ClientReactor {
             });
             handle.send_internal(identify).display();
 
-        } else {
-            println!("Opening link to host {:?}", id);
-            handle.open_link(HostLink::params(ReactorId::from(id)))?;
         }
 
         Ok(())
@@ -206,9 +206,7 @@ impl HostLink {
         send_message: bot_return::Reader,
     ) -> Result<()>
     {
-        println!("Handling bot return");
         let message = send_message.get_message()?;
-        // let user = send_message.get_user()?;
 
         let mut chat_message = MsgBuffer::<client_message::Owned>::new();
         chat_message.build(|b| {

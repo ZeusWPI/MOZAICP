@@ -277,8 +277,6 @@ impl ClientLink {
             if key == self_key {
                 let id = r.get_id()?;
 
-                println!("Sending actor joined event to the client");
-
                 let mut joined = MsgBuffer::<actor_joined::Owned>::new();
 
                 joined.build(|b| {

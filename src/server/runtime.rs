@@ -77,13 +77,17 @@ impl BrokerHandle {
 
     pub fn register(&mut self, id: ReactorId, tx: mpsc::UnboundedSender<Message>) {
         let mut broker = self.broker.lock().unwrap();
-        println!("registering {:?}", id);
+        broker.actors.insert(id, ActorData { tx });
+    }
+
+    pub fn register_as(&mut self, id: ReactorId, same_as: ReactorId) {
+        let mut broker = self.broker.lock().unwrap();
+        let tx = broker.actors.get(&same_as).unwrap().tx.clone();
         broker.actors.insert(id, ActorData { tx });
     }
 
     pub fn unregister(&mut self, id: &ReactorId) {
         let mut broker = self.broker.lock().unwrap();
-        println!("unregistering {:?}", id);
         broker.actors.remove(&id);
     }
 

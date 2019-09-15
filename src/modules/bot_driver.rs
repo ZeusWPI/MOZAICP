@@ -97,9 +97,6 @@ impl BotReactor {
 
             stdin.try_send(msg)
                 .expect("Damm it");
-
-            println!("Done");
-            // stdin.flush()?;
         }
 
         Ok(())
@@ -143,7 +140,6 @@ fn setup_async_bot_stdout(mut broker: BrokerHandle, id: ReactorId, stdout: Child
             // Convert any io::Error into a failure::Error for better flexibility
             .map_err(|e| eprintln!("{:?}", e))
             .for_each(move |input| {
-                println!("Got msg {}", input);
                 broker.send_message(
                     &id,
                     &id,
@@ -202,7 +198,6 @@ impl<A> Future for BotSink<A>
             match result {
                 None => return Ok(Async::Ready(())),
                 Some(vec) => {
-                    println!("Got message putting it on queue");
                     self.queue.push_back(vec);
                 },
             }
@@ -224,13 +219,10 @@ impl<A> Future for BotSink<A>
                 Some(ref mut c) => c,
             };
 
-            println!("Lets try send cursor");
-
             match self.write.write_buf(current) {
                 Err(_) => return Ok(Async::Ready(())),
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Ok(Async::Ready(count)) => {
-                    println!("Send {} bytes", count);
+                Ok(Async::Ready(_)) => {
                     if !current.has_remaining() {
                         self.current = None;
                     }

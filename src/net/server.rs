@@ -118,7 +118,6 @@ impl ClientHandler {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
 
-        println!("Handling connect with {:?}", connecting_id);
         self.broker.register(connecting_id.clone(), self.tx.clone());
 
         self.broker.send_message(&self.welcomer_id, &self.welcomer_id, actor_joined::Owned, |b| {
