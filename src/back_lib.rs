@@ -3,6 +3,7 @@
 extern crate bytes;
 extern crate hex;
 
+extern crate tokio_process;
 extern crate tokio_core;
 extern crate tokio;
 #[macro_use]

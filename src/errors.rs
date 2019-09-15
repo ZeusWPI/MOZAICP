@@ -7,7 +7,7 @@ error_chain!{
     foreign_links {
         Capnp(::capnp::Error);
         NotInSchema(::capnp::NotInSchema);
-
+        IO(::std::io::Error);
     }
 
     errors {

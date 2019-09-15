@@ -5,10 +5,14 @@ use errors::Consumable;
 
 use log_capnp::{log};
 
+mod bot_driver;
+pub use self::bot_driver::BotReactor;
+
 mod cmd_reactor;
+pub use self::cmd_reactor::CmdReactor;
+
 mod connection_manager;
 pub use self::connection_manager::{ConnectionManager};
-pub use self::cmd_reactor::CmdReactor;
 
 mod logging;
 pub use self::logging::{LogReactor, Link as LogLink};

@@ -7,3 +7,11 @@ struct CmdInput {
 struct CmdReturn {
     message @0: Text;
 }
+
+struct BotInput {
+    input @0: Text;
+}
+
+struct BotReturn {
+    message @0: Text;
+}
