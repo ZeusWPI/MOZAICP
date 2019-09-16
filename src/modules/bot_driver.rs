@@ -222,7 +222,8 @@ impl<A> Future for BotSink<A>
             match self.write.write_buf(current) {
                 Err(_) => return Ok(Async::Ready(())),
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Ok(Async::Ready(_)) => {
+                Ok(Async::Ready(c)) => {
+                    eprintln!("Sent {} to bot", c);
                     if !current.has_remaining() {
                         self.current = None;
                     }
