@@ -199,7 +199,6 @@ impl<A> Future for BotSink<A>
             match result {
                 None => return Ok(Async::Ready(())),
                 Some(vec) => {
-                    eprintln!("Adding {} to queue", str::from_utf8(&vec).unwrap());
                     self.queue.push_back(vec);
                 },
             }
@@ -224,8 +223,7 @@ impl<A> Future for BotSink<A>
             match self.write.write_buf(current) {
                 Err(_) => return Ok(Async::Ready(())),
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Ok(Async::Ready(c)) => {
-                    eprintln!("Sent {} to bot", c);
+                Ok(Async::Ready(_)) => {
                     if !current.has_remaining() {
                         self.current = None;
                     }
