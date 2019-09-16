@@ -187,6 +187,7 @@ impl<A> BotSink<A>
     }
 }
 
+use std::str;
 use bytes::Buf;
 impl<A> Future for BotSink<A>
     where A: AsyncWrite {
@@ -198,6 +199,7 @@ impl<A> Future for BotSink<A>
             match result {
                 None => return Ok(Async::Ready(())),
                 Some(vec) => {
+                    eprintln!("Adding {} to queue", str::from_utf8(&vec).unwrap());
                     self.queue.push_back(vec);
                 },
             }
