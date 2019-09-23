@@ -7,7 +7,6 @@ extern crate rand;
 use std::env;
 use std::net::SocketAddr;
 use mozaic::messaging::types::*;
-use mozaic::errors;
 
 use mozaic::modules::{Aggregator, Steplock, game};
 
@@ -43,7 +42,7 @@ impl game::GameController for Server {
 
 use mozaic::server::runtime::{Broker};
 use rand::Rng;
-use errors::Consumable;
+use mozaic::errors::Consumable;
 use mozaic::modules::ConnectionManager;
 use mozaic::modules::util;
 use std::collections::HashMap;

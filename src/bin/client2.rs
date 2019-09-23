@@ -11,8 +11,9 @@ use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::modules::BotReactor;
 use mozaic::errors::*;
-use mozaic::client_capnp::{client_message, host_message, client_kicked};
-use mozaic::mozaic_cmd_capnp::{bot_input, bot_return};
+use mozaic::base_capnp::{client_message, host_message};
+use mozaic::connection_capnp::{client_kicked};
+use mozaic::cmd_capnp::{bot_input, bot_return};
 use mozaic::server::runtime::{Broker, BrokerHandle};
 use mozaic::server;
 

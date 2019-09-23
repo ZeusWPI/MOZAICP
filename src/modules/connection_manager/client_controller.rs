@@ -6,8 +6,8 @@ use errors::{Result, Consumable};
 use core_capnp::{initialize};
 
 use core_capnp::{actor_joined};
-use client_capnp::{from_client, client_message, to_client, host_message, client_disconnected, inner_to_client, client_kicked};
-
+use base_capnp::{from_client, client_message, to_client, host_message, inner_to_client};
+use connection_capnp::{client_disconnected, client_kicked};
 
 use std::collections::{VecDeque};
 

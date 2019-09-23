@@ -76,19 +76,11 @@ pub mod chat_capnp {
     add_gen!(%%/chat_capnp.rs%%);
 }
 
-pub mod my_capnp {
-    add_gen!(%%/my_capnp.rs%%);
-}
-
 pub mod network_capnp {
     add_gen!(%%/network_capnp.rs%%);
 }
 
-pub mod match_control_capnp {
-    add_gen!(%%/match_control_capnp.rs%%);
-}
-
-pub mod mozaic_cmd_capnp {
+pub mod cmd_capnp {
     add_gen!(%%/mozaic/cmd_capnp.rs%%);
 }
 
@@ -96,6 +88,14 @@ pub mod log_capnp {
     add_gen!(%%/mozaic/logging_capnp.rs%%);
 }
 
-pub mod client_capnp {
-    add_gen!(%%/mozaic/client_capnp.rs%%);
+pub mod base_capnp {
+    add_gen!(%%/mozaic/base_capnp.rs%%);
+}
+
+pub mod steplock_capnp {
+    add_gen!(%%/mozaic/steplock_capnp.rs%%);
+}
+
+pub mod connection_capnp {
+    add_gen!(%%/mozaic/connection_capnp.rs%%);
 }

@@ -5,8 +5,9 @@ use errors::{Result, Consumable};
 use core_capnp::{initialize};
 use server::runtime::{BrokerHandle};
 
-use core_capnp::{timeout, set_timeout};
-use client_capnp::{from_client, to_client, host_message, client_step, client_kicked};
+use steplock_capnp::{timeout, set_timeout};
+use base_capnp::{from_client, to_client, host_message, client_step};
+use connection_capnp::{client_kicked};
 use super::util::{PlayerId};
 
 use std::collections::HashMap;

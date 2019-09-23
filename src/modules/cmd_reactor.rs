@@ -3,7 +3,7 @@ use messaging::types::*;
 use errors::{self, Consumable};
 use core_capnp::{initialize};
 
-use mozaic_cmd_capnp::{cmd_input, cmd_return};
+use cmd_capnp::{cmd_input, cmd_return};
 
 use std::io::{self, BufRead, Write, stdout};
 use std::thread;

@@ -29,7 +29,7 @@ pub fn compile_events(manifest_path: &str, proto_path: &str, events_proto: &str)
             format!("#[mozaic_event(type_id=\"{}\")]", event_id)
         );
     }
-    
+
 
     config.compile_protos(
         &[events_proto],

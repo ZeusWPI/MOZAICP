@@ -6,7 +6,8 @@ use errors::{Result};
 use core_capnp::{initialize};
 
 use core_capnp::{actors_joined};
-use client_capnp::{from_client, to_client, host_message, client_kicked};
+use base_capnp::{from_client, to_client, host_message};
+use connection_capnp::{client_kicked};
 
 pub struct Aggregator {
     connection_manager: ReactorId,

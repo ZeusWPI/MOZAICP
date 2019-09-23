@@ -3,7 +3,7 @@ use messaging::types::*;
 use errors::*;
 use core_capnp::{initialize};
 
-use mozaic_cmd_capnp::{bot_return, bot_input};
+use cmd_capnp::{bot_return, bot_input};
 
 use std::process::{Command, Stdio};
 use std::io::BufReader;

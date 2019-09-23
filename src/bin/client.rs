@@ -17,7 +17,8 @@ use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::client::{LinkHandler, RuntimeState};
 use mozaic::errors::*;
-use mozaic::client_capnp::{client_message, host_message, client_kicked};
+use mozaic::base_capnp::{client_message, host_message};
+use mozaic::connection_capnp::{client_kicked};
 
 use std::thread;
 use std::env;
@@ -394,8 +395,8 @@ impl RuntimeLink {
 mod runtime {
     use capnp::any_pointer;
     use capnp::traits::{Owned, HasTypeId};
-    use mozaic::chat_capnp;
-    use mozaic::errors::*;
+    use chat_capnp;
+    use errors::*;
 
     use cursive::{Cursive, CbSink};
     use cursive::views::{TextView, EditView};

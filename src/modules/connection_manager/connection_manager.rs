@@ -7,7 +7,7 @@ use core_capnp::{initialize};
 
 use core_capnp::{actor_joined, actors_joined, identify};
 use network_capnp::{disconnected};
-use client_capnp::{client_disconnected, client_connected, host_connected};
+use connection_capnp::{client_disconnected, client_connected, host_connected};
 
 use server::runtime::BrokerHandle;
 

@@ -16,10 +16,6 @@ struct Message {
     data @1: AnyPointer;
 }
 
-struct GreetPerson {
-    personName @0: Text;
-}
-
 struct SendGreeting {
     message @0: Text;
 }
@@ -39,6 +35,3 @@ struct ActorsJoined {
 struct Identify {
     key @0: UInt64;
 }
-
-struct Timeout { }
-struct SetTimeout { }

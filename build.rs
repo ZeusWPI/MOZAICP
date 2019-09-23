@@ -9,16 +9,12 @@ fn main() -> std::io::Result<()> {
         .src_prefix("./schema")
         .file("./schema/core.capnp")
         .file("./schema/network.capnp")
-        .file("./schema/chat.capnp")
-        .file("./schema/planetwars.capnp")
-        .file("./schema/client_events.capnp")
-        .file("./schema/match_control.capnp")
-        .file("./schema/match_events.capnp")
-        .file("./schema/server_control.capnp")
-        .file("./schema/my.capnp")
+        .file("./schema/chat.capnp")    // TODO: remove chat capnp
         .file("./schema/mozaic/cmd.capnp")
         .file("./schema/mozaic/logging.capnp")
-        .file("./schema/mozaic/client.capnp")
+        .file("./schema/mozaic/base.capnp")
+        .file("./schema/mozaic/steplock.capnp")
+        .file("./schema/mozaic/connection.capnp")
         .run().expect("schema compiler command");
 
     let out_dir = env::var("OUT_DIR").unwrap();

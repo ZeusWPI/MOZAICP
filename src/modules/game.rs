@@ -3,8 +3,10 @@
 use messaging::reactor::*;
 use messaging::types::*;
 use errors::{Result};
-use core_capnp::{initialize, set_timeout};
-use client_capnp::{from_client, to_client, host_message, client_step, client_turn, client_kicked};
+use core_capnp::{initialize};
+use steplock_capnp::{set_timeout};
+use base_capnp::{from_client, to_client, host_message, client_turn, client_step};
+use connection_capnp::{client_kicked};
 
 use modules::util::{PlayerId};
 

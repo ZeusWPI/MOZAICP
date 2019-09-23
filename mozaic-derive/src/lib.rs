@@ -1,5 +1,4 @@
 extern crate proc_macro;
-#[macro_use]
 extern crate syn;
 #[macro_use]
 extern crate quote;
@@ -67,84 +66,4 @@ fn get_meta_items(ast: &syn::DeriveInput) -> HashMap<String, syn::Lit> {
 
 fn path_equals(path: &syn::Path, s: &str) -> bool {
     path.segments.len() == 1 && path.segments[0].ident == s
-}
-
-use syn::parse::{Result, ParseStream};
-
-struct  Combinations {
-    tt: syn::Type,
-}
-
-impl syn::parse::Parse for Combinations {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let tt = input.parse()?;
-        // input.parse::<syn::Token![,]>()?;
-        // let owned = input.parse()?;
-        if !input.is_empty() {
-            return Err(input.error("Did not consume entire parse stream"));
-        }
-        Ok(Combinations { tt })
-    }
-}
-
-#[proc_macro]
-pub fn minimal(input: TokenStream) -> TokenStream {
-    let Combinations { tt } = parse_macro_input!(input as Combinations);
-    (quote!{
-        pub fn e_to_i<C: ::messaging::reactor::Ctx, T>(
-            _: &mut T,
-            h: &mut ::messaging::reactor::LinkHandle<C>,
-            r: #tt::Reader) -> ::errors::Result<()>
-        {
-            let m = ::messaging::types::MsgBuffer::<#tt::Owned>::from_reader(r)?;
-            h.send_internal(m)?;
-            Ok(())
-        }
-
-        pub fn i_to_e<C: ::messaging::reactor::Ctx, T>(
-            _: &mut T,
-            h: &mut ::messaging::reactor::LinkHandle<C>,
-            r: #tt::Reader) -> ::errors::Result<()>
-        {
-            let m = ::messaging::types::MsgBuffer::<#tt::Owned>::from_reader(r)?;
-            h.send_message(m)?;
-            Ok(())
-        }
-    }).into()
-}
-
-struct All {
-    idents: Vec<syn::Ident>,
-    blocks: Vec<syn::ExprBlock>,
-}
-
-impl syn::parse::Parse for All {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut idents = Vec::new();
-        let mut blocks = Vec::new();
-
-        // input.parse::<syn::Token![,]>()?;
-        // let owned = input.parse()?;
-        while !input.is_empty() {
-            input.parse::<syn::Token![pub]>()?;
-            input.parse::<syn::Token![mod]>()?;
-
-            idents.push(
-                input.parse()?
-            );
-            // blocks.push(
-            //     input.parse()?
-            // );
-        }
-        Ok(Self { idents, blocks })
-    }
-}
-
-#[proc_macro]
-pub fn maximal(input: TokenStream) -> TokenStream {
-    let All { idents, blocks } = parse_macro_input!(input as All);
-
-    (quote! {
-        #( pub mod #idents #blocks )*
-    }).into()
 }
