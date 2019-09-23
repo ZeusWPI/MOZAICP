@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 extern crate bytes;
 extern crate hex;
 

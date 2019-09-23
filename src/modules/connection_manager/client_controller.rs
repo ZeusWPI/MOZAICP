@@ -62,7 +62,7 @@ impl CCReactor {
     {
         handle.open_link(HostLink::params(self.id.clone(), self.host.clone()))?;
 
-        handle.open_link(ConnectionManagerLink::params(self.id.clone(), self.connection_manager.clone()))?;
+        handle.open_link(ConnectionManagerLink::params(self.connection_manager.clone()))?;
 
         Ok(())
     }
@@ -114,15 +114,11 @@ impl CCReactor {
 
 }
 
-struct ConnectionManagerLink {
-    client_id: PlayerId,
-}
+struct ConnectionManagerLink;
 
 impl ConnectionManagerLink {
-    fn params<C: Ctx>(client_id: PlayerId, foreign_id: ReactorId) -> LinkParams<Self, C> {
-        let me = Self { client_id };
-
-        let mut params = LinkParams::new(foreign_id, me);
+    fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, ConnectionManagerLink);
 
         params.external_handler(client_disconnected::Owned, CtxHandler::new(client_disconnected::e_to_i));
         params.external_handler(actor_joined::Owned, CtxHandler::new(actor_joined::e_to_i));

@@ -187,7 +187,6 @@ impl<A> BotSink<A>
     }
 }
 
-use std::str;
 use bytes::Buf;
 impl<A> Future for BotSink<A>
     where A: AsyncWrite {
