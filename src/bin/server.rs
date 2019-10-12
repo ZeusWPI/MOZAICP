@@ -4,6 +4,13 @@ extern crate futures;
 extern crate mozaic;
 extern crate rand;
 
+extern crate tracing;
+extern crate tracing_futures;
+extern crate tracing_subscriber;
+
+use tracing::{debug, info, span, Level, error, trace};
+use tracing_futures::Instrument;
+
 use std::env;
 use std::net::SocketAddr;
 use mozaic::messaging::types::*;
@@ -49,6 +56,12 @@ use std::collections::HashMap;
 
 pub fn run(args : Vec<String>) {
 
+    use tracing_subscriber::fmt;
+    let subscriber = fmt::Subscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+    let _ = tracing::subscriber::set_global_default(subscriber);
+
     let addr = "127.0.0.1:9142".parse::<SocketAddr>().unwrap();
 
     let manager_id: ReactorId = rand::thread_rng().gen();
@@ -75,5 +88,5 @@ pub fn run(args : Vec<String>) {
         ).display();
 
         Ok(())
-    }));
+    }).instrument(span!(Level::TRACE, "main")));
 }

@@ -13,12 +13,18 @@ error-chain = "0.12.1"
 futures = "0.1.28"
 hex = "0.3.2"
 rand = { version = "0.6.5", default-features = true }
+
 serde = "1.0.99"
 serde_derive = "1.0.99"
 serde_json = "1.0"
+
 tokio = "0.1.22"
 tokio-core = "0.1.17"
 tokio-process = "0.2.4"
+
+tracing = "0.1.9"
+tracing-futures = "0.1.0"
+
 mozaic-derive = { path = "./mozaic-derive" }
 
 capnp = "0.10.1"
@@ -27,6 +33,8 @@ capnp-futures = "0.10.1"
 # for chat example
 cursive = "0.13.0"
 crossbeam-channel = "0.3.9"
+
+tracing-subscriber = "0.1.5"
 
 [build-dependencies]
 capnpc = "0.10.1"

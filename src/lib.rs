@@ -13,6 +13,9 @@ extern crate rand;
 extern crate serde;
 extern crate serde_json;
 
+extern crate tracing;
+extern crate tracing_futures;
+
 #[macro_use]
 extern crate error_chain;
 

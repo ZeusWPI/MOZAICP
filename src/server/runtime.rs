@@ -8,13 +8,15 @@ use tokio;
 use futures::{Future, Async, Poll, Stream};
 use futures::sync::mpsc;
 
+use tracing::{debug, info, span, Level, error, trace};
+use tracing_futures::Instrument;
+
 use rand;
 use rand::Rng;
 
 use messaging::types::*;
 use messaging::reactor::*;
-use modules;
-// use log_capnp::{open_log_link};
+
 use errors::ErrorKind::{NoSuchReactorError, MozaicError};
 use errors::{self, Consumable, ResultExt, Result};
 
@@ -34,9 +36,7 @@ impl Broker {
             runtime_id: id.clone(),
             actors: HashMap::new(),
         };
-        let mut broker = BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
-
-        broker.spawn(modules::logger_id(), modules::LogReactor::params((id, "Broker")), "Broker")?;
+        let broker = BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
 
         return Ok(broker);
     }
@@ -47,11 +47,18 @@ impl Broker {
             .get_receiver()?
             .into();
 
-        let receiver = self.actors.get_mut(&receiver_id.clone()).ok_or(
-            errors::Error::from_kind(NoSuchReactorError(receiver_id.clone()))
-        )?;
+        let receiver = match self.actors.get_mut(&receiver_id.clone()) {
+            Some(receiver) => receiver,
+            None           => {
+                error!("No such reactor {:?}", receiver_id);
+                return Err(errors::Error::from_kind(NoSuchReactorError(receiver_id.clone())));
+            }
+        };
 
-        receiver.tx.unbounded_send(message).map_err(move |_| format!("send failed {:?}", receiver_id))?;
+        receiver.tx.unbounded_send(message).map_err(move |_| {
+            error!("Couldn't send message to {:?}", receiver_id);
+            format!("send failed {:?}", receiver_id)
+        })?;
         Ok(())
     }
 }
@@ -71,22 +78,30 @@ impl BrokerHandle {
     }
 
     pub fn dispatch_message(&mut self, message: Message) -> Result<()> {
+        trace!("Dispatching message");
+
         let mut broker = self.broker.lock().unwrap();
         broker.dispatch_message(message)
     }
 
     pub fn register(&mut self, id: ReactorId, tx: mpsc::UnboundedSender<Message>) {
+        trace!("Registering reactor {:?}", id);
+
         let mut broker = self.broker.lock().unwrap();
         broker.actors.insert(id, ActorData { tx });
     }
 
     pub fn register_as(&mut self, id: ReactorId, same_as: ReactorId) {
+        trace!("Registering new reactor as {:?}", id);
+
         let mut broker = self.broker.lock().unwrap();
         let tx = broker.actors.get(&same_as).unwrap().tx.clone();
         broker.actors.insert(id, ActorData { tx });
     }
 
     pub fn unregister(&mut self, id: &ReactorId) {
+        trace!("Unregistering reactor {:?}", id);
+
         let mut broker = self.broker.lock().unwrap();
         broker.actors.remove(&id);
     }
@@ -97,6 +112,8 @@ impl BrokerHandle {
               M: Owned<'static>,
               <M as Owned<'static>>::Builder: HasTypeId,
     {
+        trace!("Sending message as runtime to {:?}", target);
+
         self.send_message(&self.get_runtime_id(), target, m, initializer)
     }
 
@@ -106,6 +123,8 @@ impl BrokerHandle {
               <M as Owned<'static>>::Builder: HasTypeId,
 
     {
+        trace!("Sending message from {:?} to {:?}", sender, target);
+
         let mut broker = self.broker.lock().unwrap();
 
         if target == &broker.runtime_id {
@@ -130,9 +149,11 @@ impl BrokerHandle {
         broker.dispatch_message(msg)
     }
 
-    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, _name: &str) -> Result<()>
+    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str) -> Result<()>
         where S: 'static + Send
     {
+        info!("Spawning new reactor {}", name);
+
         let mut driver = {
             let mut broker = self.broker.lock().unwrap();
 
@@ -154,12 +175,6 @@ impl BrokerHandle {
             }
         };
 
-        // self.send_message_self(&modules::logger_id(), open_log_link::Owned, |b| {
-        //     let mut msg: open_log_link::Builder = b.init_as();
-        //     msg.set_id(id.bytes());
-        //     msg.set_name(name);
-        // })?;
-
         {
             let mut ctx_handle = DriverHandle {
                 broker: &mut driver.broker,
@@ -167,13 +182,12 @@ impl BrokerHandle {
             };
 
             let mut reactor_handle = driver.reactor.handle(&mut ctx_handle);
-            // reactor_handle.open_link(modules::LogLink::params(modules::logger_id()))?;
 
             let initialize = MsgBuffer::<initialize::Owned>::new();
             reactor_handle.send_internal(initialize)?;
         }
 
-        tokio::spawn(driver);
+        tokio::spawn(driver.instrument(span!(Level::TRACE, "reactor", name)));
 
         Ok(())
     }
@@ -196,6 +210,7 @@ pub struct ReactorDriver<S: 'static> {
 
 impl<S: 'static> ReactorDriver<S> {
     fn handle_external_message(&mut self, message: Message) {
+        trace!("Handleing external message");
         let mut handle = DriverHandle {
             internal_queue: &mut self.internal_queue,
             broker: &mut self.broker,
@@ -205,9 +220,11 @@ impl<S: 'static> ReactorDriver<S> {
     }
 
     fn handle_internal_queue(&mut self) {
+
         while let Some(op) = self.internal_queue.pop_front() {
             match op {
                 InternalOp::Message(msg) => {
+                    trace!("Handleing internal message");
                     let mut handle = DriverHandle {
                         internal_queue: &mut self.internal_queue,
                         broker: &mut self.broker,
@@ -216,11 +233,15 @@ impl<S: 'static> ReactorDriver<S> {
                         .chain_err(|| "handling failed").display();
                 }
                 InternalOp::OpenLink(params) => {
+                    trace!("Handleing open link");
+
                     let uuid = params.remote_id().clone();
                     let link = params.into_link();
                     self.reactor.links.insert(uuid, link);
                 }
                 InternalOp::CloseLink(uuid) => {
+                    trace!("Handleing close link");
+
                     self.reactor.links.remove(&uuid);
                 }
             }
@@ -240,7 +261,8 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 // all internal ops have been handled and no new messages can
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
-                eprintln!("Disconnected reactor {:?}", self.reactor.id);
+
+                info!("Disconnecting reactor");
                 return Ok(Async::Ready(()));
             }
 
