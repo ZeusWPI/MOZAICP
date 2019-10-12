@@ -187,7 +187,7 @@ impl BrokerHandle {
             reactor_handle.send_internal(initialize)?;
         }
 
-        tokio::spawn(driver.instrument(span!(Level::TRACE, "reactor", name)));
+        tokio::spawn(driver.instrument(span!(Level::TRACE, "reactor {}", name, "reactor id {:?}", id)));
 
         Ok(())
     }

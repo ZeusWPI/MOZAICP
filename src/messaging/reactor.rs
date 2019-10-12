@@ -3,6 +3,8 @@ use super::types::*;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
 
+use tracing::Span;
+
 use errors::{self, Consumable, Result};
 use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 
@@ -117,13 +119,6 @@ impl<S, C: Ctx> Reactor<S, C> {
             };
 
             handler.handle(&mut handler_ctx, msg.get_payload())?;
-        } else {
-            // I've spent too much time on this print statement
-            let err: Result<()> = errors::Result::Err(
-                errors::Error::from_kind(MozaicError("No reactor internal handler found"))
-            );
-
-            err.display();
         }
 
         for link in self.links.values_mut() {

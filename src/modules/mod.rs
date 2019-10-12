@@ -1,10 +1,4 @@
 
-use messaging::reactor::*;
-use messaging::types::*;
-use errors::Consumable;
-
-use log_capnp::{log};
-
 mod bot_driver;
 pub use self::bot_driver::BotReactor;
 

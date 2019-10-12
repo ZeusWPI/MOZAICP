@@ -8,6 +8,8 @@ use tokio;
 use futures::{Future, Async, Poll, Stream};
 use futures::sync::mpsc;
 
+use tracing::Span;
+
 use rand;
 use rand::Rng;
 
@@ -90,7 +92,7 @@ impl RuntimeState {
             server_link.unbounded_send(message)
                 .map_err(|_|"send failed".into()).display();
         } else {
-            return Err(errors::Error::from_kind(MozaicError("server link closed")));
+            return Err(errors::Error::from_kind(MozaicError("server link closed") ));
         }
 
         Ok(())

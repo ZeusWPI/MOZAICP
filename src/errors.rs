@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use tracing::{error};
 
 use messaging::types::ReactorId;
 
@@ -30,11 +30,9 @@ error_chain!{
 
 
 pub fn print_error(e: Error) {
-    let mut stderr = io::stderr();
-
-    for er in e.iter() {
-        let _ = writeln!(stderr, "{}", er);
-    }
+    // for er in e.iter() {
+    //     error!("{}", er);
+    // }
 }
 
 pub struct ErrWrapper(Option<Error>);
@@ -57,12 +55,7 @@ impl<T> Consumable for T
         self.into().display();
     }
 
-    fn ignore(self) {
-        match self.into().0 {
-            None => {},
-            Some(_) => {},
-        }
-    }
+    fn ignore(self) { }
 }
 
 impl ErrWrapper {

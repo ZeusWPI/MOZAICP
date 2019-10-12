@@ -102,13 +102,13 @@ pub struct ReactorId {
 
 impl fmt::Display for ReactorId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:x?}", self.public_key)
+        write!(f, "{:X?}", self.public_key)
     }
 }
 
 impl fmt::Debug for ReactorId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:x?}", self.public_key)
+        write!(f, "{:02X}{:02X}{:02X}{:02X}{:02X}..", self.public_key[0], self.public_key[1], self.public_key[2],self.public_key[3],self.public_key[4])
     }
 }
 
