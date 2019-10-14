@@ -36,6 +36,11 @@ pub mod modules;
 
 pub mod errors;
 
+///
+/// Generate extra functions for this schema file.
+/// Generates e_to_i external to internal, so retransmitting all internal messages of type to external
+/// Generates i_to_e, idem dito but interal to external
+///
 macro_rules! add_gen {
   ($(
     pub mod $name:ident {
@@ -71,34 +76,42 @@ macro_rules! add_gen {
   };
 }
 
+/// Core capnp messages
 pub mod core_capnp {
     add_gen!(%%/core_capnp.rs%%);
 }
 
+/// deprecated
 pub mod chat_capnp {
     add_gen!(%%/chat_capnp.rs%%);
 }
 
+/// Network related capnp messages
 pub mod network_capnp {
     add_gen!(%%/network_capnp.rs%%);
 }
 
-pub mod cmd_capnp {
-    add_gen!(%%/mozaic/cmd_capnp.rs%%);
-}
-
-pub mod log_capnp {
-    add_gen!(%%/mozaic/logging_capnp.rs%%);
-}
-
+/// Generic MOZAIC messages
 pub mod base_capnp {
     add_gen!(%%/mozaic/base_capnp.rs%%);
 }
 
+/// Messages specific for the steplock module
 pub mod steplock_capnp {
     add_gen!(%%/mozaic/steplock_capnp.rs%%);
 }
 
+/// Messages for MOZAIC connection events
 pub mod connection_capnp {
     add_gen!(%%/mozaic/connection_capnp.rs%%);
+}
+
+/// Messages specific for the cmd module
+pub mod cmd_capnp {
+    add_gen!(%%/mozaic/cmd_capnp.rs%%);
+}
+
+/// deprecated
+pub mod log_capnp {
+    add_gen!(%%/mozaic/logging_capnp.rs%%);
 }

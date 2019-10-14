@@ -2,7 +2,7 @@ use tracing::{error};
 
 use messaging::types::ReactorId;
 
-// Create the Error, ErrorKind, ResultExt, and Result types
+/// All possible errors for MOZAIC
 error_chain!{
     foreign_links {
         Capnp(::capnp::Error);
@@ -28,13 +28,14 @@ error_chain!{
     }
 }
 
-
+/// Print the actual error
 pub fn print_error(e: Error) {
     // for er in e.iter() {
     //     error!("{}", er);
     // }
 }
 
+/// Bloat to make error_chain happy
 pub struct ErrWrapper(Option<Error>);
 
 impl<T> From<Result<T>> for ErrWrapper {
