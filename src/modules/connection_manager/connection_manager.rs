@@ -113,9 +113,9 @@ impl HostLink {
         r: actors_joined::Reader,
     ) -> Result<()> {
         let m = ::messaging::types::MsgBuffer::<actors_joined::Owned>::from_reader(r)?;
-        handle.send_message(m);
+        handle.send_message(m)?;
 
-        handle.close_link();
+        handle.close_link()?;
 
         Ok(())
     }

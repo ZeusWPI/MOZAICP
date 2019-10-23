@@ -8,8 +8,6 @@ use tokio;
 use futures::{Future, Async, Poll, Stream};
 use futures::sync::mpsc;
 
-use tracing::Span;
-
 use rand;
 use rand::Rng;
 

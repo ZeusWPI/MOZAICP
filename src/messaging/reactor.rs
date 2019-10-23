@@ -3,8 +3,6 @@ use super::types::*;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
 
-use tracing::Span;
-
 use errors::{self, Consumable, Result};
 use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 

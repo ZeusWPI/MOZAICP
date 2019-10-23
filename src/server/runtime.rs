@@ -8,7 +8,7 @@ use tokio;
 use futures::{Future, Async, Poll, Stream};
 use futures::sync::mpsc;
 
-use tracing::{debug, info, span, Level, error, trace, field};
+use tracing::{info, span, Level, error, trace, field};
 use tracing_futures::Instrument;
 
 use rand;
@@ -100,7 +100,7 @@ impl BrokerHandle {
         trace!("Registering new reactor as {:?}", id);
 
         let tx = {
-            let mut broker = self.broker.lock().unwrap();
+            let broker = self.broker.lock().unwrap();
             broker.actors.get(&same_as).unwrap().tx.clone()
         };
 

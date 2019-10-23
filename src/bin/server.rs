@@ -8,15 +8,15 @@ extern crate tracing;
 extern crate tracing_futures;
 extern crate tracing_subscriber;
 
-use tracing::{debug, info, span, Level, error, trace};
+use tracing::{span, Level};
 use tracing_futures::Instrument;
-use tracing_subscriber::{FmtSubscriber, EnvFilter, fmt};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use std::env;
 use std::net::SocketAddr;
 use mozaic::messaging::types::*;
 
-use mozaic::modules::{Aggregator, Steplock, game};
+use mozaic::modules::{Aggregator, game};
 
 // Load the config and start the game.
 fn main() {
@@ -70,7 +70,7 @@ pub fn run(args : Vec<String>) {
     let manager_id: ReactorId = rand::thread_rng().gen();
     let welcomer_id: ReactorId = rand::thread_rng().gen();
     let aggregator_id: ReactorId = rand::thread_rng().gen();
-    let steplock_id: ReactorId = rand::thread_rng().gen();
+    // let steplock_id: ReactorId = rand::thread_rng().gen();
 
     let number_of_clients = args.get(1).map(|x| x.parse().unwrap_or(1)).unwrap_or(1);
 

@@ -1,8 +1,6 @@
-use tracing::{error};
-
 use messaging::types::ReactorId;
 
-/// All possible errors for MOZAIC
+// All possible errors for MOZAIC
 error_chain!{
     foreign_links {
         Capnp(::capnp::Error);
@@ -29,7 +27,7 @@ error_chain!{
 }
 
 /// Print the actual error
-pub fn print_error(e: Error) {
+pub fn print_error(_e: Error) {
     // for er in e.iter() {
     //     error!("{}", er);
     // }
