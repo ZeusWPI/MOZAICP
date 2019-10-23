@@ -12,7 +12,7 @@ use core_capnp::{actor_joined};
 pub struct ServerHandler {
     broker: BrokerHandle,
     tx: mpsc::UnboundedSender<Message>,
-    welcomer_id: ReactorId,
+    pub welcomer_id: ReactorId,
     connecting_id: Option<ReactorId>,
 }
 
@@ -40,6 +40,8 @@ impl ServerHandler {
     {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
+
+        info!("Handling connect of {:?}->{:?}", self.welcomer_id, connecting_id);
 
         self.broker.register(connecting_id.clone(), self.tx.clone());
 
@@ -69,6 +71,10 @@ impl ServerHandler {
     {
 
         if let Some(sender) = &self.connecting_id {
+            // TODO: this is the problem, you don't want to send disconnected to the welcomer but to the client controller
+            info!("Handling disconnect of {:?}", sender);
+            // self.broker.unregister(&sender);
+
             self.broker.send_message(&sender, &self.welcomer_id, disconnected::Owned, |b| {
                 let mut joined: disconnected::Builder = b.init_as();
                 joined.set_id(sender.bytes());

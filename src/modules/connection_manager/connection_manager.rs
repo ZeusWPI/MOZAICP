@@ -58,6 +58,7 @@ impl ConnectionManager {
         handle.open_link(CreationLink::params(handle.id().clone()))?;
         handle.open_link(HostLink::params(self.host.clone()))?;
 
+        // Create n ClientControllers
         let mut ids = Vec::new();
         for (key, id) in self.ids.drain() {
             let cc_id = handle.spawn(CCReactor::params(id, handle.id().clone(), self.host.clone()), "Client Controller")?;
@@ -65,6 +66,7 @@ impl ConnectionManager {
             handle.open_link(ClientControllerLink::params(key, cc_id)).display();
         }
 
+        // Send to host what ClientControllers are created
         let mut joined = MsgBuffer::<actors_joined::Owned>::new();
         joined.build(move |b| {
             let mut ids_builder = b.reborrow().init_ids(ids.len().try_into().unwrap());
@@ -96,20 +98,32 @@ impl ConnectionManager {
 }
 
 struct HostLink;
-
 impl HostLink {
     fn params<C: Ctx>(host: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(host, HostLink);
 
-        params.internal_handler(actors_joined::Owned, CtxHandler::new(actors_joined::i_to_e),);
+        params.internal_handler(actors_joined::Owned, CtxHandler::new(Self::i_handle_actors_joined));
 
         return params;
+    }
+
+    fn i_handle_actors_joined<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: actors_joined::Reader,
+    ) -> Result<()> {
+        let m = ::messaging::types::MsgBuffer::<actors_joined::Owned>::from_reader(r)?;
+        handle.send_message(m);
+
+        handle.close_link();
+
+        Ok(())
     }
 }
 
 /// Creation link to pass through actor joined from hopefully self
+/// This is used to 'inject' actor joined events when clients connect.
 struct CreationLink;
-
 impl CreationLink {
     pub fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, CreationLink);
@@ -251,6 +265,7 @@ impl ClientLink {
     ) -> Result<()> {
         // If not the client is not yet registered, so it doesn't matter
         if let Some(key) = self.key {
+            info!("DISCONNECTED {:?}", handle.remote_uuid());
             let mut msg = MsgBuffer::<client_disconnected::Owned>::new();
 
             msg.build(|b| {

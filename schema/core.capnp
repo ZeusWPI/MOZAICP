@@ -35,3 +35,5 @@ struct ActorsJoined {
 struct Identify {
     key @0: UInt64;
 }
+
+struct CloseLink { }

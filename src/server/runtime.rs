@@ -265,7 +265,7 @@ impl<S: 'static> Future for ReactorDriver<S> {
         loop {
             self.handle_internal_queue();
 
-            if self.reactor.links.is_empty() {
+            if self.reactor.links.keys().all(|k| k == &self.reactor.id) {
                 // all internal ops have been handled and no new messages can
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
