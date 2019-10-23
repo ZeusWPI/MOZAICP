@@ -274,7 +274,8 @@ impl ClientLink {
             handle.send_internal(msg)?;
         }
 
-        handle.close_link()?;
+        // Don't try to close the link on the other side, because pipe is already broken
+        handle.close_link_hard()?;
 
         Ok(())
     }

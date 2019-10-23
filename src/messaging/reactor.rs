@@ -356,9 +356,17 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         if self.link_state.local_closed {
             return Ok(());
         }
-
         let msg = MsgBuffer::<terminate_stream::Owned>::new();
         self.send_message(msg).display();
+
+        self._close_link()
+    }
+
+    pub fn close_link_hard(&mut self) -> Result<()> {
+        self._close_link()
+    }
+
+    fn _close_link(&mut self) -> Result<()> {
 
         self.link_state.local_closed = true;
 

@@ -246,7 +246,8 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         _: client_disconnected::Reader,
     ) -> Result<()> {
-        handle.close_link()?;
+        // Don't try to close the connection on the other side, because the pipe is already broken
+        handle.close_link_hard()?;
 
         Ok(())
     }

@@ -9,7 +9,8 @@
 //!   + Open link with connecting party
 //!   + Wait for them to identify
 //!   + Pass them through to the correct client controller
-//!   + Close link
+//!   + You cannot close the link, because the connection manager is responsible for disconnecting the reactor
+//!     (this is not wanted but currently a limitation of the MOZAIC implementation)
 //! - When all client controllers are gone (the game has finished), kill yourself
 //!
 //! Client controller:
