@@ -61,7 +61,7 @@ pub fn run(args : Vec<String>) {
         .with_env_filter(EnvFilter::from_default_env())
         .without_time()
         .inherit_fields(true)
-        // .with_max_level(Level::DEBUG)
+        .with_max_level(Level::DEBUG)
         .finish();
     let _ = tracing::subscriber::set_global_default(subscriber);
 
@@ -81,7 +81,7 @@ pub fn run(args : Vec<String>) {
     tokio::run(futures::lazy(move || {
         let mut broker = Broker::new().unwrap();
 
-        broker.spawn(welcomer_id.clone(), game::GameReactor::params(aggregator_id.clone(), Box::new(Server)), "Main").display();
+        broker.spawn(welcomer_id.clone(), game::GameReactor::params(aggregator_id.clone(), Box::new(Server)), "Server").display();
         // broker.spawn(steplock_id.clone(), Steplock::new(broker.clone(), ids.values().cloned().collect(), welcomer_id.clone(), aggregator_id.clone()).with_timeout(5000).with_initial_timeout(500).params(), "Steplock").display();
         broker.spawn(aggregator_id.clone(), Aggregator::params(manager_id.clone(), welcomer_id.clone()), "Aggregator").display();
         broker.spawn(

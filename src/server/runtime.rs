@@ -8,7 +8,7 @@ use tokio;
 use futures::{Future, Async, Poll, Stream};
 use futures::sync::mpsc;
 
-use tracing::{debug, info, span, Level, error, trace};
+use tracing::{debug, info, span, Level, error, trace, field};
 use tracing_futures::Instrument;
 
 use rand;
@@ -47,6 +47,11 @@ impl Broker {
             .get_receiver()?
             .into();
 
+        let sender_id: ReactorId = message.reader()
+            .get()?
+            .get_sender()?
+            .into();
+
         let receiver = match self.actors.get_mut(&receiver_id.clone()) {
             Some(receiver) => receiver,
             None           => {
@@ -56,7 +61,7 @@ impl Broker {
         };
 
         receiver.tx.unbounded_send(message).map_err(move |_| {
-            error!("Couldn't send message to {:?}", receiver_id);
+            error!("Couldn't send {:?} -> {:?}", sender_id, receiver_id);
             format!("send failed {:?}", receiver_id)
         })?;
         Ok(())
@@ -85,7 +90,7 @@ impl BrokerHandle {
     }
 
     pub fn register(&mut self, id: ReactorId, tx: mpsc::UnboundedSender<Message>) {
-        trace!("Registering reactor {:?}", id);
+        info!("Registering reactor {:?}", id);
 
         let mut broker = self.broker.lock().unwrap();
         broker.actors.insert(id, ActorData { tx });
@@ -94,9 +99,12 @@ impl BrokerHandle {
     pub fn register_as(&mut self, id: ReactorId, same_as: ReactorId) {
         trace!("Registering new reactor as {:?}", id);
 
-        let mut broker = self.broker.lock().unwrap();
-        let tx = broker.actors.get(&same_as).unwrap().tx.clone();
-        broker.actors.insert(id, ActorData { tx });
+        let tx = {
+            let mut broker = self.broker.lock().unwrap();
+            broker.actors.get(&same_as).unwrap().tx.clone()
+        };
+
+        self.register(id, tx);
     }
 
     pub fn unregister(&mut self, id: &ReactorId) {
@@ -123,7 +131,7 @@ impl BrokerHandle {
               <M as Owned<'static>>::Builder: HasTypeId,
 
     {
-        trace!("Sending message from {:?} to {:?}", sender, target);
+        trace!("Sending message {:?} -> {:?}", sender, target);
 
         let mut broker = self.broker.lock().unwrap();
 
@@ -152,7 +160,7 @@ impl BrokerHandle {
     pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str) -> Result<()>
         where S: 'static + Send
     {
-        info!("Spawning new reactor {}", name);
+        info!("Spawning new reactor {} {:?}", name, id);
 
         let mut driver = {
             let mut broker = self.broker.lock().unwrap();
@@ -187,7 +195,7 @@ impl BrokerHandle {
             reactor_handle.send_internal(initialize)?;
         }
 
-        tokio::spawn(driver.instrument(span!(Level::TRACE, "reactor {}", name, "reactor id {:?}", id)));
+        tokio::spawn(driver.instrument(span!(Level::TRACE, "driver", name = name, id = field::debug(&id))));
 
         Ok(())
     }
@@ -233,14 +241,14 @@ impl<S: 'static> ReactorDriver<S> {
                         .chain_err(|| "handling failed").display();
                 }
                 InternalOp::OpenLink(params) => {
-                    trace!("Handleing open link");
-
                     let uuid = params.remote_id().clone();
+                    info!("Open link {:?} -> {:?}", field::debug(&self.reactor.id), field::debug(&uuid));
+
                     let link = params.into_link();
                     self.reactor.links.insert(uuid, link);
                 }
                 InternalOp::CloseLink(uuid) => {
-                    trace!("Handleing close link");
+                    info!("Close link {:?} -> {:?}", field::debug(&self.reactor.id), field::debug(&uuid));
 
                     self.reactor.links.remove(&uuid);
                 }
@@ -262,7 +270,7 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
 
-                info!("Disconnecting reactor");
+                info!("Disconnecting reactor {:?}", field::debug(&self.reactor.id));
                 return Ok(Async::Ready(()));
             }
 
