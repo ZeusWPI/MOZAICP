@@ -123,6 +123,7 @@ impl ClientHandler {
     {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
+        println!("Handling connect of {:?}", connecting_id);
 
         self.broker.register(connecting_id.clone(), self.tx.clone());
 
@@ -148,6 +149,8 @@ impl ClientHandler {
     {
 
         if let Some(sender) = &self.connecting_id {
+            println!("Handling disconnect of {:?}", sender);
+
             self.broker.send_message(&sender, &self.welcomer_id, disconnected::Owned, |b| {
                 let mut joined: disconnected::Builder = b.init_as();
                 joined.set_id(sender.bytes());

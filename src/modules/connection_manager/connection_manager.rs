@@ -272,10 +272,11 @@ impl ClientLink {
                 b.set_client_key(key.into());
             });
             handle.send_internal(msg)?;
-        }
 
-        // Don't try to close the link on the other side, because pipe is already broken
-        handle.close_link_hard()?;
+            error!("DISCONNECTING");
+            // Don't try to close the link on the other side, because pipe is already broken
+            handle.close_link_hard()?;
+        }
 
         Ok(())
     }

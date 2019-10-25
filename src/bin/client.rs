@@ -1,29 +1,28 @@
 extern crate mozaic;
 extern crate hex;
 extern crate tokio;
-#[macro_use]
 extern crate futures;
 extern crate rand;
 extern crate cursive;
 extern crate capnp;
 
-use tokio::net::TcpStream;
-use futures::sync::mpsc;
+use tokio::prelude::Stream;
+use tokio::sync::mpsc;
 use futures::Future;
 
 use mozaic::core_capnp::{initialize, terminate_stream, identify, actor_joined};
-use mozaic::chat_capnp;
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
-use mozaic::client::{LinkHandler, RuntimeState};
 use mozaic::errors::*;
 use mozaic::base_capnp::{client_message, host_message};
 use mozaic::connection_capnp::{client_kicked};
+use mozaic::server::runtime::{Broker, BrokerHandle};
+use mozaic::server;
 
 use std::thread;
 use std::env;
-use std::sync::{Arc, Mutex};
-use std::str;
+
+use rand::Rng;
 
 use cursive::align::VAlign;
 use cursive::Cursive;
@@ -38,7 +37,11 @@ use cursive::views::{TextView, EditView, LinearLayout};
 fn main() {
     let args: Vec<String> = env::args().collect();
     let id = args.get(1).unwrap().parse().unwrap();
-    let user = args.get(2).unwrap_or(&"Ben".to_string()).clone();
+
+    let addr = "127.0.0.1:9142".parse().unwrap();
+    let self_id: ReactorId = rand::thread_rng().gen();
+
+    println!("My id {:?}", self_id);
 
     // Creates the cursive root - required for every application.
     let mut siv = Cursive::default();
@@ -61,33 +64,90 @@ fn main() {
     );
 
     let cb_sink = siv.cb_sink().clone();
-    thread::spawn(move || {
-        let addr = "127.0.0.1:9142".parse().unwrap();
-        tokio::run(futures::lazy(move || {
-            // This part is needlessly complex, please ignore =/
-            let rt: Arc<Mutex<RuntimeState>> = RuntimeState::bootstrap(|runtime| {
-                let (tx, rx) = mpsc::unbounded();
 
-                runtime::RuntimeWorker::spawn(rx, cb_sink, runtime);
+    let (tx, rx) = mpsc::channel::<String>(10);
 
-                return tx;
+    let _cb_sink = cb_sink.clone();
+    let recv = rx.for_each(move |message| {
+        eprintln!("Got message {}", message);
+        _cb_sink.send(Box::new(|cursive: &mut Cursive| {
+            cursive.call_on_id("messages", |view: &mut TextView| {
+                view.append(message);
+                view.append("\n");
             });
+        })).expect("Civ error");
 
-            TcpStream::connect(&addr)
-                .map_err(|err| panic!(err))
-                .and_then(move |stream| {
-                    LinkHandler::new(stream, rt, move |params| {
-                        let r = ClientReactor {
-                            greeter_id: params.greeter_id,
-                            runtime_id: params.runtime_id,
-                            user: user.clone(),
-                            id,
-                        };
-                        return r.params();
-                    })
-                })
-            }));
+        Ok(())
+    }).map_err(|_| ());
+
+    // cb_sink.send(Box::new(|cursive: &mut Cursive| {
+    //         cursive.call_on_id("input", |view: &mut EditView| {
+    //             view.set_on_submit(move |cursive, input_text| {
+    //                 runtime.lock().unwrap().send_message(
+    //                     &reactor_id,
+    //                     chat_capnp::user_input::Owned,
+    //                     |b| {
+    //                         let mut input: chat_capnp::user_input::Builder = b.init_as();
+    //                         input.set_text(input_text);
+    //                     }).display();
+    //                 cursive.call_on_id("input", |view: &mut EditView| {
+    //                     view.set_content("");
+    //                 });
+    //             })
+    //         });
+    //     })).unwrap();
+
+    //     ctx.state.cb_sink.send(Box::new(|cursive: &mut Cursive| {
+    //     cursive.call_on_id("messages", |view: &mut TextView| {
+    //         view.append(user);
+    //         view.append(": ");
+    //         view.append(message);
+    //         view.append("\n");
+    //     });
+    // })).unwrap();
+
+    thread::spawn(move || {
+        tokio::run(futures::lazy(move || {
+                tokio::spawn(recv);
+                let mut broker = Broker::new().unwrap();
+
+                let reactor = ClientReactor {
+                    server: None,
+                    id,
+                    broker: broker.clone(),
+                    tx,
+                };
+                broker.spawn(self_id.clone(), reactor.params(), "main").display();
+
+                let _broker = broker.clone();
+                let _self_id = self_id.clone();
+
+                cb_sink.send(Box::new(|cursive: &mut Cursive| {
+                    cursive.call_on_id("input", |view: &mut EditView| {
+                        view.set_on_submit(move |cursive, input_text| {
+
+                            _broker.clone().send_message(
+                                &_self_id, &_self_id,
+                                client_message::Owned,
+                                |b| {
+                                    let mut input: client_message::Builder = b.init_as();
+                                    input.set_data(input_text.as_bytes());
+                                }).expect("here");
+
+                            cursive.call_on_id("input", |view: &mut EditView| {
+                                view.set_content("");
+                            });
+                        })
+                    });
+                })).expect("Civ error 2");
+
+                tokio::spawn(server::connect_to_server(broker, self_id, &addr));
+
+                Ok(())
+        }));
     });
+
+    eprintln!("Here");
 
     siv.set_fps(10);
     // Starts the event loop.
@@ -99,10 +159,10 @@ fn main() {
 /// ? runtime_id is your own runtime, to handle visualisation etc
 /// ? user are you  ...
 struct ClientReactor {
-    greeter_id: ReactorId,
-    runtime_id: ReactorId,
-    user: String,
+    server: Option<ReactorId>,
     id: u64,
+    broker: BrokerHandle,
+    tx: mpsc::Sender<String>,
 }
 
 impl ClientReactor {
@@ -120,25 +180,9 @@ impl ClientReactor {
         _: initialize::Reader,
     ) -> Result<()>
     {
-        // open link with chat server
-        let link = (ServerLink {}).params(self.greeter_id.clone());
-        handle.open_link(link)?;
-
-        // open link with runtime, for communicating with chat GUI
-        let runtime_link = (RuntimeLink {user: self.user.clone()}).params(self.runtime_id.clone());
+        println!("Opening runtime link with {:?}", handle.id());
+        let runtime_link = RuntimeLink::params(handle.id().clone());
         handle.open_link(runtime_link)?;
-
-        // dispatch this additional message to instruct the runtime link
-        // to connect to the gui.
-        // TODO: this is kind of initalization code, could it be avoided?
-        let msg = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
-        handle.send_internal(msg)?;
-
-        let mut identify = MsgBuffer::<identify::Owned>::new();
-        identify.build(|b| {
-            b.set_key(self.id);
-        });
-        handle.send_internal(identify).display();
 
         return Ok(());
     }
@@ -151,19 +195,34 @@ impl ClientReactor {
     {
         let id = r.get_id()?;
 
-        handle.open_link(HostLink::params(ReactorId::from(id)))?;
+        println!("Got actor joined {:?}", id);
+
+        if let Some(server) = &self.server {
+            handle.open_link(HostLink::params(self.tx.clone(), ReactorId::from(id)))?;
+            self.broker.register_as(id.into(), server.clone());
+
+        } else {
+
+            handle.open_link(ServerLink::params(id.into()))?;
+            self.server = Some(id.into());
+
+            let mut identify = MsgBuffer::<identify::Owned>::new();
+            identify.build(|b| {
+                b.set_key(self.id);
+            });
+            handle.send_internal(identify).display();
+        }
 
         Ok(())
     }
 }
 
 // Handler for the connection with the chat server
-struct ServerLink {
-}
+struct ServerLink;
 
 impl ServerLink {
-    fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(foreign_id, self);
+    fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, ServerLink);
 
         params.external_handler(
             terminate_stream::Owned,
@@ -225,11 +284,12 @@ impl ServerLink {
     }
 }
 
-struct HostLink;
-
+struct HostLink {
+    tx: mpsc::Sender<String>,
+}
 impl HostLink {
-    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(remote_id, HostLink);
+    fn params<C: Ctx>(tx: mpsc::Sender<String>, remote_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(remote_id, HostLink { tx });
 
         params.external_handler(
             host_message::Owned,
@@ -237,8 +297,8 @@ impl HostLink {
         );
 
         params.internal_handler(
-            chat_capnp::send_message::Owned,
-            CtxHandler::new(Self::send_chat_message),
+            client_message::Owned,
+            CtxHandler::new(client_message::i_to_e),
         );
 
         params.external_handler(
@@ -251,37 +311,15 @@ impl HostLink {
 
     // pick up a 'send_message' event from the reactor, and put it to effect
     // by constructing the chat message and sending it to the chat server.
-    fn send_chat_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        send_message: chat_capnp::send_message::Reader,
-    ) -> Result<()>
-    {
-        let message = send_message.get_message()?;
-        // let user = send_message.get_user()?;
-
-        let mut chat_message = MsgBuffer::<client_message::Owned>::new();
-        chat_message.build(|b| {
-            b.set_data(message.as_bytes());
-        });
-
-        handle.send_message(chat_message)?;
-
-        return Ok(());
-    }
-
-    // pick up a 'send_message' event from the reactor, and put it to effect
-    // by constructing the chat message and sending it to the chat server.
     fn client_kicked<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
         _: client_kicked::Reader,
     ) -> Result<()>
     {
-        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<host_message::Owned>::new();
         chat_message.build(|b| {
-            b.set_message("You got kicked");
-            b.set_user("");
+            b.set_data(b"You got kicked");
         });
         handle.send_internal(chat_message)?;
 
@@ -297,279 +335,54 @@ impl HostLink {
     // reactor.
     fn receive_chat_message<C: Ctx>(
         &mut self,
-        handle: &mut LinkHandle<C>,
-        chat_message: host_message::Reader,
+        _handle: &mut LinkHandle<C>,
+        host_message: host_message::Reader,
     ) -> Result<()>
     {
-        let message = chat_message.get_data()?;
+        let message = host_message.get_data()?;
 
-        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
-        chat_message.build(|b| {
-            b.set_message(str::from_utf8(message).unwrap());
-            b.set_user("");
-        });
-        handle.send_internal(chat_message)?;
+        eprintln!("Got msg {:?}", String::from_utf8(message.to_vec()));
+        self.tx.try_send(String::from_utf8_lossy(&message).to_string()).expect("Fuck off");
 
         return Ok(());
     }
 }
 
-//
-struct RuntimeLink {
-    user: String,
-}
+struct RuntimeLink;
 
 impl RuntimeLink {
-    fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(foreign_id, self);
-        params.internal_handler(
-            chat_capnp::connect_to_gui::Owned,
-            CtxHandler::new(Self::connect_to_gui),
-        );
-
-        params.internal_handler(
-            chat_capnp::chat_message::Owned,
-            CtxHandler::new(Self::handle_chat_message),
-        );
+    fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, Self);
 
         params.external_handler(
-            chat_capnp::user_input::Owned,
-            CtxHandler::new(Self::handle_user_input),
+            actor_joined::Owned,
+            CtxHandler::new(actor_joined::e_to_i),
         );
+
+        params.external_handler(client_message::Owned, CtxHandler::new(Self::receive_chat_message));
 
         return params;
     }
 
-    // Send a message to the GUI controller to subscribe to input events.
-    fn connect_to_gui<C: Ctx>(
+    // receive a chat message from the chat server, and broadcast it on the
+    // reactor.
+    fn receive_chat_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        _: chat_capnp::connect_to_gui::Reader,
+        client_message: client_message::Reader,
     ) -> Result<()>
     {
-        let connect = MsgBuffer::<chat_capnp::connect_to_gui::Owned>::new();
-        handle.send_message(connect)?;
-        return Ok(());
-    }
+        let message = client_message.get_data()?;
 
-    // Pick up chat messages on the reactor, and forward them to the chat GUI.
-    fn handle_chat_message<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        chat_message: chat_capnp::chat_message::Reader,
-    ) -> Result<()>
-    {
-        let message = chat_message.get_message()?;
-        let user = chat_message.get_user()?;
+        eprintln!("Got msg {:?}", String::from_utf8(message.to_vec()));
 
-        let mut chat_message = MsgBuffer::<chat_capnp::chat_message::Owned>::new();
+        let mut chat_message = MsgBuffer::<client_message::Owned>::new();
         chat_message.build(|b| {
-            b.set_message(message);
-            b.set_user(user);
+            b.set_data(message);
         });
+
         handle.send_message(chat_message)?;
 
         return Ok(());
     }
-
-    fn handle_user_input<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        input: chat_capnp::user_input::Reader,
-    ) -> Result<()>
-    {
-        let message = input.get_text()?;
-
-        let mut send_message = MsgBuffer::<chat_capnp::send_message::Owned>::new();
-        send_message.build(|b| {
-            b.set_message(message);
-            b.set_user(&self.user);
-        });
-        handle.send_internal(send_message)?;
-
-        return Ok(());
-    }
-}
-
-// this code is hacked together, don't pay too much attention to it.
-mod runtime {
-    use capnp::any_pointer;
-    use capnp::traits::{Owned, HasTypeId};
-    use chat_capnp;
-    use errors::*;
-
-    use cursive::{Cursive, CbSink};
-    use cursive::views::{TextView, EditView};
-    use futures::{Future, Async, Poll, Stream};
-    use futures::sync::mpsc;
-    use mozaic::client::runtime::RuntimeState;
-    use mozaic::messaging::types::*;
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
-
-    struct HandlerState {
-        cb_sink: CbSink,
-        runtime: Arc<Mutex<RuntimeState>>,
-    }
-
-    /// ? Reads all messages from the RuntimeState and handles them.
-    /// ? It also creates new messages that are sent to the RuntimeState
-    pub struct RuntimeWorker {
-        msg_chan: mpsc::UnboundedReceiver<Message>,
-        handler_core: HandlerCore<HandlerState>,
-    }
-
-    impl RuntimeWorker {
-        pub fn spawn(
-            rx: mpsc::UnboundedReceiver<Message>,
-            cb_sink: CbSink,
-            runtime: Arc<Mutex<RuntimeState>>
-        ) {
-                let mut worker = RuntimeWorker {
-                    msg_chan: rx,
-                    handler_core: HandlerCore::new(
-                        HandlerState {
-                            cb_sink,
-                            runtime,
-                        }
-                    )
-                };
-
-                let _id = <chat_capnp::connect_to_gui::Owned as Owned>::Reader::type_id();
-                worker.handler_core.on(
-                    chat_capnp::connect_to_gui::Owned,
-                    FnHandler::new(rt_connect_to_gui),
-                );
-
-                let _id = <chat_capnp::chat_message::Owned as Owned>::Reader::type_id();
-                worker.handler_core.on(
-                    chat_capnp::chat_message::Owned,
-                    FnHandler::new(rt_display_chat_message),
-                );
-
-                tokio::spawn(worker);
-        }
-
-        fn handle_message(&mut self, msg: Message) {
-            self.handler_core.handle(&msg)
-                .expect("message handling failed");
-        }
-    }
-
-    impl Future for RuntimeWorker {
-        type Item = ();
-        type Error = ();
-
-        fn poll(&mut self) -> Poll<(), ()> {
-            loop {
-                match try_ready!(self.msg_chan.poll()) {
-                    None => return Ok(Async::Ready(())),
-                    Some(msg) => self.handle_message(msg),
-                }
-            }
-        }
-    }
-
-    fn rt_connect_to_gui(
-        ctx: &mut RtHandlerCtx<HandlerState>,
-        _: chat_capnp::connect_to_gui::Reader
-    ) -> Result<()>
-    {
-        let reactor_id = ctx.sender_id.clone();
-        let runtime = ctx.state.runtime.clone();
-
-        ctx.state.cb_sink.send(Box::new(|cursive: &mut Cursive| {
-            cursive.call_on_id("input", |view: &mut EditView| {
-                view.set_on_submit(move |cursive, input_text| {
-                    runtime.lock().unwrap().send_message(
-                        &reactor_id,
-                        chat_capnp::user_input::Owned,
-                        |b| {
-                            let mut input: chat_capnp::user_input::Builder = b.init_as();
-                            input.set_text(input_text);
-                        }).display();
-                    cursive.call_on_id("input", |view: &mut EditView| {
-                        view.set_content("");
-                    });
-                })
-            });
-        })).unwrap();
-
-        return Ok(());
-    }
-
-    fn rt_display_chat_message(
-        ctx: &mut RtHandlerCtx<HandlerState>,
-        msg: chat_capnp::chat_message::Reader
-    ) -> Result<()>
-    {
-        let message = msg.get_message()?.to_string();
-        let user = msg.get_user()?.to_string();
-        ctx.state.cb_sink.send(Box::new(|cursive: &mut Cursive| {
-            cursive.call_on_id("messages", |view: &mut TextView| {
-                view.append(user);
-                view.append(": ");
-                view.append(message);
-                view.append("\n");
-            });
-        })).unwrap();
-        return Ok(());
-    }
-
-    struct RtHandlerCtx<'a, S> {
-        pub sender_id: &'a ReactorId,
-        pub state: &'a mut S,
-    }
-
-
-    type RtMsgHandler<S> = Box<
-        dyn for<'a>
-            Handler<'a,
-                RtHandlerCtx<'a, S>,
-                any_pointer::Owned, Output=(), Error=errors::Error>
-    >;
-
-    pub struct HandlerCore<S> {
-        state: S,
-        handlers: HashMap<u64, RtMsgHandler<S>>,
-    }
-
-    impl<S> HandlerCore<S> {
-        pub fn new(state: S) -> Self {
-            HandlerCore {
-                state,
-                handlers: HashMap::new(),
-            }
-        }
-
-        fn on<M, H>(&mut self, _m: M, h: H)
-            where M: for<'a> Owned<'a> + Send + 'static,
-                <M as Owned<'static>>::Reader: HasTypeId,
-                H: 'static + for <'a> Handler<'a, RtHandlerCtx<'a, S>, M, Output=(), Error=errors::Error>
-        {
-            let boxed = Box::new(AnyPtrHandler::new(h));
-            self.handlers.insert(
-                <M as Owned<'static>>::Reader::type_id(),
-                boxed,
-            );
-        }
-
-        pub fn handle(&mut self, message: &Message)
-            -> Result<()>
-        {
-            let reader = message.reader();
-            let type_id = reader.get()?.get_type_id();
-
-            if let Some(handler) = self.handlers.get(&type_id) {
-                let sender_id: ReactorId = reader.get()?.get_sender()?.into();
-                let mut ctx = RtHandlerCtx {
-                    sender_id: &sender_id,
-                    state: &mut self.state,
-                };
-                handler.handle(&mut ctx, reader.get()?.get_payload())?;
-            }
-            return Ok(());
-        }
-    }
-
 }

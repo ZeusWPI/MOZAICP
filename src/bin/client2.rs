@@ -68,7 +68,6 @@ impl ClientReactor {
         _: initialize::Reader,
     ) -> Result<()>
     {
-        // open link with runtime, for communicating with chat GUI
         let runtime_link = RuntimeLink::params(handle.id().clone());
         handle.open_link(runtime_link)?;
 
