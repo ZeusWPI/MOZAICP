@@ -1,24 +1,24 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use core_capnp::{mozaic_message, initialize};
-use capnp::traits::{Owned, HasTypeId};
+use capnp::traits::{HasTypeId, Owned};
+use core_capnp::{drop, mozaic_message, initialize};
 
-use tokio;
-use futures::{Future, Async, Poll, Stream};
 use futures::sync::mpsc;
+use futures::{Async, Future, Poll, Stream};
+use tokio;
 
-use tracing::{info, span, Level, error, trace, field};
+use tracing::{error, field, info, span, trace, Level};
 use tracing_futures::Instrument;
 
 use rand;
 use rand::Rng;
 
-use messaging::types::*;
 use messaging::reactor::*;
+use messaging::types::*;
 
-use errors::ErrorKind::{NoSuchReactorError, MozaicError};
-use errors::{self, Consumable, ResultExt, Result};
+use errors::ErrorKind::{MozaicError, NoSuchReactorError};
+use errors::{self, Consumable, Result, ResultExt};
 
 /// The main runtime
 pub struct Runtime;
@@ -36,27 +36,25 @@ impl Broker {
             runtime_id: id.clone(),
             actors: HashMap::new(),
         };
-        let broker = BrokerHandle { broker: Arc::new(Mutex::new(broker)) };
+        let broker = BrokerHandle {
+            broker: Arc::new(Mutex::new(broker)),
+        };
 
         return Ok(broker);
     }
 
-    fn dispatch_message(&mut self, message: Message) -> Result<()>{
-        let receiver_id: ReactorId = message.reader()
-            .get()?
-            .get_receiver()?
-            .into();
+    fn dispatch_message(&mut self, message: Message) -> Result<()> {
+        let receiver_id: ReactorId = message.reader().get()?.get_receiver()?.into();
 
-        let sender_id: ReactorId = message.reader()
-            .get()?
-            .get_sender()?
-            .into();
+        let sender_id: ReactorId = message.reader().get()?.get_sender()?.into();
 
         let receiver = match self.actors.get_mut(&receiver_id.clone()) {
             Some(receiver) => receiver,
-            None           => {
+            None => {
                 error!("No such reactor {:?}", receiver_id);
-                return Err(errors::Error::from_kind(NoSuchReactorError(receiver_id.clone())));
+                return Err(errors::Error::from_kind(NoSuchReactorError(
+                    receiver_id.clone(),
+                )));
             }
         };
 
@@ -114,22 +112,33 @@ impl BrokerHandle {
         broker.actors.remove(&id);
     }
 
-
-    pub fn send_message_self<M, F>(&mut self, target: &ReactorId, m: M, initializer: F) -> Result<()>
-        where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
-              M: Owned<'static>,
-              <M as Owned<'static>>::Builder: HasTypeId,
+    pub fn send_message_self<M, F>(
+        &mut self,
+        target: &ReactorId,
+        m: M,
+        initializer: F,
+    ) -> Result<()>
+    where
+        F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
+        M: Owned<'static>,
+        <M as Owned<'static>>::Builder: HasTypeId,
     {
         trace!("Sending message as runtime to {:?}", target);
 
         self.send_message(&self.get_runtime_id(), target, m, initializer)
     }
 
-    pub fn send_message<M, F>(&mut self, sender: &ReactorId, target: &ReactorId, _m: M, initializer: F) -> Result<()>
-        where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
-              M: Owned<'static>,
-              <M as Owned<'static>>::Builder: HasTypeId,
-
+    pub fn send_message<M, F>(
+        &mut self,
+        sender: &ReactorId,
+        target: &ReactorId,
+        _m: M,
+        initializer: F,
+    ) -> Result<()>
+    where
+        F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
+        M: Owned<'static>,
+        <M as Owned<'static>>::Builder: HasTypeId,
     {
         trace!("Sending message {:?} -> {:?}", sender, target);
 
@@ -157,8 +166,14 @@ impl BrokerHandle {
         broker.dispatch_message(msg)
     }
 
-    pub fn spawn<S>(&mut self, id: ReactorId, core_params: CoreParams<S, Runtime>, name: &str) -> Result<()>
-        where S: 'static + Send
+    pub fn spawn<S>(
+        &mut self,
+        id: ReactorId,
+        core_params: CoreParams<S, Runtime>,
+        name: &str,
+    ) -> Result<()>
+    where
+        S: 'static + Send,
     {
         info!("Spawning new reactor {} {:?}", name, id);
 
@@ -180,6 +195,7 @@ impl BrokerHandle {
                 internal_queue: VecDeque::new(),
                 message_chan: rx,
                 reactor,
+                should_close: false,
             }
         };
 
@@ -195,7 +211,12 @@ impl BrokerHandle {
             reactor_handle.send_internal(initialize)?;
         }
 
-        tokio::spawn(driver.instrument(span!(Level::TRACE, "driver", name = name, id = field::debug(&id))));
+        tokio::spawn(driver.instrument(span!(
+            Level::TRACE,
+            "driver",
+            name = name,
+            id = field::debug(&id)
+        )));
 
         Ok(())
     }
@@ -207,13 +228,13 @@ enum InternalOp {
     CloseLink(ReactorId),
 }
 
-
 pub struct ReactorDriver<S: 'static> {
     message_chan: mpsc::UnboundedReceiver<Message>,
     internal_queue: VecDeque<InternalOp>,
     broker: BrokerHandle,
 
     reactor: Reactor<S, Runtime>,
+    should_close: bool,
 }
 
 impl<S: 'static> ReactorDriver<S> {
@@ -223,12 +244,13 @@ impl<S: 'static> ReactorDriver<S> {
             internal_queue: &mut self.internal_queue,
             broker: &mut self.broker,
         };
-        self.reactor.handle_external_message(&mut handle, message)
-            .chain_err(|| "handling failed").display();
+        self.reactor
+            .handle_external_message(&mut handle, message)
+            .chain_err(|| "handling failed")
+            .display();
     }
 
     fn handle_internal_queue(&mut self) {
-
         while let Some(op) = self.internal_queue.pop_front() {
             match op {
                 InternalOp::Message(msg) => {
@@ -237,18 +259,28 @@ impl<S: 'static> ReactorDriver<S> {
                         internal_queue: &mut self.internal_queue,
                         broker: &mut self.broker,
                     };
-                    self.reactor.handle_internal_message(&mut handle, msg)
-                        .chain_err(|| "handling failed").display();
+                    self.reactor
+                        .handle_internal_message(&mut handle, msg)
+                        .chain_err(|| "handling failed")
+                        .display();
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();
-                    info!("Open link {:?} -> {:?}", field::debug(&self.reactor.id), field::debug(&uuid));
+                    info!(
+                        "Open link {:?} -> {:?}",
+                        field::debug(&self.reactor.id),
+                        field::debug(&uuid)
+                    );
 
                     let link = params.into_link();
                     self.reactor.links.insert(uuid, link);
                 }
                 InternalOp::CloseLink(uuid) => {
-                    info!("Close link {:?} -> {:?}", field::debug(&self.reactor.id), field::debug(&uuid));
+                    info!(
+                        "Close link {:?} -> {:?}",
+                        field::debug(&self.reactor.id),
+                        field::debug(&uuid)
+                    );
 
                     self.reactor.links.remove(&uuid);
                 }
@@ -265,14 +297,30 @@ impl<S: 'static> Future for ReactorDriver<S> {
         loop {
             self.handle_internal_queue();
 
-            if self.reactor.links.is_empty() {
-            // if self.reactor.links.keys().all(|k| k == &self.reactor.id) {
+            if self.should_close {
+                // if self.reactor.links.keys().all(|k| k == &self.reactor.id) {
                 // all internal ops have been handled and no new messages can
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
 
                 info!("Disconnecting reactor {:?}", field::debug(&self.reactor.id));
                 return Ok(Async::Ready(()));
+            }
+
+            if self.reactor.links.is_empty() {
+                {
+                    let mut ctx_handle = DriverHandle {
+                        broker: &mut self.broker,
+                        internal_queue: &mut self.internal_queue,
+                    };
+
+                    let mut reactor_handle = self.reactor.handle(&mut ctx_handle);
+
+                    let drop = MsgBuffer::<drop::Owned>::new();
+                    reactor_handle.send_internal(drop).expect("Failed to send drop message");
+                }
+
+                self.should_close = true;
             }
 
             match try_ready!(self.message_chan.poll()) {
@@ -295,7 +343,6 @@ pub struct DriverHandle<'a> {
 }
 
 impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
-
     fn dispatch_internal(&mut self, msg: Message) -> Result<()> {
         self.internal_queue.push_back(InternalOp::Message(msg));
         Ok(())
@@ -306,7 +353,8 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
     }
 
     fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, name: &str) -> Result<ReactorId>
-        where T: 'static + Send
+    where
+        T: 'static + Send,
     {
         let id: ReactorId = rand::thread_rng().gen();
         self.broker.spawn(id.clone(), params, name)?;
@@ -314,14 +362,17 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
     }
 
     fn open_link<T>(&mut self, params: LinkParams<T, Runtime>) -> Result<()>
-        where T: 'static + Send
+    where
+        T: 'static + Send,
     {
-        self.internal_queue.push_back(InternalOp::OpenLink(Box::new(params)));
+        self.internal_queue
+            .push_back(InternalOp::OpenLink(Box::new(params)));
         Ok(())
     }
 
     fn close_link(&mut self, id: &ReactorId) -> Result<()> {
-        self.internal_queue.push_back(InternalOp::CloseLink(id.clone()));
+        self.internal_queue
+            .push_back(InternalOp::CloseLink(id.clone()));
         Ok(())
     }
 }

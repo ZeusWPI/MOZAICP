@@ -11,6 +11,8 @@ struct TerminateStream {}
 
 struct Initialize {}
 
+struct Drop {}
+
 struct Message {
     typeId @0: UInt64;
     data @1: AnyPointer;

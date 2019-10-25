@@ -30,18 +30,12 @@ use cursive::theme::Theme;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::views::{TextView, EditView, LinearLayout};
 
-// pub mod chat {
-//     include!(concat!(env!("OUT_DIR"), "/chat_capnp.rs"));
-// }
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let id = args.get(1).unwrap().parse().unwrap();
 
     let addr = "127.0.0.1:9142".parse().unwrap();
     let self_id: ReactorId = rand::thread_rng().gen();
-
-    println!("My id {:?}", self_id);
 
     // Creates the cursive root - required for every application.
     let mut siv = Cursive::default();
@@ -69,7 +63,6 @@ fn main() {
 
     let _cb_sink = cb_sink.clone();
     let recv = rx.for_each(move |message| {
-        eprintln!("Got message {}", message);
         _cb_sink.send(Box::new(|cursive: &mut Cursive| {
             cursive.call_on_id("messages", |view: &mut TextView| {
                 view.append(message);
@@ -79,32 +72,6 @@ fn main() {
 
         Ok(())
     }).map_err(|_| ());
-
-    // cb_sink.send(Box::new(|cursive: &mut Cursive| {
-    //         cursive.call_on_id("input", |view: &mut EditView| {
-    //             view.set_on_submit(move |cursive, input_text| {
-    //                 runtime.lock().unwrap().send_message(
-    //                     &reactor_id,
-    //                     chat_capnp::user_input::Owned,
-    //                     |b| {
-    //                         let mut input: chat_capnp::user_input::Builder = b.init_as();
-    //                         input.set_text(input_text);
-    //                     }).display();
-    //                 cursive.call_on_id("input", |view: &mut EditView| {
-    //                     view.set_content("");
-    //                 });
-    //             })
-    //         });
-    //     })).unwrap();
-
-    //     ctx.state.cb_sink.send(Box::new(|cursive: &mut Cursive| {
-    //     cursive.call_on_id("messages", |view: &mut TextView| {
-    //         view.append(user);
-    //         view.append(": ");
-    //         view.append(message);
-    //         view.append("\n");
-    //     });
-    // })).unwrap();
 
     thread::spawn(move || {
         tokio::run(futures::lazy(move || {
@@ -147,8 +114,6 @@ fn main() {
         }));
     });
 
-    eprintln!("Here");
-
     siv.set_fps(10);
     // Starts the event loop.
     siv.run();
@@ -180,7 +145,6 @@ impl ClientReactor {
         _: initialize::Reader,
     ) -> Result<()>
     {
-        println!("Opening runtime link with {:?}", handle.id());
         let runtime_link = RuntimeLink::params(handle.id().clone());
         handle.open_link(runtime_link)?;
 
@@ -194,8 +158,6 @@ impl ClientReactor {
     ) -> Result<()>
     {
         let id = r.get_id()?;
-
-        println!("Got actor joined {:?}", id);
 
         if let Some(server) = &self.server {
             handle.open_link(HostLink::params(self.tx.clone(), ReactorId::from(id)))?;
@@ -340,8 +302,6 @@ impl HostLink {
     ) -> Result<()>
     {
         let message = host_message.get_data()?;
-
-        eprintln!("Got msg {:?}", String::from_utf8(message.to_vec()));
         self.tx.try_send(String::from_utf8_lossy(&message).to_string()).expect("Fuck off");
 
         return Ok(());
@@ -374,14 +334,12 @@ impl RuntimeLink {
     {
         let message = client_message.get_data()?;
 
-        eprintln!("Got msg {:?}", String::from_utf8(message.to_vec()));
-
         let mut chat_message = MsgBuffer::<client_message::Owned>::new();
         chat_message.build(|b| {
             b.set_data(message);
         });
 
-        handle.send_message(chat_message)?;
+        handle.send_internal(chat_message)?;
 
         return Ok(());
     }
