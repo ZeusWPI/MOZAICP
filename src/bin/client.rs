@@ -16,8 +16,7 @@ use mozaic::messaging::types::*;
 use mozaic::errors::*;
 use mozaic::base_capnp::{client_message, host_message};
 use mozaic::connection_capnp::{client_kicked};
-use mozaic::server::runtime::{Broker, BrokerHandle};
-use mozaic::server;
+use mozaic::runtime::{self, Broker, BrokerHandle};
 
 use std::thread;
 use std::env;
@@ -108,7 +107,7 @@ fn main() {
                     });
                 })).expect("Civ error 2");
 
-                tokio::spawn(server::connect_to_server(broker, self_id, &addr));
+                tokio::spawn(runtime::connect_to_server(broker, self_id, &addr));
 
                 Ok(())
         }));

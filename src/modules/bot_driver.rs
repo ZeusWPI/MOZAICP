@@ -8,7 +8,7 @@ use cmd_capnp::{bot_return, bot_input};
 use std::process::{Command, Stdio};
 use std::io::BufReader;
 
-use server::runtime::BrokerHandle;
+use runtime::BrokerHandle;
 
 use futures::{Future, Stream};
 

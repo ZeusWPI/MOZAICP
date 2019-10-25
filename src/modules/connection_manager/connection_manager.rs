@@ -9,9 +9,9 @@ use core_capnp::{actor_joined, actors_joined, identify};
 use network_capnp::{disconnected};
 use connection_capnp::{client_disconnected, client_connected, host_connected};
 
-use server::runtime::BrokerHandle;
+use runtime::{BrokerHandle};
 
-use server::TcpServer;
+use runtime::TcpServer;
 use std::net::SocketAddr;
 
 use std::collections::{HashMap};

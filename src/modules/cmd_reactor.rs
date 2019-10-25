@@ -8,7 +8,7 @@ use cmd_capnp::{cmd_input, cmd_return};
 use std::io::{self, BufRead, Write, stdout};
 use std::thread;
 
-use server::runtime::BrokerHandle;
+use runtime::BrokerHandle;
 
 use futures::{Future, Sink, Stream};
 use futures::sync::mpsc::channel;

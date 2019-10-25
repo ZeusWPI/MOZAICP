@@ -3,7 +3,7 @@ use messaging::reactor::*;
 use messaging::types::*;
 use errors::{Result, Consumable};
 use core_capnp::{initialize};
-use server::runtime::{BrokerHandle};
+use runtime::{BrokerHandle};
 
 use steplock_capnp::{timeout, set_timeout};
 use base_capnp::{from_client, to_client, host_message, client_step};

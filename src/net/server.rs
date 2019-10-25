@@ -1,4 +1,4 @@
-use server::runtime::{BrokerHandle};
+use runtime::{BrokerHandle};
 use messaging::types::{Message, VecSegment, ReactorId};
 use errors;
 use futures::sync::mpsc;

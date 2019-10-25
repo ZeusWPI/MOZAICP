@@ -48,7 +48,7 @@ impl game::GameController for Server {
     }
 }
 
-use mozaic::server::runtime::{Broker};
+use mozaic::runtime::{Broker};
 use rand::Rng;
 use mozaic::errors::Consumable;
 use mozaic::modules::ConnectionManager;

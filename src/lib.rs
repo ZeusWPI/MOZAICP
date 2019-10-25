@@ -29,7 +29,7 @@ extern crate mozaic_derive;
 pub mod messaging;
 pub mod net;
 
-pub mod server;
+pub mod runtime;
 
 pub mod modules;
 

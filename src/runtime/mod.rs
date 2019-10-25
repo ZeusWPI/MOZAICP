@@ -10,14 +10,14 @@ use rand::Rng;
 use messaging::types::*;
 use messaging::reactor::{CoreParams};
 
-use self::runtime::{Broker, BrokerHandle, Runtime};
+pub use self::runtime::{Broker, BrokerHandle, Runtime};
 
 use net::server::{ServerHandler, ClientHandler};
 
 pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
     where F: Send + 'static + FnOnce(ReactorId) -> CoreParams<S, Runtime>,
           S: Send + 'static
-{ 
+{
 
     // let stupid = Stupid { greeter_id: greeter_id.clone(), broker: broker.clone()};
     // let mut params: CoreParams<Stupid, Runtime> = stupid.params();

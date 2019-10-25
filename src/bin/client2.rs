@@ -14,8 +14,7 @@ use mozaic::errors::*;
 use mozaic::base_capnp::{client_message, host_message};
 use mozaic::connection_capnp::{client_kicked};
 use mozaic::cmd_capnp::{bot_input, bot_return};
-use mozaic::server::runtime::{Broker, BrokerHandle};
-use mozaic::server;
+use mozaic::runtime::{self, Broker, BrokerHandle};
 
 use rand::Rng;
 
@@ -37,7 +36,7 @@ fn main() {
         };
         broker.spawn(self_id.clone(), reactor.params(), "main").display();
 
-        tokio::spawn(server::connect_to_server(broker, self_id, &addr));
+        tokio::spawn(runtime::connect_to_server(broker, self_id, &addr));
 
         Ok(())
     }));
