@@ -188,7 +188,7 @@ impl HostLink {
         let id = r.get_id();
         let self_id: u64 = self.client_id.into();
 
-        // Only pass message throug if it is ment for my client
+        // Only pass message throug if it is meant for my client
         if id == self_id {
 
             let mut joined = MsgBuffer::<client_kicked::Owned>::new();

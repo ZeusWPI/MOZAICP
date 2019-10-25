@@ -11,19 +11,12 @@ struct TerminateStream {}
 
 struct Initialize {}
 
+# This message is sent when a reactor is about to be dropped
 struct Drop {}
 
 struct Message {
     typeId @0: UInt64;
     data @1: AnyPointer;
-}
-
-struct SendGreeting {
-    message @0: Text;
-}
-
-struct Greeting {
-    message @0: Text;
 }
 
 struct ActorJoined {
@@ -38,4 +31,7 @@ struct Identify {
     key @0: UInt64;
 }
 
-struct CloseLink { }
+# You can send this message to indicate something it should close
+struct Close {}
+
+struct CloseLink {}

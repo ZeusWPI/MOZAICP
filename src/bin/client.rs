@@ -10,7 +10,7 @@ use tokio::prelude::Stream;
 use tokio::sync::mpsc;
 use futures::Future;
 
-use mozaic::core_capnp::{initialize, terminate_stream, identify, actor_joined};
+use mozaic::core_capnp::{initialize, terminate_stream, identify, actor_joined, close, drop};
 use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::errors::*;
@@ -24,7 +24,7 @@ use std::env;
 use rand::Rng;
 
 use cursive::align::VAlign;
-use cursive::Cursive;
+use cursive::{Cursive, CbSink};
 use cursive::theme::Theme;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::views::{TextView, EditView, LinearLayout};
@@ -72,6 +72,7 @@ fn main() {
         Ok(())
     }).map_err(|_| ());
 
+    let _cb_sink = cb_sink.clone();
     thread::spawn(move || {
         tokio::run(futures::lazy(move || {
                 tokio::spawn(recv);
@@ -82,6 +83,7 @@ fn main() {
                     id,
                     broker: broker.clone(),
                     tx,
+                    cb_sink: _cb_sink.clone(),
                 };
                 broker.spawn(self_id.clone(), reactor.params(), "main").display();
 
@@ -127,6 +129,7 @@ struct ClientReactor {
     id: u64,
     broker: BrokerHandle,
     tx: mpsc::Sender<String>,
+    cb_sink: CbSink,
 }
 
 impl ClientReactor {
@@ -134,6 +137,8 @@ impl ClientReactor {
         let mut params = CoreParams::new(self);
         params.handler(initialize::Owned, CtxHandler::new(Self::initialize));
         params.handler(actor_joined::Owned, CtxHandler::new(Self::open_host));
+        params.handler(drop::Owned, CtxHandler::new(Self::drop));
+
         return params;
     }
 
@@ -148,6 +153,21 @@ impl ClientReactor {
         handle.open_link(runtime_link)?;
 
         return Ok(());
+    }
+
+    // reactor drop
+    fn drop<C: Ctx>(
+        &mut self,
+        _: &mut ReactorHandle<C>,
+        _: drop::Reader,
+    ) -> Result<()>
+    {
+        println!("Dropping!");
+        self.cb_sink.send(Box::new(|cursive: &mut Cursive| {
+            cursive.quit();
+        })).unwrap();
+
+        Ok(())
     }
 
     fn open_host<C: Ctx>(
@@ -214,6 +234,8 @@ impl ServerLink {
         joined.build(|b| b.set_id(id));
         handle.send_internal(joined)?;
 
+        handle.close_link()?;
+
         Ok(())
     }
 
@@ -258,6 +280,11 @@ impl HostLink {
         );
 
         params.internal_handler(
+            host_message::Owned,
+            CtxHandler::new(Self::receive_chat_message),
+        );
+
+        params.internal_handler(
             client_message::Owned,
             CtxHandler::new(client_message::i_to_e),
         );
@@ -284,7 +311,7 @@ impl HostLink {
         });
         handle.send_internal(chat_message)?;
 
-        let chat_message = MsgBuffer::<client_kicked::Owned>::new();
+        let chat_message = MsgBuffer::<close::Owned>::new();
         handle.send_internal(chat_message)?;
 
         handle.close_link()?;
@@ -318,6 +345,10 @@ impl RuntimeLink {
             CtxHandler::new(actor_joined::e_to_i),
         );
 
+        params.internal_handler(
+            close::Owned,
+            CtxHandler::new(Self::close));
+
         params.external_handler(client_message::Owned, CtxHandler::new(Self::receive_chat_message));
 
         return params;
@@ -341,5 +372,17 @@ impl RuntimeLink {
         handle.send_internal(chat_message)?;
 
         return Ok(());
+    }
+
+    fn close<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        _: close::Reader,
+    ) -> Result<()>
+    {
+        println!("Closing");
+        handle.close_link()?;
+
+        Ok(())
     }
 }

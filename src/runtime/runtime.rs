@@ -166,6 +166,10 @@ impl BrokerHandle {
         broker.dispatch_message(msg)
     }
 
+    pub fn reactor_exists(&self, id: &ReactorId) -> bool {
+        self.broker.lock().unwrap().actors.contains_key(id)
+    }
+
     pub fn spawn<S>(
         &mut self,
         id: ReactorId,
@@ -307,6 +311,7 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 return Ok(Async::Ready(()));
             }
 
+            // close if you have no links, you should close 'auto' links yourself.
             if self.reactor.links.is_empty() {
                 {
                     let mut ctx_handle = DriverHandle {

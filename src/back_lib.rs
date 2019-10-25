@@ -80,11 +80,6 @@ pub mod core_capnp {
     add_gen!(%%/core_capnp.rs%%);
 }
 
-/// deprecated
-pub mod chat_capnp {
-    add_gen!(%%/chat_capnp.rs%%);
-}
-
 /// Network related capnp messages
 pub mod network_capnp {
     add_gen!(%%/network_capnp.rs%%);

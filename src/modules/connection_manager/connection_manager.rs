@@ -5,7 +5,7 @@ use messaging::types::*;
 use errors::{Result, Consumable};
 use core_capnp::{initialize};
 
-use core_capnp::{actor_joined, actors_joined, identify};
+use core_capnp::{actor_joined, actors_joined, identify, close};
 use network_capnp::{disconnected};
 use connection_capnp::{client_disconnected, client_connected, host_connected};
 
@@ -19,8 +19,6 @@ use std::collections::{HashMap};
 use modules::util::{Identifier, PlayerId};
 use super::client_controller::CCReactor;
 
-// TODO: TIMEOUTS?
-// TODO: Now only distributed messages are supported, add one on one conversation options
 /// Main connection manager, creates handles for as many players as asked for
 /// Handles disconnects, reconnects etc, host can always send messages to everybody
 pub struct ConnectionManager {

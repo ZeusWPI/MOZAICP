@@ -9,7 +9,6 @@ fn main() -> std::io::Result<()> {
         .src_prefix("./schema")
         .file("./schema/core.capnp")
         .file("./schema/network.capnp")
-        .file("./schema/chat.capnp")    // TODO: remove chat capnp
         .file("./schema/mozaic/cmd.capnp")
         .file("./schema/mozaic/logging.capnp")
         .file("./schema/mozaic/base.capnp")
