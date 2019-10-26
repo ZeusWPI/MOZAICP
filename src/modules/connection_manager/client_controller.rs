@@ -5,7 +5,7 @@ use messaging::types::*;
 use errors::{Result, Consumable};
 use core_capnp::{initialize};
 
-use core_capnp::{actor_joined};
+use core_capnp::{actor_joined, close};
 use base_capnp::{from_client, client_message, to_client, host_message, inner_to_client};
 use connection_capnp::{client_disconnected, client_kicked};
 
@@ -131,6 +131,9 @@ impl ConnectionManagerLink {
         handle: &mut LinkHandle<C>,
         _: client_kicked::Reader,
     ) -> Result<()> {
+        let joined = MsgBuffer::<close::Owned>::new();
+        trace!("Handle kick");
+        handle.send_message(joined)?;
         handle.close_link()?;
         Ok(())
     }
@@ -275,6 +278,7 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         _: client_kicked::Reader,
     ) -> Result<()> {
+        trace!("Handling kicked");
         let inner_msg = MsgBuffer::<client_kicked::Owned>::new();
 
         handle.send_message(inner_msg).display();

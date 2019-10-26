@@ -61,7 +61,7 @@ pub fn run(args : Vec<String>) {
         .with_env_filter(EnvFilter::from_default_env())
         .without_time()
         .inherit_fields(true)
-        .with_max_level(Level::DEBUG)
+        .with_max_level(Level::TRACE)
         .finish();
     let _ = tracing::subscriber::set_global_default(subscriber);
 

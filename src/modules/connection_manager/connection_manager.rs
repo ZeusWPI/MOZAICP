@@ -157,7 +157,24 @@ impl ClientControllerLink {
             CtxHandler::new(Self::i_handle_disconnected),
         );
 
+        params.external_handler(
+            close::Owned,
+            CtxHandler::new(Self::e_handle_close)
+        );
+
         return params;
+    }
+
+    fn e_handle_close<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        r: close::Reader,
+    ) -> Result<()> {
+        trace!("close event");
+
+        handle.close_link()?;
+
+        Ok(())
     }
 
     fn i_handle_connected<C: Ctx>(
@@ -264,6 +281,7 @@ impl ClientLink {
         // If not the client is not yet registered, so it doesn't matter
         if let Some(key) = self.key {
             info!("DISCONNECTED {:?}", handle.remote_uuid());
+            trace!("Handling disconnect");
             let mut msg = MsgBuffer::<client_disconnected::Owned>::new();
 
             msg.build(|b| {
@@ -271,7 +289,6 @@ impl ClientLink {
             });
             handle.send_internal(msg)?;
 
-            error!("DISCONNECTING");
             // Don't try to close the link on the other side, because pipe is already broken
             handle.close_link_hard()?;
         }
