@@ -168,7 +168,7 @@ impl ClientControllerLink {
     fn e_handle_close<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        r: close::Reader,
+        _: close::Reader,
     ) -> Result<()> {
         trace!("close event");
 
