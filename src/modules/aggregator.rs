@@ -1,13 +1,11 @@
-
-
+use core_capnp::initialize;
+use errors::Result;
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{Result};
-use core_capnp::{initialize};
 
-use core_capnp::{actors_joined};
-use base_capnp::{from_client, to_client, host_message};
-use connection_capnp::{client_kicked};
+use base_capnp::{from_client, host_message, to_client};
+use connection_capnp::client_kicked;
+use core_capnp::actors_joined;
 
 pub struct Aggregator {
     connection_manager: ReactorId,
@@ -23,7 +21,10 @@ impl Aggregator {
         let mut params = CoreParams::new(me);
 
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
-        params.handler(actors_joined::Owned, CtxHandler::new(Self::handle_actors_joined));
+        params.handler(
+            actors_joined::Owned,
+            CtxHandler::new(Self::handle_actors_joined),
+        );
 
         return params;
     }
@@ -32,9 +33,7 @@ impl Aggregator {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<()>
-    {
-
+    ) -> Result<()> {
         handle.open_link(HostLink::params(self.host.clone()))?;
         handle.open_link(ConnectionsLink::params(self.connection_manager.clone()))?;
 
@@ -45,8 +44,7 @@ impl Aggregator {
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: actors_joined::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         for id in msg.get_ids()?.iter() {
             let id = id.unwrap();
             let client_id = ReactorId::from(id);
@@ -59,7 +57,6 @@ impl Aggregator {
 struct HostLink;
 impl HostLink {
     fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
-
         let mut params = LinkParams::new(remote_id, HostLink);
 
         params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
@@ -72,16 +69,12 @@ impl HostLink {
     }
 }
 
-
 struct ConnectionsLink;
 impl ConnectionsLink {
     fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(remote_id, ConnectionsLink);
 
-        params.external_handler(
-            actors_joined::Owned,
-            CtxHandler::new(actors_joined::e_to_i),
-        );
+        params.external_handler(actors_joined::Owned, CtxHandler::new(actors_joined::e_to_i));
 
         return params;
     }

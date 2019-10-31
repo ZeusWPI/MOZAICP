@@ -314,7 +314,7 @@ impl HostLink {
         let chat_message = MsgBuffer::<close::Owned>::new();
         handle.send_internal(chat_message)?;
 
-        handle.close_link()?;
+        // handle.close_link()?;
 
         return Ok(());
     }

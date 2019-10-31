@@ -58,10 +58,10 @@ use std::collections::HashMap;
 pub fn run(args : Vec<String>) {
 
     let subscriber = fmt::Subscriber::builder()
+        .with_max_level(Level::TRACE)
         .with_env_filter(EnvFilter::from_default_env())
         .without_time()
         .inherit_fields(true)
-        .with_max_level(Level::TRACE)
         .finish();
     let _ = tracing::subscriber::set_global_default(subscriber);
 

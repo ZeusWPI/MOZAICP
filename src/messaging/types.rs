@@ -9,6 +9,8 @@ use capnp::any_pointer;
 use capnp::traits::{Owned, HasTypeId};
 use core_capnp::mozaic_message;
 
+use HasNamedTypeId;
+
 /// Handles messages of type M with lifetime 'a, using state S.
 pub trait Handler<'a, S, M>: Send
     where M: Owned<'a>
@@ -226,7 +228,7 @@ pub struct MsgBuffer<T> {
 
 impl<T> MsgBuffer<T>
     where T: for<'a> Owned<'a>,
-          <T as Owned<'static>>::Builder: HasTypeId,
+          <T as Owned<'static>>::Builder: HasNamedTypeId,
 {
     pub fn new() -> Self {
         let mut b = MsgBuffer {

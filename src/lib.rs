@@ -35,6 +35,14 @@ pub mod modules;
 
 pub mod errors;
 
+use capnp::traits::HasTypeId;
+
+pub trait HasNamedTypeId: HasTypeId {
+  fn get_name() -> &'static str {
+    return "";
+  }
+}
+
 ///
 /// Generate extra functions for this schema file.
 /// Generates e_to_i external to internal, so retransmitting all internal messages of type to external
@@ -67,6 +75,17 @@ macro_rules! add_gen {
             let m = ::messaging::types::MsgBuffer::<Owned>::from_reader(r)?;
             h.send_message(m)?;
             Ok(())
+        }
+
+        impl<'a> ::HasNamedTypeId for Reader<'a> {
+            fn get_name()->&'static str {
+              stringify!($name)
+            }
+        }
+        impl<'a> ::HasNamedTypeId for Builder<'a> {
+            fn get_name()->&'static str {
+              stringify!($name)
+            }
         }
 
         $($content)*

@@ -71,8 +71,6 @@ impl ServerHandler {
     {
 
         if let Some(sender) = &self.connecting_id {
-            // TODO: this is the problem, you don't want to send disconnected to the welcomer but to the client controller
-            info!("Handling disconnect of {:?}", sender);
             self.broker.unregister(&sender);
 
             self.broker.send_message(&sender, &self.welcomer_id, disconnected::Owned, |b| {

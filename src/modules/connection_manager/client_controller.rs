@@ -280,9 +280,9 @@ impl ClientLink {
     ) -> Result<()> {
         trace!("Handling kicked");
         let inner_msg = MsgBuffer::<client_kicked::Owned>::new();
-
         handle.send_message(inner_msg).display();
-        handle.close_link().display();
+
+        handle.close_link()?;
         Ok(())
     }
 }

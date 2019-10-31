@@ -8,6 +8,8 @@ use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 
 use core_capnp::{mozaic_message, terminate_stream};
 
+use HasNamedTypeId;
+
 /// Runtime trait
 pub trait Ctx : 'static + for<'a> Context<'a> {}
 impl<C> Ctx for C where C: 'static + for<'a> Context<'a> {}
@@ -131,6 +133,16 @@ impl<S, C: Ctx> Reactor<S, C> {
         return Ok(());
     }
 
+    pub fn destroy(
+        &mut self,
+    ) -> Result<()> {
+        for (_id, _link) in self.links.iter() {
+
+        }
+
+        Ok(())
+    }
+
     // helper function for implementing runtimes, should go sometime soon
     pub fn handle<'a, 'c>(&'a self, ctx: &'a mut <C as Context<'c>>::Handle)
         -> ReactorHandle<'a, 'c, C>
@@ -164,11 +176,16 @@ impl<C> Link<C>
         msg: mozaic_message::Reader,
     ) -> Result<()>
     {
+
         if msg.get_type_id() == terminate_stream::Reader::type_id() {
             self.link_state.remote_closed = true;
+            self.link_state.local_closed = true;
+            handle.ctx.close_link(&self.remote_id)?;
+            return Ok(());
         }
 
         let mut link_handle = handle.link_handle(&self.remote_id, &mut self.link_state);
+
         return self.reducer.handle_external(&mut link_handle, msg);
     }
 
@@ -356,9 +373,13 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
         if self.link_state.local_closed {
             return Ok(());
         }
+
+        if self.link_state.remote_closed {
+            return self._close_link();
+        }
+
         let msg = MsgBuffer::<terminate_stream::Owned>::new();
         self.send_message(msg).display();
-
         self._close_link()
     }
 
@@ -495,7 +516,7 @@ impl<S, C: Ctx> CoreParams<S, C> {
 
     pub fn handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasTypeId,
+             <M as Owned<'static>>::Reader: HasNamedTypeId,
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
@@ -528,7 +549,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
 
     pub fn internal_handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasTypeId,
+             <M as Owned<'static>>::Reader: HasNamedTypeId,
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
@@ -541,7 +562,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
 
     pub fn external_handler<M, H>(&mut self, _m: M, h: H)
         where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasTypeId,
+             <M as Owned<'static>>::Reader: HasNamedTypeId,
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));

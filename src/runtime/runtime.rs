@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use capnp::traits::{HasTypeId, Owned};
-use core_capnp::{drop, mozaic_message, initialize};
+use core_capnp::{drop, initialize, mozaic_message};
 
 use futures::sync::mpsc;
 use futures::{Async, Future, Poll, Stream};
@@ -19,6 +19,8 @@ use messaging::types::*;
 
 use errors::ErrorKind::{MozaicError, NoSuchReactorError};
 use errors::{self, Consumable, Result, ResultExt};
+
+use HasNamedTypeId;
 
 /// The main runtime
 pub struct Runtime;
@@ -44,9 +46,14 @@ impl Broker {
     }
 
     fn dispatch_message(&mut self, message: Message) -> Result<()> {
-        let receiver_id: ReactorId = message.reader().get()?.get_receiver()?.into();
+        let (receiver_id, sender_id): (ReactorId, ReactorId) = {
+            let r = message.reader();
+            let rr = r.get()?;
 
-        let sender_id: ReactorId = message.reader().get()?.get_sender()?.into();
+            (rr.get_receiver()?.into(), rr.get_sender()?.into())
+        };
+
+        trace!("Dispatching {:?} -> {:?}", sender_id, receiver_id);
 
         let receiver = match self.actors.get_mut(&receiver_id.clone()) {
             Some(receiver) => receiver,
@@ -81,8 +88,6 @@ impl BrokerHandle {
     }
 
     pub fn dispatch_message(&mut self, message: Message) -> Result<()> {
-        trace!("Dispatching message");
-
         let mut broker = self.broker.lock().unwrap();
         broker.dispatch_message(message)
     }
@@ -105,8 +110,14 @@ impl BrokerHandle {
         self.register(id, tx);
     }
 
+    pub fn drop_reactor(&mut self, _id: &ReactorId) {
+
+    }
+
     pub fn unregister(&mut self, id: &ReactorId) {
-        trace!("Unregistering reactor {:?}", id);
+        // Maybe check to close all links to this reactor
+
+        info!("Unregistering reactor {:?}", id);
 
         let mut broker = self.broker.lock().unwrap();
         broker.actors.remove(&id);
@@ -121,7 +132,7 @@ impl BrokerHandle {
     where
         F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
         M: Owned<'static>,
-        <M as Owned<'static>>::Builder: HasTypeId,
+        <M as Owned<'static>>::Builder: HasNamedTypeId,
     {
         trace!("Sending message as runtime to {:?}", target);
 
@@ -138,9 +149,14 @@ impl BrokerHandle {
     where
         F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
         M: Owned<'static>,
-        <M as Owned<'static>>::Builder: HasTypeId,
+        <M as Owned<'static>>::Builder: HasNamedTypeId,
     {
-        trace!("Sending message {:?} -> {:?}", sender, target);
+        trace!(
+            "Sending {} message {:?} -> {:?}",
+            <M as Owned<'static>>::Builder::get_name(),
+            sender,
+            target
+        );
 
         let mut broker = self.broker.lock().unwrap();
 
@@ -200,6 +216,8 @@ impl BrokerHandle {
                 message_chan: rx,
                 reactor,
                 should_close: false,
+                external_msgs_handled: 0,
+                internal_msgs_handled: 0,
             }
         };
 
@@ -230,6 +248,7 @@ enum InternalOp {
     Message(Message),
     OpenLink(Box<dyn LinkParamsTrait<Runtime>>),
     CloseLink(ReactorId),
+    Destroy(),
 }
 
 pub struct ReactorDriver<S: 'static> {
@@ -239,11 +258,17 @@ pub struct ReactorDriver<S: 'static> {
 
     reactor: Reactor<S, Runtime>,
     should_close: bool,
+    internal_msgs_handled: usize,
+    external_msgs_handled: usize,
 }
 
 impl<S: 'static> ReactorDriver<S> {
     fn handle_external_message(&mut self, message: Message) {
-        trace!("Handleing external message");
+        let span = span!(Level::INFO, "e_msg", c = self.external_msgs_handled);
+        let _guard = span.enter();
+
+        self.external_msgs_handled += 1;
+
         let mut handle = DriverHandle {
             internal_queue: &mut self.internal_queue,
             broker: &mut self.broker,
@@ -256,9 +281,11 @@ impl<S: 'static> ReactorDriver<S> {
 
     fn handle_internal_queue(&mut self) {
         while let Some(op) = self.internal_queue.pop_front() {
+            let span = span!(Level::INFO, "i_msg", c = self.internal_msgs_handled);
+            self.internal_msgs_handled += 1;
+            let _guard = span.enter();
             match op {
                 InternalOp::Message(msg) => {
-                    trace!("Handleing internal message");
                     let mut handle = DriverHandle {
                         internal_queue: &mut self.internal_queue,
                         broker: &mut self.broker,
@@ -267,6 +294,9 @@ impl<S: 'static> ReactorDriver<S> {
                         .handle_internal_message(&mut handle, msg)
                         .chain_err(|| "handling failed")
                         .display();
+                }
+                InternalOp::Destroy() => {
+                    self.reactor.destroy().expect("I failed");
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();
@@ -322,7 +352,9 @@ impl<S: 'static> Future for ReactorDriver<S> {
                     let mut reactor_handle = self.reactor.handle(&mut ctx_handle);
 
                     let drop = MsgBuffer::<drop::Owned>::new();
-                    reactor_handle.send_internal(drop).expect("Failed to send drop message");
+                    reactor_handle
+                        .send_internal(drop)
+                        .expect("Failed to send drop message");
                 }
 
                 self.should_close = true;
@@ -330,8 +362,9 @@ impl<S: 'static> Future for ReactorDriver<S> {
 
             match try_ready!(self.message_chan.poll()) {
                 None => return Ok(Async::Ready(())),
-                Some(message) => {
-                    self.handle_external_message(message);
+                Some(item) => {
+                    trace!("Handling external message");
+                    self.handle_external_message(item);
                 }
             }
         }
