@@ -235,6 +235,7 @@ impl ServerLink {
         handle.send_internal(joined)?;
 
         handle.close_link()?;
+        println!("Closed Server Link");
 
         Ok(())
     }
@@ -252,6 +253,7 @@ impl ServerLink {
         });
 
         handle.send_message(chat_message).display();
+
         Ok(())
     }
 

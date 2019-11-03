@@ -58,8 +58,7 @@ use std::collections::HashMap;
 pub fn run(args : Vec<String>) {
 
     let subscriber = fmt::Subscriber::builder()
-        .with_max_level(Level::TRACE)
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or(EnvFilter::from("info")))
         .without_time()
         .inherit_fields(true)
         .finish();
@@ -67,9 +66,9 @@ pub fn run(args : Vec<String>) {
 
     let addr = "127.0.0.1:9142".parse::<SocketAddr>().unwrap();
 
-    let manager_id: ReactorId = rand::thread_rng().gen();
-    let welcomer_id: ReactorId = rand::thread_rng().gen();
-    let aggregator_id: ReactorId = rand::thread_rng().gen();
+    let manager_id: ReactorId = ReactorId::from(1);
+    let welcomer_id: ReactorId = ReactorId::from(2);
+    let aggregator_id: ReactorId = ReactorId::from(3);
     // let steplock_id: ReactorId = rand::thread_rng().gen();
 
     let number_of_clients = args.get(1).map(|x| x.parse().unwrap_or(1)).unwrap_or(1);

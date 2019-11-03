@@ -43,7 +43,10 @@ pub fn connect_to_server(broker: BrokerHandle, greeter_id: ReactorId, addr: &Soc
             broker,
             greeter_id,
         );
-        tokio::spawn(handler);
+        tokio::spawn(handler.then(|_| {
+            println!("handler closed");
+            Ok(())
+        }));
     }).map_err(|e| error!("{:?}", e))
 }
 

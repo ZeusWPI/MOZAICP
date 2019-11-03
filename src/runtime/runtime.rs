@@ -307,7 +307,9 @@ impl<S: 'static> ReactorDriver<S> {
                     );
 
                     let link = params.into_link();
-                    self.reactor.links.insert(uuid, link);
+                    let span = span!(tracing::Level::INFO, "link");
+
+                    self.reactor.links.insert(uuid, (link, span));
                 }
                 InternalOp::CloseLink(uuid) => {
                     info!(
@@ -409,6 +411,7 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
     }
 
     fn close_link(&mut self, id: &ReactorId) -> Result<()> {
+        info!("close link event");
         self.internal_queue
             .push_back(InternalOp::CloseLink(id.clone()));
         Ok(())

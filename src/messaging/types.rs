@@ -142,6 +142,16 @@ impl <'a> From<&'a [u8]> for ReactorId {
     }
 }
 
+impl From<u8> for ReactorId {
+    fn from(src: u8) -> ReactorId {
+        let mut bytes = [0; 32];
+        bytes[0] = src;
+        return ReactorId {
+            public_key: bytes,
+        };
+    }
+}
+
 pub struct VecSegment {
     words: Vec<capnp::Word>,
 }

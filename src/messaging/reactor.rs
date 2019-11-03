@@ -3,6 +3,8 @@ use super::types::*;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
 
+use tracing::Span;
+
 use errors::{self, Consumable, Result};
 use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 
@@ -47,8 +49,8 @@ pub trait CtxHandle<C> {
 pub struct Reactor<S, C: Ctx> {
     pub id: ReactorId,
     pub internal_state: S,
-    pub internal_handlers: HashMap<u64, CoreHandler<S, C, (), errors::Error>>,
-    pub links: HashMap<ReactorId, Link<C>>,
+    pub internal_handlers: HashMap<u64, (CoreHandler<S, C, (), errors::Error>, Span)>,
+    pub links: HashMap<ReactorId, (Link<C>, Span)>,
 }
 
 impl<S, C: Ctx> Reactor<S, C> {
@@ -66,8 +68,10 @@ impl<S, C: Ctx> Reactor<S, C> {
 
         let receiver: ReactorId = msg.get_receiver()?.into();
 
+        let (link, span) = self.links.get_mut(&sender_uuid).ok_or(errors::Error::from_kind(NoLinkFoundError(sender_uuid.clone(), receiver.clone())))?;
+        let _guard = span.enter();
+
         let closed = {
-            let link = self.links.get_mut(&sender_uuid).ok_or(errors::Error::from_kind(NoLinkFoundError(sender_uuid.clone(), receiver.clone())))?;
 
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
@@ -80,6 +84,7 @@ impl<S, C: Ctx> Reactor<S, C> {
         };
 
         if closed {
+            trace!("Closing link");
             ctx_handle.close_link(&sender_uuid)?;
         }
 
@@ -107,7 +112,9 @@ impl<S, C: Ctx> Reactor<S, C> {
         let msg = reader.get()?;
 
 
-        if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
+        if let Some((handler, span)) = self.internal_handlers.get(&msg.get_type_id()) {
+            let _guard = span.enter();
+
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
                 ctx: ctx_handle,
@@ -121,7 +128,9 @@ impl<S, C: Ctx> Reactor<S, C> {
             handler.handle(&mut handler_ctx, msg.get_payload())?;
         }
 
-        for link in self.links.values_mut() {
+        for (link, span) in self.links.values_mut() {
+            let _guard = span.enter();
+
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
                 ctx: ctx_handle,
@@ -176,6 +185,7 @@ impl<C> Link<C>
         msg: mozaic_message::Reader,
     ) -> Result<()>
     {
+        trace!("L_H E_M");
 
         if msg.get_type_id() == terminate_stream::Reader::type_id() {
             self.link_state.remote_closed = true;
@@ -195,6 +205,8 @@ impl<C> Link<C>
         msg: mozaic_message::Reader,
     ) -> Result<()>
     {
+        trace!("L_H I_M");
+
         let mut link_handle = handle
             .link_handle(&self.remote_id, &mut self.link_state);
         return self.reducer.handle_internal(&mut link_handle, msg);
@@ -238,9 +250,12 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
         msg: mozaic_message::Reader<'a>,
     ) -> Result<()>
     {
-        let handler = self.external_handlers.get(&msg.get_type_id()).ok_or(
+        let (handler, span) = self.external_handlers.get(&msg.get_type_id()).ok_or(
             errors::Error::from_kind(MozaicError("No link external handler found"))
         )?;
+
+        let _guard = span.enter();
+        trace!("handle external");
 
         let mut ctx = HandlerCtx {
             state: &mut self.state,
@@ -259,7 +274,9 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
     ) -> Result<()>
     {
 
-        if let Some(handler) = self.internal_handlers.get(&msg.get_type_id()) {
+        if let Some((handler, span)) = self.internal_handlers.get(&msg.get_type_id()) {
+            let _guard = span.enter();
+            trace!("handle internal");
 
             let mut ctx = HandlerCtx {
                 state: &mut self.state,
@@ -384,6 +401,7 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
     }
 
     pub fn close_link_hard(&mut self) -> Result<()> {
+        self.link_state.remote_closed = true;
         self._close_link()
     }
 
@@ -488,7 +506,7 @@ type LinkHandler<S, C, T, E> = Box<
         >
 >;
 
-type LinkHandlers<S, C, T, E> = HashMap<u64, LinkHandler<S, C, T, E>>;
+type LinkHandlers<S, C, T, E> = HashMap<u64, (LinkHandler<S, C, T, E>, Span)>;
 
 
 
@@ -503,7 +521,7 @@ type LinkHandlers<S, C, T, E> = HashMap<u64, LinkHandler<S, C, T, E>>;
 /// ? CoreParams are the parameters for defining handlers for the reactor core
 pub struct CoreParams<S, C: Ctx> {
     pub state: S,
-    pub handlers: HashMap<u64, CoreHandler<S, C, (), errors::Error>>,
+    pub handlers: HashMap<u64, (CoreHandler<S, C, (), errors::Error>, Span)>,
 }
 
 impl<S, C: Ctx> CoreParams<S, C> {
@@ -520,9 +538,11 @@ impl<S, C: Ctx> CoreParams<S, C> {
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
+        let span = span!(tracing::Level::INFO, "handler", id = M::Reader::get_name());
+
         self.handlers.insert(
             <M as Owned<'static>>::Reader::type_id(),
-            boxed,
+            (boxed, span),
         );
     }
 }
@@ -553,9 +573,11 @@ impl<S, C: Ctx> LinkParams<S, C> {
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
+        let span = span!(tracing::Level::INFO, "I_handler", id = M::Reader::get_name());
+
         self.internal_handlers.insert(
             <M as Owned<'static>>::Reader::type_id(),
-            boxed,
+            (boxed, span),
         );
 
     }
@@ -566,9 +588,11 @@ impl<S, C: Ctx> LinkParams<S, C> {
               H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
+        let span = span!(tracing::Level::INFO, "E_handler", id = M::Reader::get_name(), to = tracing::field::debug(self.remote_id.clone()));
+
         self.external_handlers.insert(
             <M as Owned<'static>>::Reader::type_id(),
-            boxed,
+            (boxed, span),
         );
     }
 }

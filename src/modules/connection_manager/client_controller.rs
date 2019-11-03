@@ -226,6 +226,8 @@ impl HostLink {
 }
 
 
+// TODO: CLOSE LINK WHEN TCP IS GONE
+
 /// Link with the client, passing though disconnects and messages
 struct ClientLink;
 
@@ -250,6 +252,7 @@ impl ClientLink {
         _: client_disconnected::Reader,
     ) -> Result<()> {
         // Don't try to close the connection on the other side, because the pipe is already broken
+        println!("DISconnecting CL");
         handle.close_link_hard()?;
 
         Ok(())

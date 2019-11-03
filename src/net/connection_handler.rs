@@ -57,6 +57,7 @@ impl<S> Future for ConnectionHandler<S> {
 
     fn poll(&mut self) -> Poll<(), ()> {
         if self.forward_messages()?.is_ready() {
+            info!("Rx closed at connection handler");
             return Ok(Async::Ready(()));
         }
 
@@ -71,6 +72,7 @@ impl<S> Future for ConnectionHandler<S> {
 
             self.handler.handle_message(msg.into_reader()).expect("what the hell");
 
+            info!("Tcp streamed closed at connection handler");
             return Ok(Async::Ready(()));
         }
 

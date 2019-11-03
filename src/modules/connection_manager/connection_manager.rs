@@ -215,6 +215,7 @@ impl ClientControllerLink {
         if key == self_key {
 
             let joined = MsgBuffer::<client_disconnected::Owned>::new();
+            println!("Sending client disconnected");
             handle.send_message(joined)?;
         }
 
@@ -278,9 +279,10 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         _: disconnected::Reader,
     ) -> Result<()> {
+        println!("got disconnected message, handling");
         // If not the client is not yet registered, so it doesn't matter
         if let Some(key) = self.key {
-            info!("DISCONNECTED {:?}", handle.remote_uuid());
+            eprintln!("DISCONNECTED {:?}", handle.remote_uuid());
             trace!("Handling disconnect");
             let mut msg = MsgBuffer::<client_disconnected::Owned>::new();
 
