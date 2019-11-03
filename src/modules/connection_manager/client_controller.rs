@@ -139,7 +139,6 @@ impl ConnectionManagerLink {
         _: client_kicked::Reader,
     ) -> Result<()> {
         let joined = MsgBuffer::<close::Owned>::new();
-        debug!("Handle kick");
         handle.send_message(joined)?;
         handle.close_link()?;
         Ok(())
@@ -234,8 +233,6 @@ impl HostLink {
     }
 }
 
-// TODO: CLOSE LINK WHEN TCP IS GONE
-
 /// Link with the client, passing though disconnects and messages
 struct ClientLink;
 
@@ -266,9 +263,7 @@ impl ClientLink {
         _: client_disconnected::Reader,
     ) -> Result<()> {
         // Don't try to close the connection on the other side, because the pipe is already broken
-        debug!("DISconnecting CL");
         handle.close_link_hard()?;
-
         Ok(())
     }
 
@@ -294,7 +289,6 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         _: client_kicked::Reader,
     ) -> Result<()> {
-        debug!("Handling kicked");
         let inner_msg = MsgBuffer::<client_kicked::Owned>::new();
         handle.send_message(inner_msg).display();
 

@@ -180,8 +180,6 @@ impl ClientControllerLink {
         handle: &mut LinkHandle<C>,
         _: close::Reader,
     ) -> Result<()> {
-        trace!("close event");
-
         handle.close_link()?;
 
         Ok(())
@@ -280,10 +278,8 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         _: disconnected::Reader,
     ) -> Result<()> {
-        debug!("got disconnected message, handling");
         // If not the client is not yet registered, so it doesn't matter
         if let Some(key) = self.key {
-            debug!("DISCONNECTED {:?}", handle.remote_uuid());
             let mut msg = MsgBuffer::<client_disconnected::Owned>::new();
 
             msg.build(|b| {
