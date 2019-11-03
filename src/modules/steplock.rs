@@ -166,7 +166,7 @@ impl Steplock {
         handle: &mut ReactorHandle<C>,
         _: timeout::Reader,
     ) -> Result<()> {
-        println!("Handling timeout");
+        debug!("Handling timeout");
         self.flush(handle)?;
 
         Ok(())

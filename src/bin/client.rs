@@ -232,9 +232,6 @@ impl ServerLink {
         joined.build(|b| b.set_id(id));
         handle.send_internal(joined)?;
 
-        handle.close_link()?;
-        println!("Closed Server Link");
-
         Ok(())
     }
 

@@ -44,9 +44,9 @@ impl ServerHandler {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
 
-        info!(
+        debug!(
             "Handling connect of {:?}->{:?}",
-            self.welcomer_id, connecting_id
+            connecting_id, self.welcomer_id
         );
 
         self.broker.register(connecting_id.clone(), self.tx.clone());

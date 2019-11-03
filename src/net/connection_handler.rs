@@ -58,7 +58,7 @@ impl<S> Future for ConnectionHandler<S> {
 
     fn poll(&mut self) -> Poll<(), ()> {
         if self.forward_messages()?.is_ready() {
-            info!("Rx closed at connection handler");
+            debug!("Rx closed at connection handler");
             return Ok(Async::Ready(()));
         }
 
@@ -79,7 +79,7 @@ impl<S> Future for ConnectionHandler<S> {
                 .handle_message(msg.into_reader())
                 .expect("what the hell");
 
-            info!("Tcp streamed closed at connection handler");
+            debug!("Tcp streamed closed at connection handler");
             return Ok(Async::Ready(()));
         }
 
@@ -119,7 +119,7 @@ impl<S> HandlerCore<S> {
     ) -> Result<(), errors::Error> {
         let type_id = r.get_type_id();
         match self.handlers.get(&type_id) {
-            None => eprintln!("unknown message type"),
+            None => error!("unknown message type"),
             Some(handler) => {
                 let mut ctx = MsgHandlerCtx {
                     state: &mut self.state,

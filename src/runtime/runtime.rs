@@ -53,8 +53,6 @@ impl Broker {
             (rr.get_receiver()?.into(), rr.get_sender()?.into())
         };
 
-        trace!("Dispatching {:?} -> {:?}", sender_id, receiver_id);
-
         let receiver = match self.actors.get_mut(&receiver_id.clone()) {
             Some(receiver) => receiver,
             None => {
@@ -114,7 +112,6 @@ impl BrokerHandle {
 
     pub fn unregister(&mut self, id: &ReactorId) {
         // Maybe check to close all links to this reactor
-
         info!("Unregistering reactor {:?}", id);
 
         let mut broker = self.broker.lock().unwrap();
@@ -150,7 +147,8 @@ impl BrokerHandle {
         <M as Owned<'static>>::Builder: HasNamedTypeId,
     {
         trace!(
-            "Sending {} message {:?} -> {:?}",
+            "Sending {} {} message {:?} -> {:?}",
+            <M as Owned<'static>>::Builder::type_id(),
             <M as Owned<'static>>::Builder::get_name(),
             sender,
             target
@@ -337,7 +335,6 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
 
-                info!("Disconnecting reactor {:?}", field::debug(&self.reactor.id));
                 return Ok(Async::Ready(()));
             }
 
@@ -363,7 +360,6 @@ impl<S: 'static> Future for ReactorDriver<S> {
             match try_ready!(self.message_chan.poll()) {
                 None => return Ok(Async::Ready(())),
                 Some(item) => {
-                    trace!("Handling external message");
                     self.handle_external_message(item);
                 }
             }
@@ -409,7 +405,6 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
     }
 
     fn close_link(&mut self, id: &ReactorId) -> Result<()> {
-        info!("close link event");
         self.internal_queue
             .push_back(InternalOp::CloseLink(id.clone()));
         Ok(())

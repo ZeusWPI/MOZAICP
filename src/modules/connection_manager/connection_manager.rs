@@ -223,7 +223,6 @@ impl ClientControllerLink {
 
         if key == self_key {
             let joined = MsgBuffer::<client_disconnected::Owned>::new();
-            println!("Sending client disconnected");
             handle.send_message(joined)?;
         }
 
@@ -281,11 +280,10 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         _: disconnected::Reader,
     ) -> Result<()> {
-        println!("got disconnected message, handling");
+        debug!("got disconnected message, handling");
         // If not the client is not yet registered, so it doesn't matter
         if let Some(key) = self.key {
-            eprintln!("DISCONNECTED {:?}", handle.remote_uuid());
-            trace!("Handling disconnect");
+            debug!("DISCONNECTED {:?}", handle.remote_uuid());
             let mut msg = MsgBuffer::<client_disconnected::Owned>::new();
 
             msg.build(|b| {
@@ -294,7 +292,7 @@ impl ClientLink {
             handle.send_internal(msg)?;
 
             // Don't try to close the link on the other side, because pipe is already broken
-            handle.close_link()?;
+            handle.close_link_hard()?;
         }
 
         Ok(())

@@ -116,6 +116,7 @@ impl<S, C: Ctx> Reactor<S, C> {
 
         if let Some((handler, span)) = self.internal_handlers.get(&msg.get_type_id()) {
             let _guard = span.enter();
+            trace!("Handling type {}", msg.get_type_id());
 
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
@@ -181,7 +182,7 @@ where
         handle: &mut ReactorHandle<C>,
         msg: mozaic_message::Reader,
     ) -> Result<()> {
-        trace!("L_H E_M");
+        trace!("Link external handling {}", msg.get_type_id());
 
         if msg.get_type_id() == terminate_stream::Reader::type_id() {
             self.link_state.remote_closed = true;
@@ -200,7 +201,7 @@ where
         handle: &mut ReactorHandle<C>,
         msg: mozaic_message::Reader,
     ) -> Result<()> {
-        trace!("L_H I_M");
+        trace!("Link internal handling {}", msg.get_type_id());
 
         let mut link_handle = handle.link_handle(&self.remote_id, &mut self.link_state);
         return self.reducer.handle_internal(&mut link_handle, msg);
@@ -253,7 +254,7 @@ where
                 )))?;
 
         let _guard = span.enter();
-        trace!("handle external");
+        trace!("handle external {}", msg.get_type_id());
 
         let mut ctx = HandlerCtx {
             state: &mut self.state,
