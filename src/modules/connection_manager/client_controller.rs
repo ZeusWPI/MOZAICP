@@ -1,17 +1,15 @@
-
-
+use core_capnp::initialize;
+use errors::{Consumable, Result};
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{Result, Consumable};
-use core_capnp::{initialize};
 
-use core_capnp::{actor_joined, close};
-use base_capnp::{from_client, client_message, to_client, host_message, inner_to_client};
+use base_capnp::{client_message, from_client, host_message, inner_to_client, to_client};
 use connection_capnp::{client_disconnected, client_kicked};
+use core_capnp::{actor_joined, close};
 
-use std::collections::{VecDeque};
+use std::collections::VecDeque;
 
-use modules::util::{PlayerId};
+use modules::util::PlayerId;
 
 pub struct CCReactor {
     connected: bool,
@@ -22,18 +20,27 @@ pub struct CCReactor {
 }
 
 impl CCReactor {
-    pub fn params<C: Ctx>(id: PlayerId, connection_manager: ReactorId, host: ReactorId) -> CoreParams<Self, C> {
+    pub fn params<C: Ctx>(
+        id: PlayerId,
+        connection_manager: ReactorId,
+        host: ReactorId,
+    ) -> CoreParams<Self, C> {
         let me = Self {
             connected: false,
             queue: VecDeque::new(),
-            id, connection_manager, host,
+            id,
+            connection_manager,
+            host,
         };
 
         let mut params = CoreParams::new(me);
 
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         params.handler(actor_joined::Owned, CtxHandler::new(Self::handle_connect));
-        params.handler(client_disconnected::Owned, CtxHandler::new(Self::handle_disconnect));
+        params.handler(
+            client_disconnected::Owned,
+            CtxHandler::new(Self::handle_disconnect),
+        );
         params.handler(host_message::Owned, CtxHandler::new(Self::handle_host_msg));
 
         return params;
@@ -58,22 +65,22 @@ impl CCReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         handle.open_link(HostLink::params(self.id.clone(), self.host.clone()))?;
 
-        handle.open_link(ConnectionManagerLink::params(self.connection_manager.clone()))?;
+        handle.open_link(ConnectionManagerLink::params(
+            self.connection_manager.clone(),
+        ))?;
 
         Ok(())
     }
 
     /// Handle client connected by (re)opening it's client controller (it will flush stored messages)
-    fn handle_connect<C: Ctx> (
+    fn handle_connect<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: actor_joined::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let id: ReactorId = r.get_id()?.into();
 
         handle.open_link(ClientLink::params(id))?;
@@ -86,23 +93,21 @@ impl CCReactor {
     }
 
     /// Handle client disconnected, can't send messages for a while
-    fn handle_disconnect<C: Ctx> (
+    fn handle_disconnect<C: Ctx>(
         &mut self,
         _: &mut ReactorHandle<C>,
         _: client_disconnected::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         self.connected = false;
 
         Ok(())
     }
 
-    fn handle_host_msg<C: Ctx> (
+    fn handle_host_msg<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: host_message::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let msg = msg.get_data()?;
 
         self.queue.push_back(msg.to_vec());
@@ -111,7 +116,6 @@ impl CCReactor {
 
         Ok(())
     }
-
 }
 
 struct ConnectionManagerLink;
@@ -120,7 +124,10 @@ impl ConnectionManagerLink {
     fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, ConnectionManagerLink);
 
-        params.external_handler(client_disconnected::Owned, CtxHandler::new(client_disconnected::e_to_i));
+        params.external_handler(
+            client_disconnected::Owned,
+            CtxHandler::new(client_disconnected::e_to_i),
+        );
         params.external_handler(actor_joined::Owned, CtxHandler::new(actor_joined::e_to_i));
         params.internal_handler(client_kicked::Owned, CtxHandler::new(Self::handle_kicked));
         return params;
@@ -146,17 +153,21 @@ struct HostLink {
 
 impl HostLink {
     fn params<C: Ctx>(client_id: PlayerId, foreign_id: ReactorId) -> LinkParams<Self, C> {
-        let me = Self {
-            client_id
-        };
+        let me = Self { client_id };
 
         let mut params = LinkParams::new(foreign_id, me);
 
         params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
         params.external_handler(to_client::Owned, CtxHandler::new(Self::e_handle_to_client));
-        params.external_handler(client_kicked::Owned, CtxHandler::new(Self::e_handle_client_kicked));
+        params.external_handler(
+            client_kicked::Owned,
+            CtxHandler::new(Self::e_handle_client_kicked),
+        );
 
-        params.internal_handler(client_message::Owned, CtxHandler::new(Self::i_handle_message));
+        params.internal_handler(
+            client_message::Owned,
+            CtxHandler::new(Self::i_handle_message),
+        );
 
         return params;
     }
@@ -193,7 +204,6 @@ impl HostLink {
 
         // Only pass message throug if it is meant for my client
         if id == self_id {
-
             let mut joined = MsgBuffer::<client_kicked::Owned>::new();
             joined.build(|b| b.set_id(id));
             handle.send_internal(joined)?;
@@ -210,7 +220,6 @@ impl HostLink {
         handle: &mut LinkHandle<C>,
         r: client_message::Reader,
     ) -> Result<()> {
-
         let id = self.client_id.into();
         let msg = r.get_data()?;
 
@@ -225,7 +234,6 @@ impl HostLink {
     }
 }
 
-
 // TODO: CLOSE LINK WHEN TCP IS GONE
 
 /// Link with the client, passing though disconnects and messages
@@ -237,9 +245,15 @@ impl ClientLink {
 
         let mut params = LinkParams::new(foreign_id, me);
 
-        params.external_handler(client_message::Owned, CtxHandler::new(client_message::e_to_i));
+        params.external_handler(
+            client_message::Owned,
+            CtxHandler::new(client_message::e_to_i),
+        );
 
-        params.internal_handler(client_disconnected::Owned, CtxHandler::new(Self::i_handle_disconnect));
+        params.internal_handler(
+            client_disconnected::Owned,
+            CtxHandler::new(Self::i_handle_disconnect),
+        );
         params.internal_handler(inner_to_client::Owned, CtxHandler::new(Self::i_handle_msg));
         params.internal_handler(client_kicked::Owned, CtxHandler::new(Self::handle_kicked));
 
@@ -263,7 +277,6 @@ impl ClientLink {
         handle: &mut LinkHandle<C>,
         msg: inner_to_client::Reader,
     ) -> Result<()> {
-
         let msg = msg.get_data()?;
 
         let mut inner_msg = MsgBuffer::<host_message::Owned>::new();

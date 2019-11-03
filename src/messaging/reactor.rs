@@ -1,22 +1,22 @@
-use std::collections::HashMap;
 use super::types::*;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
+use std::collections::HashMap;
 
 use tracing::Span;
 
+use errors::ErrorKind::{MozaicError, NoLinkFoundError};
 use errors::{self, Consumable, Result};
-use errors::ErrorKind::{NoLinkFoundError, MozaicError};
 
 use core_capnp::{mozaic_message, terminate_stream};
 
 use HasNamedTypeId;
 
 /// Runtime trait
-pub trait Ctx : 'static + for<'a> Context<'a> {}
+pub trait Ctx: 'static + for<'a> Context<'a> {}
 impl<C> Ctx for C where C: 'static + for<'a> Context<'a> {}
 
-pub trait Context<'a> : Sized {
+pub trait Context<'a>: Sized {
     type Handle: 'a + CtxHandle<Self>;
 }
 
@@ -25,17 +25,17 @@ pub trait CtxHandle<C> {
     fn dispatch_external(&mut self, message: Message) -> Result<()>;
 
     fn open_link<S>(&mut self, params: LinkParams<S, C>) -> Result<()>
-        where S: 'static + Send,
-              C: Ctx;
+    where
+        S: 'static + Send,
+        C: Ctx;
 
     fn close_link(&mut self, id: &ReactorId) -> Result<()>;
 
-
     fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> Result<ReactorId>
-        where S: 'static + Send,
-              C: Ctx;
+    where
+        S: 'static + Send,
+        C: Ctx;
 }
-
 
 /// A reactor is an "actor" in the MOZAIC system. It is defined by an identity
 /// (an UUID), a state, and a set of message ('event') handlers.
@@ -60,19 +60,23 @@ impl<S, C: Ctx> Reactor<S, C> {
         &'a mut self,
         ctx_handle: &'a mut <C as Context<'c>>::Handle,
         message: Message,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let reader = message.reader();
         let msg = reader.get()?;
         let sender_uuid = msg.get_sender()?.into();
 
         let receiver: ReactorId = msg.get_receiver()?.into();
 
-        let (link, span) = self.links.get_mut(&sender_uuid).ok_or(errors::Error::from_kind(NoLinkFoundError(sender_uuid.clone(), receiver.clone())))?;
+        let (link, span) = self
+            .links
+            .get_mut(&sender_uuid)
+            .ok_or(errors::Error::from_kind(NoLinkFoundError(
+                sender_uuid.clone(),
+                receiver.clone(),
+            )))?;
         let _guard = span.enter();
 
         let closed = {
-
             let mut reactor_handle = ReactorHandle {
                 id: &self.id,
                 ctx: ctx_handle,
@@ -105,12 +109,10 @@ impl<S, C: Ctx> Reactor<S, C> {
         &mut self,
         ctx_handle: &mut <C as Context<'c>>::Handle,
         message: Message,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let reader = message.reader();
 
         let msg = reader.get()?;
-
 
         if let Some((handler, span)) = self.internal_handlers.get(&msg.get_type_id()) {
             let _guard = span.enter();
@@ -142,24 +144,18 @@ impl<S, C: Ctx> Reactor<S, C> {
         return Ok(());
     }
 
-    pub fn destroy(
-        &mut self,
-    ) -> Result<()> {
-        for (_id, _link) in self.links.iter() {
-
-        }
+    pub fn destroy(&mut self) -> Result<()> {
+        for (_id, _link) in self.links.iter() {}
 
         Ok(())
     }
 
     // helper function for implementing runtimes, should go sometime soon
-    pub fn handle<'a, 'c>(&'a self, ctx: &'a mut <C as Context<'c>>::Handle)
-        -> ReactorHandle<'a, 'c, C>
-    {
-        ReactorHandle {
-            id: &self.id,
-            ctx,
-        }
+    pub fn handle<'a, 'c>(
+        &'a self,
+        ctx: &'a mut <C as Context<'c>>::Handle,
+    ) -> ReactorHandle<'a, 'c, C> {
+        ReactorHandle { id: &self.id, ctx }
     }
 }
 
@@ -177,19 +173,19 @@ pub struct Link<C> {
 }
 
 impl<C> Link<C>
-    where C: Ctx
+where
+    C: Ctx,
 {
     fn handle_external(
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: mozaic_message::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         trace!("L_H E_M");
 
         if msg.get_type_id() == terminate_stream::Reader::type_id() {
             self.link_state.remote_closed = true;
-            self.link_state.local_closed = true;
+            self.link_state.local_closed = true; // What is this?
             handle.ctx.close_link(&self.remote_id)?;
             return Ok(());
         }
@@ -203,18 +199,17 @@ impl<C> Link<C>
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: mozaic_message::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         trace!("L_H I_M");
 
-        let mut link_handle = handle
-            .link_handle(&self.remote_id, &mut self.link_state);
+        let mut link_handle = handle.link_handle(&self.remote_id, &mut self.link_state);
         return self.reducer.handle_internal(&mut link_handle, msg);
     }
 }
 
 pub struct LinkReducer<S, C>
-    where C: Ctx
+where
+    C: Ctx,
 {
     /// handler state
     pub state: S,
@@ -227,7 +222,7 @@ pub struct LinkReducer<S, C>
 /// A trait for all LinkReducers to implement.
 /// We need this to make boxed LinkReducers (with the state type erased).
 pub trait LinkReducerTrait<C: Ctx>: 'static + Send {
-    fn handle_external<'a, 'b, >(
+    fn handle_external<'a, 'b>(
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
@@ -241,18 +236,21 @@ pub trait LinkReducerTrait<C: Ctx>: 'static + Send {
 }
 
 impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
-    where S: 'static + Send,
-          C: 'static + Ctx,
+where
+    S: 'static + Send,
+    C: 'static + Ctx,
 {
     fn handle_external<'a>(
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
-    ) -> Result<()>
-    {
-        let (handler, span) = self.external_handlers.get(&msg.get_type_id()).ok_or(
-            errors::Error::from_kind(MozaicError("No link external handler found"))
-        )?;
+    ) -> Result<()> {
+        let (handler, span) =
+            self.external_handlers
+                .get(&msg.get_type_id())
+                .ok_or(errors::Error::from_kind(MozaicError(
+                    "No link external handler found",
+                )))?;
 
         let _guard = span.enter();
         trace!("handle external");
@@ -271,9 +269,7 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
         &'a mut self,
         link_handle: &'a mut LinkHandle<'a, '_, C>,
         msg: mozaic_message::Reader<'a>,
-    ) -> Result<()>
-    {
-
+    ) -> Result<()> {
         if let Some((handler, span)) = self.internal_handlers.get(&msg.get_type_id()) {
             let _guard = span.enter();
             trace!("handle internal");
@@ -283,7 +279,6 @@ impl<S, C> LinkReducerTrait<C> for LinkReducer<S, C>
                 handle: link_handle,
             };
             handler.handle(&mut ctx, msg.get_payload())?;
-
         }
 
         Ok(())
@@ -300,9 +295,8 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
     fn link_handle<'b>(
         &'b mut self,
         remote_id: &'b ReactorId,
-        link_state: &'b mut LinkState
-    ) -> LinkHandle<'b, 'c, C>
-    {
+        link_state: &'b mut LinkState,
+    ) -> LinkHandle<'b, 'c, C> {
         LinkHandle {
             id: self.id,
             ctx: self.ctx,
@@ -329,13 +323,15 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
     }
 
     pub fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> Result<ReactorId>
-        where S: 'static + Send
+    where
+        S: 'static + Send,
     {
         self.ctx.spawn(params, name)
     }
 
     pub fn open_link<S>(&mut self, params: LinkParams<S, C>) -> Result<()>
-        where S: 'static + Send
+    where
+        S: 'static + Send,
     {
         self.ctx.open_link(params)
     }
@@ -373,7 +369,6 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
 
     /// ? Send message to the other side of the link
     pub fn send_message<T>(&mut self, msg_buffer: MsgBuffer<T>) -> Result<()> {
-
         let mut builder = msg_buffer.into_builder();
         {
             let mut msg: mozaic_message::Builder = builder.get_root()?;
@@ -406,14 +401,12 @@ impl<'a, 'c, C: Ctx> LinkHandle<'a, 'c, C> {
     }
 
     fn _close_link(&mut self) -> Result<()> {
-
         self.link_state.local_closed = true;
 
         self.ctx.close_link(&self.remote_id)?;
         Ok(())
     }
 }
-
 
 /// A simple struct for bundling a borrowed state and handle.
 pub struct HandlerCtx<'a, S, H> {
@@ -451,24 +444,24 @@ impl<M, F> CtxHandler<M, F> {
     }
 }
 
-
 impl<'a, S, H, M, F, T, E> Handler<'a, HandlerCtx<'a, S, H>, M> for CtxHandler<M, F>
-    where F: Fn(&mut S, &mut H, <M as Owned<'a>>::Reader) -> std::result::Result<T, E>,
-          F: Send,
-          M: Owned<'a> + 'static + Send
+where
+    F: Fn(&mut S, &mut H, <M as Owned<'a>>::Reader) -> std::result::Result<T, E>,
+    F: Send,
+    M: Owned<'a> + 'static + Send,
 {
     type Output = T;
     type Error = E;
 
-    fn handle(&self, ctx: &mut HandlerCtx<'a, S, H>, reader: <M as Owned<'a>>::Reader)
-        -> std::result::Result<T, E>
-    {
+    fn handle(
+        &self,
+        ctx: &mut HandlerCtx<'a, S, H>,
+        reader: <M as Owned<'a>>::Reader,
+    ) -> std::result::Result<T, E> {
         let (state, handle) = ctx.split();
         (self.function)(state, handle, reader)
     }
 }
-
-
 
 pub type ReactorCtx<'a, 'c, S, C> = HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>;
 pub type LinkCtx<'a, 'c, S, C> = HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>;
@@ -483,40 +476,29 @@ impl<'a, S, H> Deref for HandlerCtx<'a, S, H> {
     }
 }
 
-
-
 type CoreHandler<S, C, T, E> = Box<
-    dyn for <'a, 'c>
-        Handler<
-            'a,
-            HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>,
-            any_pointer::Owned,
-            Output=T,
-            Error=E
-        >
+    dyn for<'a, 'c> Handler<
+        'a,
+        HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>,
+        any_pointer::Owned,
+        Output = T,
+        Error = E,
+    >,
 >;
 
 type LinkHandler<S, C, T, E> = Box<
-    dyn for<'a, 'c>
-        Handler<'a,
-            HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>,
-            any_pointer::Owned,
-            Output=T,
-            Error=E
-        >
+    dyn for<'a, 'c> Handler<
+        'a,
+        HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>,
+        any_pointer::Owned,
+        Output = T,
+        Error = E,
+    >,
 >;
 
 type LinkHandlers<S, C, T, E> = HashMap<u64, (LinkHandler<S, C, T, E>, Span)>;
 
-
-
-
-
-
-
 // *********** SPAWNING **********
-
-
 
 /// ? CoreParams are the parameters for defining handlers for the reactor core
 pub struct CoreParams<S, C: Ctx> {
@@ -533,17 +515,23 @@ impl<S, C: Ctx> CoreParams<S, C> {
     }
 
     pub fn handler<M, H>(&mut self, _m: M, h: H)
-        where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasNamedTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>,
+    where
+        M: for<'a> Owned<'a> + Send + 'static,
+        <M as Owned<'static>>::Reader: HasNamedTypeId,
+        H: 'static
+            + for<'a, 'c> Handler<
+                'a,
+                HandlerCtx<'a, S, ReactorHandle<'a, 'c, C>>,
+                M,
+                Output = (),
+                Error = errors::Error,
+            >,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         let span = span!(tracing::Level::INFO, "handler", id = M::Reader::get_name());
 
-        self.handlers.insert(
-            <M as Owned<'static>>::Reader::type_id(),
-            (boxed, span),
-        );
+        self.handlers
+            .insert(<M as Owned<'static>>::Reader::type_id(), (boxed, span));
     }
 }
 
@@ -568,32 +556,52 @@ impl<S, C: Ctx> LinkParams<S, C> {
     }
 
     pub fn internal_handler<M, H>(&mut self, _m: M, h: H)
-        where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasNamedTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
+    where
+        M: for<'a> Owned<'a> + Send + 'static,
+        <M as Owned<'static>>::Reader: HasNamedTypeId,
+        H: 'static
+            + for<'a, 'c> Handler<
+                'a,
+                HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>,
+                M,
+                Output = (),
+                Error = errors::Error,
+            >,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
-        let span = span!(tracing::Level::INFO, "I_handler", id = M::Reader::get_name());
-
-        self.internal_handlers.insert(
-            <M as Owned<'static>>::Reader::type_id(),
-            (boxed, span),
+        let span = span!(
+            tracing::Level::INFO,
+            "I_handler",
+            id = M::Reader::get_name()
         );
 
+        self.internal_handlers
+            .insert(<M as Owned<'static>>::Reader::type_id(), (boxed, span));
     }
 
     pub fn external_handler<M, H>(&mut self, _m: M, h: H)
-        where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasNamedTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>, M, Output=(), Error=errors::Error>
+    where
+        M: for<'a> Owned<'a> + Send + 'static,
+        <M as Owned<'static>>::Reader: HasNamedTypeId,
+        H: 'static
+            + for<'a, 'c> Handler<
+                'a,
+                HandlerCtx<'a, S, LinkHandle<'a, 'c, C>>,
+                M,
+                Output = (),
+                Error = errors::Error,
+            >,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
-        let span = span!(tracing::Level::INFO, "E_handler", id = M::Reader::get_name(), to = tracing::field::debug(self.remote_id.clone()));
-
-        self.external_handlers.insert(
-            <M as Owned<'static>>::Reader::type_id(),
-            (boxed, span),
+        let span = span!(
+            tracing::Level::INFO,
+            "E_handler",
+            id = M::Reader::get_name(),
+            to = tracing::field::debug(self.remote_id.clone())
         );
+
+        self.external_handlers
+            .insert(<M as Owned<'static>>::Reader::type_id(), (boxed, span));
     }
 }
 
@@ -603,8 +611,9 @@ pub trait LinkParamsTrait<C: Ctx>: 'static + Send {
 }
 
 impl<S, C> LinkParamsTrait<C> for LinkParams<S, C>
-    where S: 'static + Send,
-          C: Ctx + 'static
+where
+    S: 'static + Send,
+    C: Ctx + 'static,
 {
     fn remote_id<'a>(&'a self) -> &'a ReactorId {
         &self.remote_id

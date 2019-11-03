@@ -1,11 +1,11 @@
-use super::runtime::Broker;
 use super::reactor::*;
-use capnp;
-use core_capnp::{terminate_stream, initialize, send_greeting, greeting};
+use super::runtime::Broker;
 use super::types::*;
+use capnp;
+use core_capnp::{greeting, initialize, send_greeting, terminate_stream};
 
-use futures::{Future, Async};
 use futures::future::poll_fn;
+use futures::{Async, Future};
 
 use tokio::runtime::Runtime;
 
@@ -27,7 +27,6 @@ pub fn run() {
     rt.shutdown_on_idle().wait().unwrap();
 }
 
-
 struct Main {}
 
 impl Main {
@@ -40,16 +39,16 @@ impl Main {
     fn initialize<C: Ctx>(
         self: &mut ReactorCtx<Self, C>,
         _: initialize::Reader,
-    ) -> Result<(), errors::Error>
-    {
-        let greeter = Greeter { to_greet: self.handle().id().clone() };
+    ) -> Result<(), errors::Error> {
+        let greeter = Greeter {
+            to_greet: self.handle().id().clone(),
+        };
         let greeter_uuid = self.handle().spawn(greeter.params());
         let link = GreeterLink {};
         self.handle().open_link(link.params(greeter_uuid));
         return Ok(());
     }
 }
-
 
 struct Greeter {
     to_greet: ReactorId,
@@ -66,8 +65,7 @@ impl Greeter {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), errors::Error>
-    {
+    ) -> Result<(), errors::Error> {
         let link = (GreeterLink {}).params(self.to_greet.clone());
         handle.open_link(link);
 
@@ -86,22 +84,15 @@ struct Link<'a, H> {
     handle: &'a mut H,
 }
 
-
 struct GreeterLinkState {}
 
-struct GreeterLink { }
+struct GreeterLink {}
 
 impl GreeterLink {
     fn params<C: Ctx>(self, remote_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(remote_id, self);
-        params.internal_handler(
-            send_greeting::Owned,
-            CtxHandler::new(Self::send_greeting)
-        );
-        params.external_handler(
-            greeting::Owned,
-            CtxHandler::new(Self::recv_greeting),
-        );
+        params.internal_handler(send_greeting::Owned, CtxHandler::new(Self::send_greeting));
+        params.external_handler(greeting::Owned, CtxHandler::new(Self::recv_greeting));
         params.external_handler(
             terminate_stream::Owned,
             CtxHandler::new(Self::close_handler),
@@ -113,8 +104,7 @@ impl GreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         send_greeting: send_greeting::Reader,
-    ) -> Result<(), errors::Error>
-    {
+    ) -> Result<(), errors::Error> {
         let message = send_greeting.get_message()?;
 
         handle.send_message(greeting::Owned, |b| {
@@ -129,8 +119,7 @@ impl GreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         greeting: greeting::Reader,
-    ) -> Result<(), errors::Error>
-    {
+    ) -> Result<(), errors::Error> {
         let message = greeting.get_message()?;
         println!("got greeting: {:?}", message);
         handle.close_link();
@@ -141,8 +130,7 @@ impl GreeterLink {
         &mut self,
         handle: &mut LinkHandle<C>,
         _: terminate_stream::Reader,
-    ) -> Result<(), errors::Error>
-    {
+    ) -> Result<(), errors::Error> {
         // also close our end of the stream
         handle.close_link();
         return Ok(());

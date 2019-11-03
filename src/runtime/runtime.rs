@@ -110,9 +110,7 @@ impl BrokerHandle {
         self.register(id, tx);
     }
 
-    pub fn drop_reactor(&mut self, _id: &ReactorId) {
-
-    }
+    pub fn drop_reactor(&mut self, _id: &ReactorId) {}
 
     pub fn unregister(&mut self, id: &ReactorId) {
         // Maybe check to close all links to this reactor

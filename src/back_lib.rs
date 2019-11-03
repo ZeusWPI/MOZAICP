@@ -3,9 +3,9 @@
 extern crate bytes;
 extern crate hex;
 
-extern crate tokio_process;
-extern crate tokio_core;
 extern crate tokio;
+extern crate tokio_core;
+extern crate tokio_process;
 #[macro_use]
 extern crate futures;
 extern crate rand;
@@ -13,7 +13,8 @@ extern crate rand;
 extern crate serde;
 extern crate serde_json;
 
-#[macro_use] extern crate tracing;
+#[macro_use]
+extern crate tracing;
 extern crate tracing_futures;
 
 #[macro_use]
@@ -96,35 +97,35 @@ macro_rules! add_gen {
 
 /// Core capnp messages
 pub mod core_capnp {
-    add_gen!(%%/core_capnp.rs%%);
+  add_gen!(%%/core_capnp.rs%%);
 }
 
 /// Network related capnp messages
 pub mod network_capnp {
-    add_gen!(%%/network_capnp.rs%%);
+  add_gen!(%%/network_capnp.rs%%);
 }
 
 /// Generic MOZAIC messages
 pub mod base_capnp {
-    add_gen!(%%/mozaic/base_capnp.rs%%);
+  add_gen!(%%/mozaic/base_capnp.rs%%);
 }
 
 /// Messages specific for the steplock module
 pub mod steplock_capnp {
-    add_gen!(%%/mozaic/steplock_capnp.rs%%);
+  add_gen!(%%/mozaic/steplock_capnp.rs%%);
 }
 
 /// Messages for MOZAIC connection events
 pub mod connection_capnp {
-    add_gen!(%%/mozaic/connection_capnp.rs%%);
+  add_gen!(%%/mozaic/connection_capnp.rs%%);
 }
 
 /// Messages specific for the cmd module
 pub mod cmd_capnp {
-    add_gen!(%%/mozaic/cmd_capnp.rs%%);
+  add_gen!(%%/mozaic/cmd_capnp.rs%%);
 }
 
 /// deprecated
 pub mod log_capnp {
-    add_gen!(%%/mozaic/logging_capnp.rs%%);
+  add_gen!(%%/mozaic/logging_capnp.rs%%);
 }

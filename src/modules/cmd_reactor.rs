@@ -1,18 +1,17 @@
+use core_capnp::initialize;
+use errors::{self, Consumable};
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{self, Consumable};
-use core_capnp::{initialize};
 
 use cmd_capnp::{cmd_input, cmd_return};
 
-use std::io::{self, BufRead, Write, stdout};
+use std::io::{self, stdout, BufRead, Write};
 use std::thread;
 
 use runtime::BrokerHandle;
 
-use futures::{Future, Sink, Stream};
 use futures::sync::mpsc::channel;
-
+use futures::{Future, Sink, Stream};
 
 /// Reactor to handle cmd input
 pub struct CmdReactor {
@@ -21,13 +20,8 @@ pub struct CmdReactor {
 }
 
 impl CmdReactor {
-
     pub fn new(broker: BrokerHandle, foreign_id: ReactorId) -> Self {
-
-        CmdReactor {
-            foreign_id,
-            broker,
-        }
+        CmdReactor { foreign_id, broker }
     }
 
     pub fn params<C: Ctx>(self) -> CoreParams<Self, C> {
@@ -42,8 +36,7 @@ impl CmdReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<(), errors::Error>
-    {
+    ) -> Result<(), errors::Error> {
         handle.open_link(CmdLink.params(handle.id().clone()))?;
 
         handle.open_link(ForeignLink.params(self.foreign_id.clone()))?;
@@ -72,45 +65,35 @@ impl CmdReactor {
     }
 }
 
-
 /// Link from the reactor to the cmd line, only handling incoming messages
 struct CmdLink;
 
 impl CmdLink {
     pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
-        params.external_handler(cmd_input::Owned, CtxHandler::new(cmd_input::e_to_i), );
+        params.external_handler(cmd_input::Owned, CtxHandler::new(cmd_input::e_to_i));
 
         return params;
     }
 }
-
 
 /// Link from the cmd reactor to somewhere, sending through the cmd messages
 /// Also listening for messages that have to return to the command line
 struct ForeignLink;
 
 impl ForeignLink {
-
     pub fn params<C: Ctx>(self, foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, self);
-        params.internal_handler(
-            cmd_input::Owned,
-            CtxHandler::new(cmd_input::i_to_e),
-        );
+        params.internal_handler(cmd_input::Owned, CtxHandler::new(cmd_input::i_to_e));
 
-        params.external_handler(
-            cmd_return::Owned,
-            CtxHandler::new(cmd_return::e_to_i)
-        );
+        params.external_handler(cmd_return::Owned, CtxHandler::new(cmd_return::e_to_i));
 
         return params;
     }
 }
 
-
 /// Helper function to make stdin async
-fn stdin() -> impl Stream<Item=String, Error=io::Error> {
+fn stdin() -> impl Stream<Item = String, Error = io::Error> {
     let (mut tx, rx) = channel(1);
     thread::spawn(move || {
         let input = io::stdin();
@@ -124,26 +107,23 @@ fn stdin() -> impl Stream<Item=String, Error=io::Error> {
     rx.then(|e| e.unwrap())
 }
 
-
 /// Read stdin async, and send messages from it
 /// Via broker, this is not preffered, but it's ok
 fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
     tokio::spawn(futures::lazy(move || {
-        stdin().for_each(|string| {
-            broker.send_message(
-                &id,
-                &id,
-                cmd_input::Owned,
-                move |b| {
-                    let mut msg: cmd_input::Builder = b.init_as();
-                    msg.set_input(&string);
-                }
-            ).display();
-            Ok(())
-        })
-        .wait()
-        .map_err(|_| ())
-        .unwrap();
+        stdin()
+            .for_each(|string| {
+                broker
+                    .send_message(&id, &id, cmd_input::Owned, move |b| {
+                        let mut msg: cmd_input::Builder = b.init_as();
+                        msg.set_input(&string);
+                    })
+                    .display();
+                Ok(())
+            })
+            .wait()
+            .map_err(|_| ())
+            .unwrap();
         Ok(())
     }));
 }

@@ -1,14 +1,12 @@
-
-
+use base_capnp::{client_step, client_turn, from_client, host_message, to_client};
+use connection_capnp::client_kicked;
+use core_capnp::initialize;
+use errors::Result;
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{Result};
-use core_capnp::{initialize};
-use steplock_capnp::{set_timeout};
-use base_capnp::{from_client, to_client, host_message, client_turn, client_step};
-use connection_capnp::{client_kicked};
+use steplock_capnp::set_timeout;
 
-use modules::util::{PlayerId};
+use modules::util::PlayerId;
 
 #[derive(Debug, Clone)]
 pub enum Turn<'a> {
@@ -38,7 +36,8 @@ pub struct GameReactor {
 impl GameReactor {
     pub fn params<C: Ctx>(clients_id: ReactorId, game_controller: GameBox) -> CoreParams<Self, C> {
         let me = Self {
-            clients_id, game_controller
+            clients_id,
+            game_controller,
         };
 
         let mut params = CoreParams::new(me);
@@ -54,8 +53,7 @@ impl GameReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         handle.open_link(ClientLink::params(self.clients_id.clone()))?;
         Ok(())
     }
@@ -64,8 +62,7 @@ impl GameReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: from_client::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let id: PlayerId = msg.get_client_id().into();
         let data = msg.get_data()?;
 
@@ -78,8 +75,7 @@ impl GameReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         msgs: client_step::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let mut turns = Vec::new();
         for turn in msgs.get_data()?.iter() {
             let id: PlayerId = turn.get_client_id().into();
@@ -94,11 +90,7 @@ impl GameReactor {
         Ok(())
     }
 
-    fn step<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        msgs: Vec<PlayerTurn>,
-    ) -> Result<()> {
+    fn step<C: Ctx>(&mut self, handle: &mut ReactorHandle<C>, msgs: Vec<PlayerTurn>) -> Result<()> {
         for update in self.game_controller.step(msgs).iter() {
             match update {
                 Update::Global(data) => {
@@ -107,7 +99,7 @@ impl GameReactor {
                         b.set_data(data);
                     });
                     handle.send_internal(host_message)?;
-                },
+                }
                 Update::Player(id, data) => {
                     let mut to_client = MsgBuffer::<to_client::Owned>::new();
                     to_client.build(|b| {
@@ -115,7 +107,7 @@ impl GameReactor {
                         b.set_client_id(**id);
                     });
                     handle.send_internal(to_client)?;
-                },
+                }
                 Update::Kick(id) => {
                     let mut to_client = MsgBuffer::<client_kicked::Owned>::new();
                     to_client.build(|b| {

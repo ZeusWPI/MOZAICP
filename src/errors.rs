@@ -1,7 +1,7 @@
 use messaging::types::ReactorId;
 
 // All possible errors for MOZAIC
-error_chain!{
+error_chain! {
     foreign_links {
         Capnp(::capnp::Error);
         NotInSchema(::capnp::NotInSchema);
@@ -48,19 +48,20 @@ pub trait Consumable {
 }
 
 impl<T> Consumable for T
-    where T: Into<ErrWrapper> {
-
+where
+    T: Into<ErrWrapper>,
+{
     fn display(self) {
         self.into().display();
     }
 
-    fn ignore(self) { }
+    fn ignore(self) {}
 }
 
 impl ErrWrapper {
     pub fn display(self) {
         match self.0 {
-            None => {},
+            None => {}
             Some(inner) => print_error(inner),
         }
     }

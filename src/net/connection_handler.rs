@@ -1,20 +1,20 @@
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 
 use capnp_futures::serialize::Transport;
 use tokio::net::TcpStream;
 
-use futures::{Future, Async, Poll, Stream, Sink, AsyncSink};
 use futures::sync::mpsc;
+use futures::{Async, AsyncSink, Future, Poll, Sink, Stream};
 
 use capnp;
 use capnp::any_pointer;
-use capnp::traits::{Owned, HasTypeId};
-use capnp::message::{ReaderOptions, Reader, Builder, HeapAllocator, ReaderSegments};
+use capnp::message::{Builder, HeapAllocator, Reader, ReaderOptions, ReaderSegments};
+use capnp::traits::{HasTypeId, Owned};
 
-use network_capnp::{network_message, publish, disconnected};
-use messaging::types::{Message, Handler, AnyPtrHandler};
 use errors;
+use messaging::types::{AnyPtrHandler, Handler, Message};
+use network_capnp::{disconnected, network_message, publish};
 
 pub struct ConnectionHandler<S> {
     handler: StreamHandler<S>,
@@ -23,7 +23,8 @@ pub struct ConnectionHandler<S> {
 
 impl<S> ConnectionHandler<S> {
     pub fn new<F>(stream: TcpStream, core_constructor: F) -> Self
-        where F: FnOnce(mpsc::UnboundedSender<Message>) -> HandlerCore<S>
+    where
+        F: FnOnce(mpsc::UnboundedSender<Message>) -> HandlerCore<S>,
     {
         let (tx, rx) = mpsc::unbounded();
 
@@ -43,7 +44,7 @@ impl<S> ConnectionHandler<S> {
                 publish.set_message(msg.bytes());
             });
         }
-        return Ok(Async::Ready(()))
+        return Ok(Async::Ready(()));
     }
 
     pub fn writer<'a>(&'a mut self) -> Writer<'a> {
@@ -61,8 +62,12 @@ impl<S> Future for ConnectionHandler<S> {
             return Ok(Async::Ready(()));
         }
 
-        if self.handler.poll_stream().unwrap_or(Async::Ready(())).is_ready() {
-
+        if self
+            .handler
+            .poll_stream()
+            .unwrap_or(Async::Ready(()))
+            .is_ready()
+        {
             let mut msg = Builder::new_default();
 
             {
@@ -70,7 +75,9 @@ impl<S> Future for ConnectionHandler<S> {
                 root.set_type_id(disconnected::Builder::type_id());
             }
 
-            self.handler.handle_message(msg.into_reader()).expect("what the hell");
+            self.handler
+                .handle_message(msg.into_reader())
+                .expect("what the hell");
 
             info!("Tcp streamed closed at connection handler");
             return Ok(Async::Ready(()));
@@ -94,20 +101,22 @@ impl<S> HandlerCore<S> {
     }
 
     pub fn on<M, H>(&mut self, _m: M, h: H)
-        where M: for<'a> Owned<'a> + Send + 'static,
-             <M as Owned<'static>>::Reader: HasTypeId,
-              H: 'static + for <'a, 'c> Handler<'a, MsgHandlerCtx<'a, 'c, S>, M, Output=(), Error=errors::Error>
+    where
+        M: for<'a> Owned<'a> + Send + 'static,
+        <M as Owned<'static>>::Reader: HasTypeId,
+        H: 'static
+            + for<'a, 'c> Handler<'a, MsgHandlerCtx<'a, 'c, S>, M, Output = (), Error = errors::Error>,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
-        self.handlers.insert(
-            <M as Owned<'static>>::Reader::type_id(),
-            boxed,
-        );
+        self.handlers
+            .insert(<M as Owned<'static>>::Reader::type_id(), boxed);
     }
 
-    pub fn handle(&mut self, writer: &mut Writer, r: network_message::Reader)
-        -> Result<(), errors::Error>
-    {
+    pub fn handle(
+        &mut self,
+        writer: &mut Writer,
+        r: network_message::Reader,
+    ) -> Result<(), errors::Error> {
         let type_id = r.get_type_id();
         match self.handlers.get(&type_id) {
             None => eprintln!("unknown message type"),
@@ -144,24 +153,23 @@ impl<S> StreamHandler<S> {
         }
     }
 
-
     fn flush_writes(&mut self) -> Poll<(), errors::Error> {
         while let Some(builder) = self.write_queue.pop_front() {
             match self.transport.start_send(builder)? {
-                AsyncSink::Ready => { }, // continue
+                AsyncSink::Ready => {} // continue
                 AsyncSink::NotReady(builder) => {
                     self.write_queue.push_front(builder);
                     return Ok(Async::NotReady);
-                },
+                }
             };
         }
 
         return self.transport.poll_complete().map_err(|e| e.into());
     }
 
-    pub fn handle_message<T>(&mut self, builder: Reader<T>)
-        -> Result<(), errors::Error>
-        where T: ReaderSegments
+    pub fn handle_message<T>(&mut self, builder: Reader<T>) -> Result<(), errors::Error>
+    where
+        T: ReaderSegments,
     {
         let mut writer = Writer {
             write_queue: &mut self.write_queue,
@@ -188,10 +196,13 @@ impl<S> StreamHandler<S> {
 }
 
 type MessageHandler<S> = Box<
-    dyn for<'a, 'c>
-        Handler<'a,
-            MsgHandlerCtx<'a, 'c, S>,
-            any_pointer::Owned, Output=(), Error=errors::Error>
+    dyn for<'a, 'c> Handler<
+        'a,
+        MsgHandlerCtx<'a, 'c, S>,
+        any_pointer::Owned,
+        Output = (),
+        Error = errors::Error,
+    >,
 >;
 
 pub struct MsgHandlerCtx<'a, 'w, S> {
@@ -213,17 +224,20 @@ impl<M, F> MsgHandler<M, F> {
     }
 }
 
-impl<'a, 'c, S,  M, F, T, E> Handler<'a, MsgHandlerCtx<'a, 'c, S>, M> for MsgHandler<M, F>
-    where F: Fn(&mut S, &mut Writer, <M as Owned<'a>>::Reader) -> Result<T, E>,
-          F: Send,
-          M: Owned<'a> + 'static + Send
+impl<'a, 'c, S, M, F, T, E> Handler<'a, MsgHandlerCtx<'a, 'c, S>, M> for MsgHandler<M, F>
+where
+    F: Fn(&mut S, &mut Writer, <M as Owned<'a>>::Reader) -> Result<T, E>,
+    F: Send,
+    M: Owned<'a> + 'static + Send,
 {
     type Output = T;
     type Error = E;
 
-    fn handle(&self, ctx: &mut MsgHandlerCtx<'a, 'c, S>, reader: <M as Owned<'a>>::Reader)
-        -> Result<T, E>
-    {
+    fn handle(
+        &self,
+        ctx: &mut MsgHandlerCtx<'a, 'c, S>,
+        reader: <M as Owned<'a>>::Reader,
+    ) -> Result<T, E> {
         let MsgHandlerCtx { state, writer } = ctx;
         (self.function)(state, writer, reader)
     }
@@ -236,9 +250,10 @@ pub struct Writer<'a> {
 
 impl<'a> Writer<'a> {
     pub fn write<M, F>(&mut self, _m: M, initializer: F)
-        where F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
-              M: Owned<'static>,
-              <M as Owned<'static>>::Builder: HasTypeId,
+    where
+        F: for<'b> FnOnce(capnp::any_pointer::Builder<'b>),
+        M: Owned<'static>,
+        <M as Owned<'static>>::Builder: HasTypeId,
     {
         let mut builder = Builder::new_default();
         {

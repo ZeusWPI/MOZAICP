@@ -1,12 +1,12 @@
+use core_capnp::initialize;
+use errors::*;
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::*;
-use core_capnp::{initialize};
 
-use cmd_capnp::{bot_return, bot_input};
+use cmd_capnp::{bot_input, bot_return};
 
-use std::process::{Command, Stdio};
 use std::io::BufReader;
+use std::process::{Command, Stdio};
 
 use runtime::BrokerHandle;
 
@@ -28,9 +28,10 @@ pub struct BotReactor {
 
 impl BotReactor {
     pub fn new(broker: BrokerHandle, foreign_id: ReactorId, bot_cmd: Vec<String>) -> Self {
-
         Self {
-            broker, foreign_id, bot: Bot::ToSpawn(bot_cmd)
+            broker,
+            foreign_id,
+            bot: Bot::ToSpawn(bot_cmd),
         }
     }
 
@@ -46,11 +47,10 @@ impl BotReactor {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let args = match &self.bot {
             Bot::ToSpawn(v) => v,
-            _ => return Ok(())
+            _ => return Ok(()),
         };
 
         let mut cmd = Command::new(&args[0]);
@@ -59,13 +59,16 @@ impl BotReactor {
         cmd.stdout(Stdio::piped());
         cmd.stdin(Stdio::piped());
 
-        let mut bot = cmd.spawn_async()
-            .expect("Couldn't spawn bot");
+        let mut bot = cmd.spawn_async().expect("Couldn't spawn bot");
 
-        let stdout = bot.stdout().take()
+        let stdout = bot
+            .stdout()
+            .take()
             .expect("child did not have a handle to stdout");
 
-        let stdin = bot.stdin().take()
+        let stdin = bot
+            .stdin()
+            .take()
             .expect("child did not have a handle to stdin");
 
         let child_future = bot
@@ -73,7 +76,6 @@ impl BotReactor {
             .map_err(|e| panic!("error while running child: {}", e));
 
         tokio::spawn(child_future);
-
 
         self.bot = Bot::Spawned(BotSink::new(stdin));
 
@@ -89,14 +91,12 @@ impl BotReactor {
         _: &mut ReactorHandle<C>,
         r: bot_input::Reader,
     ) -> Result<()> {
-
         if let Bot::Spawned(ref mut stdin) = self.bot {
             let msg = r.get_input()?;
             let mut msg = msg.to_vec();
             msg.push(b'\n');
 
-            stdin.try_send(msg)
-                .expect("Damm it");
+            stdin.try_send(msg).expect("Damm it");
         }
 
         Ok(())
@@ -110,15 +110,9 @@ struct ForeignLink;
 impl ForeignLink {
     pub fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, Self);
-        params.internal_handler(
-            bot_return::Owned,
-            CtxHandler::new(bot_return::i_to_e),
-        );
+        params.internal_handler(bot_return::Owned, CtxHandler::new(bot_return::i_to_e));
 
-        params.external_handler(
-            bot_input::Owned,
-            CtxHandler::new(bot_input::e_to_i)
-        );
+        params.external_handler(bot_input::Owned, CtxHandler::new(bot_input::e_to_i));
 
         return params;
     }
@@ -129,7 +123,7 @@ struct BotLink;
 impl BotLink {
     pub fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(foreign_id, Self);
-        params.external_handler(bot_return::Owned, CtxHandler::new(bot_return::e_to_i), );
+        params.external_handler(bot_return::Owned, CtxHandler::new(bot_return::e_to_i));
         return params;
     }
 }
@@ -140,23 +134,20 @@ fn setup_async_bot_stdout(mut broker: BrokerHandle, id: ReactorId, stdout: Child
             // Convert any io::Error into a failure::Error for better flexibility
             .map_err(|e| eprintln!("{:?}", e))
             .for_each(move |input| {
-                broker.send_message(
-                    &id,
-                    &id,
-                    bot_return::Owned,
-                    move |b| {
+                broker
+                    .send_message(&id, &id, bot_return::Owned, move |b| {
                         let mut msg: bot_return::Builder = b.init_as();
                         msg.set_message(&input.as_bytes());
-                    }
-                ).display();
+                    })
+                    .display();
                 Ok(())
-            })
+            }),
     );
 }
 
-use tokio::sync::mpsc;
-use std::io::Cursor;
 use std::collections::VecDeque;
+use std::io::Cursor;
+use tokio::sync::mpsc;
 
 use tokio::io::AsyncWrite;
 use tokio::prelude::*;
@@ -169,8 +160,9 @@ struct BotSink<A> {
 }
 
 impl<A> BotSink<A>
-    where A: AsyncWrite + Send + 'static {
-
+where
+    A: AsyncWrite + Send + 'static,
+{
     fn new(write: A) -> mpsc::Sender<Vec<u8>> {
         let (tx, rx) = mpsc::channel(10);
 
@@ -189,7 +181,9 @@ impl<A> BotSink<A>
 
 use bytes::Buf;
 impl<A> Future for BotSink<A>
-    where A: AsyncWrite {
+where
+    A: AsyncWrite,
+{
     type Item = ();
     type Error = ();
 
@@ -199,7 +193,7 @@ impl<A> Future for BotSink<A>
                 None => return Ok(Async::Ready(())),
                 Some(vec) => {
                     self.queue.push_back(vec);
-                },
+                }
             }
         }
 

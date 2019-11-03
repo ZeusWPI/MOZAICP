@@ -1,5 +1,3 @@
-
-
 use std::ops::Deref;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Copy)]
@@ -20,7 +18,7 @@ impl Into<u64> for Identifier {
 impl Deref for Identifier {
     type Target = u64;
 
-    fn deref(& self) -> &u64 {
+    fn deref(&self) -> &u64 {
         &self.0
     }
 }
@@ -49,7 +47,7 @@ impl Into<u64> for &PlayerId {
 impl Deref for PlayerId {
     type Target = u64;
 
-    fn deref(& self) -> &u64 {
+    fn deref(&self) -> &u64 {
         &self.0
     }
 }

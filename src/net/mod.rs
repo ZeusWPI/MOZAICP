@@ -1,2 +1,2 @@
-pub mod server;
 pub mod connection_handler;
+pub mod server;

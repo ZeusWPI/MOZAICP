@@ -1,11 +1,11 @@
+use core_capnp::initialize;
+use errors;
+use log_capnp::{inner_log, log, open_log_link};
 use messaging::reactor::*;
 use messaging::types::*;
-use errors;
-use core_capnp::{initialize};
-use log_capnp::{open_log_link, log, inner_log};
 
 use std::fs::File;
-use std::io::{Write};
+use std::io::Write;
 
 pub struct LogReactor {
     file: File,
@@ -13,13 +13,15 @@ pub struct LogReactor {
 }
 
 impl LogReactor {
-
     pub fn params<C: Ctx, S>(foreign: (ReactorId, S)) -> CoreParams<Self, C>
-        where S: Into<String> {
+    where
+        S: Into<String>,
+    {
         let file = File::create("log.log").expect("Couldn't create log file");
 
         let reactor = LogReactor {
-            file, foreign: (foreign.0, foreign.1.into())
+            file,
+            foreign: (foreign.0, foreign.1.into()),
         };
 
         let mut params = CoreParams::new(reactor);
@@ -58,11 +60,9 @@ impl LogReactor {
     fn open_link<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
-        user: (ReactorId, String)
+        user: (ReactorId, String),
     ) -> Result<(), errors::Error> {
-        handle.open_link(
-            LogLink::params(user)
-        )
+        handle.open_link(LogLink::params(user))
     }
 
     fn handle_log<C: Ctx>(
@@ -74,7 +74,9 @@ impl LogReactor {
         let user = r.get_name()?;
         let msg = r.get_log()?;
 
-        self.file.write_fmt(format_args!("{}: {}\n", user, msg)).expect("Couldn't write to log file");
+        self.file
+            .write_fmt(format_args!("{}: {}\n", user, msg))
+            .expect("Couldn't write to log file");
 
         Ok(())
     }
@@ -85,15 +87,11 @@ impl Link {
     pub fn params<C: Ctx>(logger: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(logger, Link);
 
-        params.internal_handler(
-            log::Owned,
-            CtxHandler::new(log::i_to_e)
-        );
+        params.internal_handler(log::Owned, CtxHandler::new(log::i_to_e));
 
         return params;
     }
 }
-
 
 struct LogLink {
     name: String,
@@ -104,15 +102,9 @@ impl LogLink {
         let out = LogLink { name: foreign.1 };
         let mut params = LinkParams::new(foreign.0, out);
 
-        params.external_handler(
-            log::Owned,
-            CtxHandler::new(Self::e_handle_log)
-        );
+        params.external_handler(log::Owned, CtxHandler::new(Self::e_handle_log));
 
-        params.external_handler(
-            open_log_link::Owned,
-            CtxHandler::new(open_log_link::e_to_i)
-        );
+        params.external_handler(open_log_link::Owned, CtxHandler::new(open_log_link::e_to_i));
 
         return params;
     }

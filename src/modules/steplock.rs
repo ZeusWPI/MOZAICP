@@ -1,14 +1,13 @@
-
+use core_capnp::initialize;
+use errors::{Consumable, Result};
 use messaging::reactor::*;
 use messaging::types::*;
-use errors::{Result, Consumable};
-use core_capnp::{initialize};
-use runtime::{BrokerHandle};
+use runtime::BrokerHandle;
 
-use steplock_capnp::{timeout, set_timeout};
-use base_capnp::{from_client, to_client, host_message, client_step};
-use connection_capnp::{client_kicked};
-use super::util::{PlayerId};
+use super::util::PlayerId;
+use base_capnp::{client_step, from_client, host_message, to_client};
+use connection_capnp::client_kicked;
+use steplock_capnp::{set_timeout, timeout};
 
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -27,7 +26,12 @@ pub struct Steplock {
 }
 
 impl Steplock {
-    pub fn new(broker: BrokerHandle, players: Vec<PlayerId>, host_id: ReactorId, client_id: ReactorId) -> Self {
+    pub fn new(
+        broker: BrokerHandle,
+        players: Vec<PlayerId>,
+        host_id: ReactorId,
+        client_id: ReactorId,
+    ) -> Self {
         Self {
             broker,
             timeout: None,
@@ -36,7 +40,7 @@ impl Steplock {
             timer: None,
             players,
             host_id,
-            client_id
+            client_id,
         }
     }
 
@@ -55,9 +59,18 @@ impl Steplock {
 
         params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
         params.handler(timeout::Owned, CtxHandler::new(Self::handle_timeout));
-        params.handler(from_client::Owned, CtxHandler::new(Self::handle_from_client));
-        params.handler(set_timeout::Owned, CtxHandler::new(Self::handle_set_timeout));
-        params.handler(client_kicked::Owned, CtxHandler::new(Self::handle_client_kicked));
+        params.handler(
+            from_client::Owned,
+            CtxHandler::new(Self::handle_from_client),
+        );
+        params.handler(
+            set_timeout::Owned,
+            CtxHandler::new(Self::handle_set_timeout),
+        );
+        params.handler(
+            client_kicked::Owned,
+            CtxHandler::new(Self::handle_client_kicked),
+        );
 
         return params;
     }
@@ -66,17 +79,14 @@ impl Steplock {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         handle.open_link(TimeoutLink::params(handle.id().clone()))?;
 
         handle.open_link(ClientsLink::params(self.client_id.clone()))?;
         handle.open_link(HostLink::params(self.host_id.clone()))?;
 
         // Open timeout shit
-        self.timer = Some(
-            Timer::new(self.broker.clone(), handle.id().clone())
-        );
+        self.timer = Some(Timer::new(self.broker.clone(), handle.id().clone()));
 
         if let Some(timeout) = self.initial_timeout {
             self.set_timout(timeout);
@@ -86,19 +96,22 @@ impl Steplock {
     }
 
     pub fn set_timout(&mut self, timeout: u64) {
-        self.timer.as_mut().map(|tx| tx.try_send(TimerAction::Reset(timeout)).unwrap());
+        self.timer
+            .as_mut()
+            .map(|tx| tx.try_send(TimerAction::Reset(timeout)).unwrap());
     }
 
     pub fn stop_timeout(&mut self) {
-        self.timer.as_mut().map(|tx| tx.try_send(TimerAction::Halt).unwrap());
+        self.timer
+            .as_mut()
+            .map(|tx| tx.try_send(TimerAction::Halt).unwrap());
     }
 
     fn handle_set_timeout<C: Ctx>(
         &mut self,
         _handle: &mut ReactorHandle<C>,
         _: set_timeout::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         if let Some(timeout) = self.timeout {
             self.set_timout(timeout);
         }
@@ -110,8 +123,7 @@ impl Steplock {
         &mut self,
         _handle: &mut ReactorHandle<C>,
         c: client_kicked::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let id = c.get_id();
 
         if let Some(pos) = self.players.iter().position(|x| **x == id) {
@@ -123,13 +135,12 @@ impl Steplock {
         Ok(())
     }
 
-    fn flush<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-    ) -> Result<()> {
+    fn flush<C: Ctx>(&mut self, handle: &mut ReactorHandle<C>) -> Result<()> {
         let mut msgs = MsgBuffer::<client_step::Owned>::new();
         msgs.build(|b| {
-            let mut data_list = b.reborrow().init_data(self.players.len().try_into().unwrap());
+            let mut data_list = b
+                .reborrow()
+                .init_data(self.players.len().try_into().unwrap());
 
             for (i, player) in self.players.iter().enumerate() {
                 let mut builder = data_list.reborrow().get(i.try_into().unwrap());
@@ -154,8 +165,7 @@ impl Steplock {
         &mut self,
         handle: &mut ReactorHandle<C>,
         _: timeout::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         println!("Handling timeout");
         self.flush(handle)?;
 
@@ -166,8 +176,7 @@ impl Steplock {
         &mut self,
         handle: &mut ReactorHandle<C>,
         r: from_client::Reader,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let id = r.get_client_id();
         let msg = r.get_data()?;
 
@@ -183,7 +192,7 @@ impl Steplock {
 
 struct TimeoutLink;
 impl TimeoutLink {
-    fn params<C:Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
+    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
         let mut params = LinkParams::new(remote_id, Self);
         params.external_handler(timeout::Owned, CtxHandler::new(timeout::e_to_i));
         params
@@ -219,10 +228,10 @@ impl HostLink {
 
 use std::time::{Duration, Instant};
 
-use tokio::prelude::{Stream};
-use tokio::timer::Delay;
-use futures::{Poll, Async};
 use futures::future::Future;
+use futures::{Async, Poll};
+use tokio::prelude::Stream;
+use tokio::timer::Delay;
 
 struct Timer {
     inner: Option<Delay>,
@@ -237,7 +246,10 @@ impl Timer {
         let (tx, rx) = mpsc::channel(20);
 
         let me = Self {
-            inner, rx, broker, id
+            inner,
+            rx,
+            broker,
+            id,
         };
 
         tokio::spawn(me);
@@ -256,25 +268,21 @@ impl Future for Timer {
                 None => return Ok(Async::Ready(())),
                 Some(action) => match action {
                     TimerAction::Reset(timeout) => {
-                        self.inner = Some(
-                            Delay::new(Instant::now() + Duration::from_millis(timeout))
-                        );
-                    },
+                        self.inner =
+                            Some(Delay::new(Instant::now() + Duration::from_millis(timeout)));
+                    }
                     TimerAction::Halt => {
                         self.inner = None;
                     }
-                }
+                },
             }
         }
 
         if let Some(Ok(Async::Ready(_))) = self.inner.as_mut().map(|future| future.poll()) {
             self.inner = None;
-            self.broker.send_message(
-                &self.id,
-                &self.id,
-                timeout::Owned,
-                |_| { }
-            ).display();
+            self.broker
+                .send_message(&self.id, &self.id, timeout::Owned, |_| {})
+                .display();
         }
 
         Ok(Async::NotReady)
