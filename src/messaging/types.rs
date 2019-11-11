@@ -136,9 +136,19 @@ impl rand::distributions::Distribution<ReactorId> for rand::distributions::Stand
     }
 }
 
+
+use std::mem;
 impl ReactorId {
     pub fn bytes<'a>(&'a self) -> &'a [u8] {
         &self.public_key
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        let mut b = [0; 4];
+        b.clone_from_slice(&self.public_key[0..4]);
+        unsafe {
+            mem::transmute::<[u8; 4], u32>(b)
+        }
     }
 }
 

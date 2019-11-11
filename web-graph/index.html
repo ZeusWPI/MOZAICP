@@ -1,0 +1,188 @@
+
+<!doctype html>
+<html>
+<head>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <title>Vis Network | Node Styles | HTML in Nodes</title>
+
+    <style type="text/css">
+        body {
+            font: 10pt arial;
+        }
+        #mynetwork {
+            width: 600px;
+            height: 600px;
+            border: 1px solid lightgray;
+            background-color:#eeeeee;
+        }
+    </style>
+
+    <script type="text/javascript">
+        var data = new vis.DataSet();
+
+        var nodes = null;
+        var edges = null;
+        var network = null;
+        // Called when the Visualization API is loaded.
+        function draw() {
+        }
+    </script>
+
+</head>
+
+<body onload="draw()">
+<div style="width: 80vw; height: 80vh; margin: auto;" id="mynetwork"></div>
+
+<script>
+    var nodes = new vis.DataSet();
+    var edges = new vis.DataSet();
+
+    // TODO add colour
+
+    nodes.add({id: 1, label: 'Get HTML'});
+    nodes.add({id: 2, label: 'Using SVG'});
+    nodes.add({id: 3, label: 'Using SVG'});
+    nodes.add({id: 4, label: 'Using SVG'});
+
+    edges.add({id: 1, from: 1, to: 2, length: 300});
+
+    function set_color(nodes) {
+        if (Array.isArray(nodes))
+            for (let n of nodes) {
+                n.color = "red";
+            }
+        else
+            nodes.color = "cyan";
+    }
+
+        /*
+
+        Event: {
+            type: string,
+        }
+
+        Event: {
+            type: "init",
+            nodes: [{
+                id: int,
+                label: string
+            }],
+            edges: [{
+                id: int,
+                from: int,
+                to: int
+            }]
+        }
+
+        Event: {
+            type: "add",
+            data_type: "node",
+            data:  {
+                id: int,
+                label: string
+            }
+        }
+
+        Event: {
+            type: "add",
+            data_type: "edge",
+            data:  {
+                id: int,
+                from: int,
+                to: int
+            }
+        }
+
+        Event: {
+            type: "remove",
+            data_type: "edge"|"node",
+            id: int
+        }
+
+        */
+    function handle_event(event) {
+        if (event.type === "Init"){
+            nodes.clear();
+            edges.clear();
+            set_color(event.nodes);
+
+            nodes.add(event.nodes);
+
+            setTimeout(
+                () => {
+                    edges.add(event.edges);
+                }, 200
+            )
+        } else {
+            const at = event.data_type === "Node" ? nodes : edges;
+
+            if (event.data_type === "Node") {
+                set_color(event.data);
+            }
+
+            if (event.type === "Add") {
+                at.add(event.data);
+            } else {
+                at.remove(event.id);
+            }
+        }
+    }
+
+    function draw() {
+        const container = document.getElementById('mynetwork');
+
+        const data = {
+            nodes: nodes,
+            edges: edges
+        };
+        const options = { };
+
+        const network = new vis.Network(container, data, options);
+
+        var ws = new WebSocket('ws://127.0.0.1:3012');
+        ws.onmessage = function (event) {
+            console.log(event.data);
+            handle_event(JSON.parse(event.data));
+        };
+
+        ws.onopen = function(ev) {
+            ws.send(
+                JSON.stringify(
+                    {
+                        type: "init",
+                        nodes: [{id: 1, label: 'Get HTML'}, {id: 2, label: 'Get HTML'}],
+                        edges: [{id: 1, from: 1, to: 2}]
+                    }
+                )
+            );
+
+            setTimeout(
+                () => ws.send(
+                    JSON.stringify(
+                        {
+                            type: "add",
+                            data_type: "edge",
+                            data: {id: 2, from: 1, to: 2}
+                        }
+                    )
+                ), 1000
+            );
+
+            setTimeout(
+                () => ws.send(
+                    JSON.stringify(
+                        {
+                            type: "add",
+                            data_type: "node",
+                            data: {id: 3, label: 'BLUE'}
+                        }
+                    )
+                ), 2000
+            );
+        }
+
+    }
+</script>
+</body>
+</html>

@@ -19,6 +19,7 @@ use messaging::types::*;
 
 use errors::ErrorKind::{MozaicError, NoSuchReactorError};
 use errors::{self, Consumable, Result, ResultExt};
+use graph::Graph;
 
 use HasNamedTypeId;
 
@@ -40,6 +41,7 @@ impl Broker {
         };
         let broker = BrokerHandle {
             broker: Arc::new(Mutex::new(broker)),
+            graph: Graph::new(),
         };
 
         return Ok(broker);
@@ -78,6 +80,7 @@ pub struct ActorData {
 #[derive(Clone)]
 pub struct BrokerHandle {
     broker: Arc<Mutex<Broker>>,
+    graph: Graph,
 }
 
 impl BrokerHandle {
@@ -113,6 +116,7 @@ impl BrokerHandle {
     pub fn unregister(&mut self, id: &ReactorId) {
         // Maybe check to close all links to this reactor
         info!("Unregistering reactor {:?}", id);
+        self.graph.remove_node(id);
 
         let mut broker = self.broker.lock().unwrap();
         broker.actors.remove(&id);
@@ -192,6 +196,7 @@ impl BrokerHandle {
         S: 'static + Send,
     {
         info!("Spawning new reactor {} {:?}", name, id);
+        self.graph.add_node(&id, name);
 
         let mut driver = {
             let mut broker = self.broker.lock().unwrap();
@@ -301,6 +306,7 @@ impl<S: 'static> ReactorDriver<S> {
                         field::debug(&self.reactor.id),
                         field::debug(&uuid)
                     );
+                    self.broker.graph.add_edge(&self.reactor.id, &uuid);
 
                     let link = params.into_link();
                     let span = span!(tracing::Level::INFO, "link");
@@ -313,6 +319,7 @@ impl<S: 'static> ReactorDriver<S> {
                         field::debug(&self.reactor.id),
                         field::debug(&uuid)
                     );
+                    self.broker.graph.remove_edge(&self.reactor.id, &uuid);
 
                     self.reactor.links.remove(&uuid);
                 }
