@@ -18,7 +18,6 @@
             border: 1px solid lightgray;
             background-color: #3a3a3a;
         }
-
     </style>
 
     <script type="text/javascript">
@@ -140,11 +139,12 @@
             };
             const options = {
                 physics: {
-                    forceAtlas2Based: {
-                        centralGravity: 0.02,
-                        damping: 0.0
+                    stabilization: {
+                        enabled: true,
+                        iterations: 10, // maximum number of iteration to stabilize
+                        updateInterval: 10,
+                        fit: true
                     },
-                    timestamp: 0.2
                 }
             };
 
