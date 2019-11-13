@@ -52,6 +52,7 @@ use mozaic::errors::Consumable;
 use mozaic::modules::util;
 use mozaic::modules::ConnectionManager;
 use mozaic::runtime::Broker;
+use mozaic::graph;
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -80,7 +81,8 @@ pub fn run(args: Vec<String>) {
 
     tokio::run(
         futures::lazy(move || {
-            let mut broker = Broker::new(Graph::new_boxed()).unwrap();
+            graph::set_graph(Graph::new());
+            let mut broker = Broker::new().unwrap();
 
             broker
                 .spawn(

@@ -19,7 +19,7 @@ use messaging::types::*;
 
 use errors::ErrorKind::{MozaicError, NoSuchReactorError};
 use errors::{self, Consumable, Result, ResultExt};
-use graph::{GraphLike};
+use graph;
 
 use HasNamedTypeId;
 
@@ -32,7 +32,7 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new(graph: Arc<Mutex<dyn GraphLike>>) -> Result<BrokerHandle> {
+    pub fn new() -> Result<BrokerHandle> {
         let id: ReactorId = rand::thread_rng().gen();
 
         let broker = Broker {
@@ -41,7 +41,6 @@ impl Broker {
         };
         let broker = BrokerHandle {
             broker: Arc::new(Mutex::new(broker)),
-            graph: graph,
         };
 
         return Ok(broker);
@@ -80,7 +79,6 @@ pub struct ActorData {
 #[derive(Clone)]
 pub struct BrokerHandle {
     broker: Arc<Mutex<Broker>>,
-    graph: Arc<Mutex<dyn GraphLike>>,
 }
 
 impl BrokerHandle {
@@ -95,7 +93,7 @@ impl BrokerHandle {
 
     pub fn register(&mut self, id: ReactorId, tx: mpsc::UnboundedSender<Message>, name: &str) {
         info!("Registering reactor {:?}", id);
-        self.graph.lock().unwrap().add_node(&id, name);
+        graph::add_node(&id, name);
 
         let mut broker = self.broker.lock().unwrap();
         broker.actors.insert(id, ActorData { tx });
@@ -117,7 +115,7 @@ impl BrokerHandle {
     pub fn unregister(&mut self, id: &ReactorId) {
         // Maybe check to close all links to this reactor
         info!("Unregistering reactor {:?}", id);
-        self.graph.lock().unwrap().remove_node(id);
+        graph::remove_node(id);
 
         let mut broker = self.broker.lock().unwrap();
         broker.actors.remove(&id);
@@ -197,7 +195,7 @@ impl BrokerHandle {
         S: 'static + Send,
     {
         info!("Spawning new reactor {} {:?}", name, id);
-        self.graph.lock().unwrap().add_node(&id, name);
+        graph::add_node(&id, name);
 
         let mut driver = {
             let mut broker = self.broker.lock().unwrap();
@@ -307,7 +305,7 @@ impl<S: 'static> ReactorDriver<S> {
                         field::debug(&self.reactor.id),
                         field::debug(&uuid)
                     );
-                    self.broker.graph.lock().unwrap().add_edge(&self.reactor.id, &uuid);
+                    graph::add_edge(&self.reactor.id, &uuid);
 
                     let link = params.into_link();
                     let span = span!(tracing::Level::INFO, "link");
@@ -320,7 +318,7 @@ impl<S: 'static> ReactorDriver<S> {
                         field::debug(&self.reactor.id),
                         field::debug(&uuid)
                     );
-                    self.broker.graph.lock().unwrap().remove_edge(&self.reactor.id, &uuid);
+                    graph::remove_edge(&self.reactor.id, &uuid);
 
                     self.reactor.links.remove(&uuid);
                 }

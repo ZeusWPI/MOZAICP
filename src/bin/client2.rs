@@ -28,9 +28,7 @@ fn main() {
     let self_id: ReactorId = rand::thread_rng().gen();
 
     tokio::run(futures::lazy(move || {
-        let mut broker = Broker::new(
-            mozaic::graph::new_empty()
-        ).unwrap();
+        let mut broker = Broker::new().unwrap();
         let reactor = ClientReactor {
             server: None,
             id,
