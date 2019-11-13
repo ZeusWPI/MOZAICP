@@ -12,6 +12,7 @@ use tracing_futures::Instrument;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use mozaic::messaging::types::*;
+use mozaic::graph::Graph;
 use std::env;
 use std::net::SocketAddr;
 
@@ -79,7 +80,7 @@ pub fn run(args: Vec<String>) {
 
     tokio::run(
         futures::lazy(move || {
-            let mut broker = Broker::new().unwrap();
+            let mut broker = Broker::new(Graph::new_boxed()).unwrap();
 
             broker
                 .spawn(

@@ -4,42 +4,13 @@ use std::io;
 use std::net::SocketAddr;
 
 use futures::{Async, Future, Poll};
-use rand::Rng;
 use tokio::net::TcpListener;
 
-use messaging::reactor::CoreParams;
 use messaging::types::*;
 
 pub use self::runtime::{Broker, BrokerHandle, Runtime};
 
 use net::server::{ClientHandler, ServerHandler};
-
-pub fn run_server<F, S>(addr: SocketAddr, initialize_greeter: F)
-where
-    F: Send + 'static + FnOnce(ReactorId) -> CoreParams<S, Runtime>,
-    S: Send + 'static,
-{
-    // let stupid = Stupid { greeter_id: greeter_id.clone(), broker: broker.clone()};
-    // let mut params: CoreParams<Stupid, Runtime> = stupid.params();
-
-    tokio::run(futures::lazy(move || {
-        let mut broker = Broker::new().unwrap();
-        let greeter_id: ReactorId = rand::thread_rng().gen();
-
-        let greeter_params = initialize_greeter(broker.get_runtime_id());
-
-        broker
-            .spawn(
-                greeter_id.clone(),
-                greeter_params,
-                &format!("Tcp Server {}", addr.port()),
-            )
-            .unwrap();
-
-        tokio::spawn(TcpServer::new(broker, greeter_id, &addr));
-        return Ok(());
-    }));
-}
 
 pub fn connect_to_server(
     broker: BrokerHandle,

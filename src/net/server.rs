@@ -49,7 +49,7 @@ impl ServerHandler {
             connecting_id, self.welcomer_id
         );
 
-        self.broker.register(connecting_id.clone(), self.tx.clone());
+        self.broker.register(connecting_id.clone(), self.tx.clone(), "Client");
 
         self.broker.send_message(
             &self.welcomer_id,
@@ -144,7 +144,7 @@ impl ClientHandler {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
 
-        self.broker.register(connecting_id.clone(), self.tx.clone());
+        self.broker.register(connecting_id.clone(), self.tx.clone(), "Server");
 
         self.broker.send_message(
             &self.welcomer_id,

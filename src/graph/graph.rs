@@ -130,7 +130,15 @@ impl Graph {
         return out;
     }
 
-    pub fn add_node(&self, id: &ReactorId, name: &str) {
+    pub fn new_boxed() -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(Self::new()))
+    }
+}
+
+use super::GraphLike;
+impl GraphLike for Graph {
+
+    fn add_node(&self, id: &ReactorId, name: &str) {
         let node = Node { id: id.as_u32(), label: String::from(name) };
 
         let event = Event::Add(Add::Node (node.clone()));
@@ -140,7 +148,7 @@ impl Graph {
         inner.emit_event(event);
     }
 
-    pub fn add_edge(&mut self, from: &ReactorId, to: &ReactorId) {
+    fn add_edge(&mut self, from: &ReactorId, to: &ReactorId) {
         let mut inner = self.inner.lock().unwrap();
 
         let edge = Edge { id: inner.get_new_edge_id(), from: from.as_u32(), to: to.as_u32()};
@@ -150,24 +158,24 @@ impl Graph {
         inner.emit_event(event);
     }
 
-    pub fn remove_node(&self, id: &ReactorId) {
+    fn remove_node(&self, id: &ReactorId) {
         let id = id.as_u32();
 
         let mut inner = self.inner.lock().unwrap();
         first_index(&inner.nodes, |n| n.id == id).map(|idx| inner.nodes.remove(idx));
 
-        let event = Event::Remove(Remove { data_type: String::from("node"), id: id });
+        let event = Event::Remove(Remove { data_type: String::from("Node"), id: id });
         inner.emit_event(event);
     }
 
-    pub fn remove_edge(&self, from: &ReactorId, to: &ReactorId) {
+    fn remove_edge(&self, from: &ReactorId, to: &ReactorId) {
         let from = from.as_u32();
         let to = to.as_u32();
 
         let mut inner = self.inner.lock().unwrap();
 
         if let Some(id) = first_index(&inner.edges, |n| n.from == from && n.to == to).map(|idx| inner.edges.remove(idx).id) {
-            let event = Event::Remove(Remove { data_type: String::from("edge"), id: id });
+            let event = Event::Remove(Remove { data_type: String::from("Edge"), id: id });
             inner.emit_event(event);
         }
     }
