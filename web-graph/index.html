@@ -4,19 +4,21 @@
 <head>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 
-    <title>Vis Network | Node Styles | HTML in Nodes</title>
+    <title>MOZAIC debug station</title>
 
     <style type="text/css">
         body {
             font: 10pt arial;
+            background-color: #222;
+
         }
-        
+
+
         #mynetwork {
-            width: 600px;
-            height: 600px;
             border: 1px solid lightgray;
-            background-color: #eeeeee;
+            background-color: #3a3a3a;
         }
+
     </style>
 
     <script type="text/javascript">
@@ -26,7 +28,7 @@
         var edges = null;
         var network = null;
         // Called when the Visualization API is loaded.
-        function draw() {}
+        function draw() { }
     </script>
 
 </head>
@@ -40,46 +42,17 @@
 
         var colour_cache = {};
 
-        // TODO add colour
-
-        nodes.add({
-            id: 1,
-            label: 'Get HTML'
-        });
-        nodes.add({
-            id: 2,
-            label: 'Using SVG'
-        });
-        nodes.add({
-            id: 3,
-            label: 'Using SVG'
-        });
-        nodes.add({
-            id: 4,
-            label: 'Using SVG'
-        });
-
-        edges.add({
-            id: 1,
-            from: 1,
-            to: 2,
-            length: 300
-        });
-
-        function random_colour() {
-            var letters = '0123456789ABCDEF';
-            var color = '#';
-            for (var i = 0; i < 6; i++) {
-                color += letters[Math.floor(Math.random() * 16)];
-            }
-            return color;
+        function getColor() {
+            return "hsl(" + 360 * Math.random() + ',' +
+                (100 * Math.random()) + '%,' +
+                (60 + 20 * Math.random()) + '%)';
         }
 
         function set_color(nodes) {
             nodes = Array.isArray(nodes) ? nodes : [nodes];
             for (let n of nodes) {
                 if (colour_cache[n.label] == undefined) {
-                    colour_cache[n.label] = random_colour();
+                    colour_cache[n.label] = getColor();
                 }
                 n.color = colour_cache[n.label];
             }
@@ -178,8 +151,7 @@
             const network = new vis.Network(container, data, options);
 
             var ws = new WebSocket('ws://127.0.0.1:3012');
-            ws.onmessage = function(event) {
-                console.log(event.data);
+            ws.onmessage = function (event) {
                 handle_event(JSON.parse(event.data));
             };
         }
