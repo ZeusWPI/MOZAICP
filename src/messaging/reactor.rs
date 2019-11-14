@@ -188,7 +188,6 @@ where
             self.link_state.remote_closed = true;
             self.link_state.local_closed = true; // What is this?
             handle.ctx.close_link(&self.remote_id)?;
-            return Ok(());
         }
 
         let mut link_handle = handle.link_handle(&self.remote_id, &mut self.link_state);

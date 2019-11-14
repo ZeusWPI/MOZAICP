@@ -21,7 +21,7 @@ pub fn connect_to_server(
         .map(|stream| {
             let handler = ClientHandler::new(stream, broker, greeter_id);
             tokio::spawn(handler.then(|_| {
-                println!("handler closed");
+                info!("handler closed");
                 Ok(())
             }));
         })

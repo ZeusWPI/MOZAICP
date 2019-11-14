@@ -5,11 +5,12 @@ use messaging::types::*;
 
 use base_capnp::{from_client, host_message, to_client};
 use connection_capnp::client_kicked;
-use core_capnp::actors_joined;
+use core_capnp::{actors_joined, terminate_stream, close as should_close};
 
 pub struct Aggregator {
     connection_manager: ReactorId,
     host: ReactorId,
+    waiting_for: Option<usize>,
 }
 
 impl Aggregator {
@@ -17,6 +18,7 @@ impl Aggregator {
         let me = Self {
             connection_manager,
             host,
+            waiting_for: None,
         };
         let mut params = CoreParams::new(me);
 
@@ -25,6 +27,8 @@ impl Aggregator {
             actors_joined::Owned,
             CtxHandler::new(Self::handle_actors_joined),
         );
+
+        params.handler(terminate_stream::Owned, CtxHandler::new(Self::handle_actor_left));
 
         return params;
     }
@@ -40,12 +44,30 @@ impl Aggregator {
         Ok(())
     }
 
+    fn handle_actor_left<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        _: terminate_stream::Reader,
+    ) -> Result<()> {
+
+        self.waiting_for = self.waiting_for.map(|x| x-1);
+
+        if self.waiting_for == Some(0) {
+            let joined = MsgBuffer::<should_close::Owned>::new();
+            handle.send_internal(joined)?;
+        }
+
+        Ok(())
+    }
+
     fn handle_actors_joined<C: Ctx>(
         &mut self,
         handle: &mut ReactorHandle<C>,
         msg: actors_joined::Reader,
     ) -> Result<()> {
+        self.waiting_for = Some(0);
         for id in msg.get_ids()?.iter() {
+            self.waiting_for = self.waiting_for.map(|x| x+1);
             let id = id.unwrap();
             let client_id = ReactorId::from(id);
             handle.open_link(ClientLink::params(client_id)).unwrap();
@@ -65,7 +87,20 @@ impl HostLink {
 
         params.internal_handler(from_client::Owned, CtxHandler::new(from_client::i_to_e));
 
+        params.internal_handler(should_close::Owned, CtxHandler::new(Self::close));
+
         return params;
+    }
+
+    fn close<C: Ctx>(
+        &mut self,
+        handle: &mut LinkHandle<C>,
+        _: should_close::Reader,
+    ) -> Result<()> {
+
+        handle.close_link()?;
+
+        Ok(())
     }
 }
 
@@ -88,6 +123,7 @@ impl ClientLink {
         params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
         params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
 
+        params.external_handler(terminate_stream::Owned, CtxHandler::new(terminate_stream::e_to_i));
         params.external_handler(from_client::Owned, CtxHandler::new(from_client::e_to_i));
 
         return params;

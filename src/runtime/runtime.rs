@@ -344,6 +344,7 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 return Ok(Async::Ready(()));
             }
 
+            debug!("I still have {} links", self.reactor.links.iter().count());
             // close if you have no links, you should close 'auto' links yourself.
             if self.reactor.links.is_empty() {
                 {
