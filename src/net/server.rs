@@ -49,7 +49,8 @@ impl ServerHandler {
             connecting_id, self.welcomer_id
         );
 
-        self.broker.register(connecting_id.clone(), self.tx.clone(), "Client");
+        self.broker
+            .register(connecting_id.clone(), self.tx.clone(), "Client");
 
         self.broker.send_message(
             &self.welcomer_id,
@@ -87,11 +88,17 @@ impl ServerHandler {
         if let Some(sender) = &self.connecting_id {
             self.broker.unregister(&sender);
 
-            self.broker
-                .send_message(&sender, &self.welcomer_id, disconnected::Owned, |b| {
-                    let mut joined: disconnected::Builder = b.init_as();
-                    joined.set_id(sender.bytes());
-                })?;
+            // This does not exist anymore when the welcomer is closed
+            if self.broker.reactor_exists(&self.welcomer_id) {
+                self.broker
+                    .send_message(&sender, &self.welcomer_id, disconnected::Owned, |b| {
+                        let mut joined: disconnected::Builder = b.init_as();
+                        joined.set_id(sender.bytes());
+                    })?;
+            } else {
+                // TODO: Complete tcp future
+                // I don't think this is happening already
+            }
         }
 
         return Ok(());
@@ -144,7 +151,8 @@ impl ClientHandler {
         let connecting_id: ReactorId = r.get_id()?.into();
         self.connecting_id = Some(connecting_id.clone());
 
-        self.broker.register(connecting_id.clone(), self.tx.clone(), "Server");
+        self.broker
+            .register(connecting_id.clone(), self.tx.clone(), "Server");
 
         self.broker.send_message(
             &self.welcomer_id,

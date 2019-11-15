@@ -4,7 +4,7 @@ use messaging::reactor::*;
 use messaging::types::*;
 
 use connection_capnp::{client_connected, client_disconnected, host_connected};
-use core_capnp::{actor_joined, actors_joined, close, identify};
+use core_capnp::{actor_joined, actors_joined, close, identify, terminate_stream};
 use network_capnp::disconnected;
 
 use runtime::BrokerHandle;
@@ -26,6 +26,8 @@ pub struct ConnectionManager {
 
     host: ReactorId,
     addr: SocketAddr,
+
+    cc_count: usize,
 }
 
 use std::convert::TryInto;
@@ -36,11 +38,13 @@ impl ConnectionManager {
         host: ReactorId,
         addr: SocketAddr,
     ) -> CoreParams<Self, C> {
+        let cc_count = ids.len();
         let server_reactor = Self {
             broker,
             ids,
             host,
             addr,
+            cc_count,
         };
 
         let mut params = CoreParams::new(server_reactor);
@@ -50,6 +54,7 @@ impl ConnectionManager {
             actor_joined::Owned,
             CtxHandler::new(Self::handle_actor_joined),
         );
+        params.handler(close::Owned, CtxHandler::new(Self::close));
 
         return params;
     }
@@ -93,6 +98,21 @@ impl ConnectionManager {
             handle.id().clone(),
             &self.addr,
         ));
+
+        Ok(())
+    }
+
+    /// Handle actor joined by opening ClientLink to him
+    fn close<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        _: close::Reader,
+    ) -> Result<()> {
+        self.cc_count -= 1;
+
+        if self.cc_count == 0 {
+            handle.destroy()?;
+        }
 
         Ok(())
     }
@@ -181,6 +201,9 @@ impl ClientControllerLink {
         _: close::Reader,
     ) -> Result<()> {
         handle.close_link()?;
+
+        let joined = MsgBuffer::<close::Owned>::new();
+        handle.send_internal(joined)?;
 
         Ok(())
     }
