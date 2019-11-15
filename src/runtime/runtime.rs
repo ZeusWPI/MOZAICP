@@ -344,7 +344,6 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 return Ok(Async::Ready(()));
             }
 
-            debug!("I still have {} links", self.reactor.links.iter().count());
             // close if you have no links, you should close 'auto' links yourself.
             if self.reactor.links.is_empty() {
                 {
@@ -364,11 +363,21 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 self.should_close = true;
             }
 
-            match try_ready!(self.message_chan.poll()) {
-                None => return Ok(Async::Ready(())),
-                Some(item) => {
+            match self.message_chan.poll() {
+                Ok(Async::Ready(None)) => {
+                    self.broker.unregister(&self.reactor.id);
+                    return Ok(Async::Ready(()));
+                }
+                Ok(Async::Ready(Some(item))) => {
                     self.handle_external_message(item);
                 }
+                // Only return if you shouldn't close
+                Ok(Async::NotReady) => {
+                    if !self.should_close {
+                        return Ok(Async::NotReady);
+                    }
+                }
+                Err(e) => return Err(e),
             }
         }
     }
