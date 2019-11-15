@@ -8,6 +8,7 @@ use super::util::PlayerId;
 use base_capnp::{client_step, from_client, host_message, to_client};
 use connection_capnp::client_kicked;
 use steplock_capnp::{set_timeout, timeout};
+use core_capnp::terminate_stream;
 
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -72,6 +73,8 @@ impl Steplock {
             CtxHandler::new(Self::handle_client_kicked),
         );
 
+        params.handler(terminate_stream::Owned, CtxHandler::new(Self::handle_close));
+
         return params;
     }
 
@@ -91,6 +94,16 @@ impl Steplock {
         if let Some(timeout) = self.initial_timeout {
             self.set_timout(timeout);
         }
+
+        Ok(())
+    }
+
+    fn handle_close<C: Ctx>(
+        &mut self,
+        handle: &mut ReactorHandle<C>,
+        _: terminate_stream::Reader,
+    ) -> Result<()> {
+        handle.destroy()?;
 
         Ok(())
     }
@@ -207,6 +220,7 @@ impl ClientsLink {
         params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
         params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
         params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
+        params.external_handler(terminate_stream::Owned, CtxHandler::new(terminate_stream::e_to_i));
 
         params
     }

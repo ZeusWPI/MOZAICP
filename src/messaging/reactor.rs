@@ -35,6 +35,8 @@ pub trait CtxHandle<C> {
     where
         S: 'static + Send,
         C: Ctx;
+
+    fn destroy(&mut self) -> Result<()>;
 }
 
 /// A reactor is an "actor" in the MOZAIC system. It is defined by an identity
@@ -145,8 +147,16 @@ impl<S, C: Ctx> Reactor<S, C> {
         return Ok(());
     }
 
-    pub fn destroy(&mut self) -> Result<()> {
-        for (_id, _link) in self.links.iter() {}
+    pub fn destroy<'a, 'c: 'a>(&'a mut self, ctx_handle: &'a mut <C as Context<'c>>::Handle) -> Result<()> {
+        let mut reactor_handle: ReactorHandle<'a, 'c, C> = ReactorHandle {
+            id: &self.id,
+            ctx: ctx_handle,
+        };
+
+        for (id, link) in self.links.iter_mut() {
+            let mut link_handle = reactor_handle.link_handle(&id, &mut link.0.link_state);
+            link_handle.close_link()?;
+        }
 
         Ok(())
     }
@@ -334,6 +344,10 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
         S: 'static + Send,
     {
         self.ctx.open_link(params)
+    }
+
+    pub fn destroy(&mut self) -> Result<()> {
+        self.ctx.destroy()
     }
 }
 

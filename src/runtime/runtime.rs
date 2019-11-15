@@ -296,7 +296,11 @@ impl<S: 'static> ReactorDriver<S> {
                         .display();
                 }
                 InternalOp::Destroy() => {
-                    self.reactor.destroy().expect("I failed");
+                    let mut handle = DriverHandle {
+                        internal_queue: &mut self.internal_queue,
+                        broker: &mut self.broker,
+                    };
+                    self.reactor.destroy(&mut handle).expect("I failed");
                 }
                 InternalOp::OpenLink(params) => {
                     let uuid = params.remote_id().clone();
@@ -423,6 +427,11 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
     fn close_link(&mut self, id: &ReactorId) -> Result<()> {
         self.internal_queue
             .push_back(InternalOp::CloseLink(id.clone()));
+        Ok(())
+    }
+
+    fn destroy(&mut self) -> Result<()> {
+        self.internal_queue.push_back(InternalOp::Destroy());
         Ok(())
     }
 }

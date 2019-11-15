@@ -5,7 +5,7 @@ use messaging::types::*;
 
 use base_capnp::{from_client, host_message, to_client};
 use connection_capnp::client_kicked;
-use core_capnp::{actors_joined, terminate_stream, close as should_close};
+use core_capnp::{actors_joined, terminate_stream};
 
 pub struct Aggregator {
     connection_manager: ReactorId,
@@ -53,8 +53,7 @@ impl Aggregator {
         self.waiting_for = self.waiting_for.map(|x| x-1);
 
         if self.waiting_for == Some(0) {
-            let joined = MsgBuffer::<should_close::Owned>::new();
-            handle.send_internal(joined)?;
+            handle.destroy()?;
         }
 
         Ok(())
@@ -87,20 +86,7 @@ impl HostLink {
 
         params.internal_handler(from_client::Owned, CtxHandler::new(from_client::i_to_e));
 
-        params.internal_handler(should_close::Owned, CtxHandler::new(Self::close));
-
         return params;
-    }
-
-    fn close<C: Ctx>(
-        &mut self,
-        handle: &mut LinkHandle<C>,
-        _: should_close::Reader,
-    ) -> Result<()> {
-
-        handle.close_link()?;
-
-        Ok(())
     }
 }
 
