@@ -1,10 +1,12 @@
+use futures::Future;
+
 use core_capnp::initialize;
 use errors::{Consumable, Result};
 use messaging::reactor::*;
 use messaging::types::*;
 
 use connection_capnp::{client_connected, client_disconnected, host_connected};
-use core_capnp::{actor_joined, actors_joined, close, identify, terminate_stream};
+use core_capnp::{actor_joined, actors_joined, close, identify, drop};
 use network_capnp::disconnected;
 
 use runtime::BrokerHandle;
@@ -17,6 +19,7 @@ use std::collections::HashMap;
 use super::client_controller::CCReactor;
 use modules::util::{Identifier, PlayerId};
 
+type Closer = tokio::sync::oneshot::Sender<()>;
 /// Main connection manager, creates handles for as many players as asked for
 /// Handles disconnects, reconnects etc, host can always send messages to everybody
 pub struct ConnectionManager {
@@ -28,6 +31,7 @@ pub struct ConnectionManager {
     addr: SocketAddr,
 
     cc_count: usize,
+    at_close: Option<Closer>,
 }
 
 use std::convert::TryInto;
@@ -45,6 +49,7 @@ impl ConnectionManager {
             host,
             addr,
             cc_count,
+            at_close: None,
         };
 
         let mut params = CoreParams::new(server_reactor);
@@ -55,6 +60,7 @@ impl ConnectionManager {
             CtxHandler::new(Self::handle_actor_joined),
         );
         params.handler(close::Owned, CtxHandler::new(Self::close));
+        params.handler(drop::Owned, CtxHandler::new(Self::drop));
 
         return params;
     }
@@ -93,11 +99,17 @@ impl ConnectionManager {
 
         handle.send_internal(joined)?;
 
-        tokio::spawn(TcpServer::new(
-            self.broker.clone(),
-            handle.id().clone(),
-            &self.addr,
-        ));
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.at_close = Some(tx);
+        tokio::spawn(
+            rx.map_err(|_| ()).select(
+                TcpServer::new(
+                    self.broker.clone(),
+                    handle.id().clone(),
+                    &self.addr,
+                )
+            ).map(|_| ()).map_err(|_| ()));
 
         Ok(())
     }
@@ -113,6 +125,20 @@ impl ConnectionManager {
         if self.cc_count == 0 {
             handle.destroy()?;
         }
+
+        Ok(())
+    }
+
+    /// Handle actor joined by opening ClientLink to him
+    fn drop<C: Ctx>(
+        &mut self,
+        _: &mut ReactorHandle<C>,
+        _: drop::Reader,
+    ) -> Result<()> {
+        use std::mem;
+
+        let sender = mem::replace(&mut self.at_close, None);
+        sender.map(|x| x.send(()));
 
         Ok(())
     }

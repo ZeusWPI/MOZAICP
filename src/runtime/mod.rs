@@ -59,6 +59,12 @@ impl TcpServer {
     }
 }
 
+impl Drop for TcpServer {
+    fn drop(&mut self) {
+        info!("Tcp server dropped");
+    }
+}
+
 impl Future for TcpServer {
     type Item = ();
     type Error = ();

@@ -95,9 +95,6 @@ impl ServerHandler {
                         let mut joined: disconnected::Builder = b.init_as();
                         joined.set_id(sender.bytes());
                     })?;
-            } else {
-                // TODO: Complete tcp future
-                // I don't think this is happening already
             }
         }
 
