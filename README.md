@@ -22,7 +22,7 @@ You can reach us by [e-mail](mailto:bottlebats@zeus.ugent.be), [Facebook](https:
 
 ## Flow
 
-MOZAICP consists of multiple big components. 
+MOZAICP consists of multiple big components.
 
 Reactors are the nodes in your genetic network. They consist of a state `S` and handlers for internal messages, `HashMap<TypeId, ReactorHandler>`. A reactor also has links to other reactors. `HashMap<ReactorId, Link>`.
 
@@ -38,4 +38,5 @@ Internal messages get handled as follows: first the reactor tries to find a corr
 
 External messages get handled as follows: the reactor reads that messages from his channel and looks for the corresponding link (this might fail). That links tries to handle that message with the correct handler (this might fail).
 
-
+Everything is dependant on what messages can be transported, being the M type parameter. This is made clear with the Broker I guess.
+A Broker only distributes the mpsc::Sender<M> for all reactors in that Broker.
