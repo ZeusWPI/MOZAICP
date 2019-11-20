@@ -271,7 +271,6 @@ where
         };
 
         handler.handle(&mut ctx, msg.get_payload())?;
-
         Ok(())
     }
 

@@ -20,10 +20,10 @@ extern crate tracing_futures;
 #[macro_use]
 extern crate error_chain;
 
-extern crate serde_derive;
-
 extern crate capnp;
 extern crate capnp_futures;
+
+extern crate ws;
 
 extern crate mozaic_derive;
 
@@ -35,6 +35,9 @@ pub mod runtime;
 pub mod modules;
 
 pub mod errors;
+
+pub mod graph;
+pub mod generic;
 
 use capnp::traits::HasTypeId;
 
