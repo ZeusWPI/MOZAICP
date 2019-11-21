@@ -18,7 +18,8 @@ where
     state: S,
     msg_handlers: HashMap<K, Box<dyn Handler<S, ReactorHandle<K, M>, M> + Send>>,
 
-    links: HashMap<ReactorID, Box<dyn Handler<(), ReactorHandle<K, M>, M> + Send>>,
+
+    links: HashMap<ReactorID, Box<dyn Handler<(), ReactorHandle<K, M>, LinkOperation<K, M>> + Send>>,
 
     tx: Sender<K, M>,
     rx: Receiver<K, M>,
@@ -69,7 +70,6 @@ where
                 self.tx.clone(),
                 tx,
             );
-
             self.links.insert(target, spawner(handles));
         } else {
             eprintln!("No such reactor");

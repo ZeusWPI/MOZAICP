@@ -1,5 +1,5 @@
-use std::hash::Hash;
 use super::*;
+use std::hash::Hash;
 
 // ANCHOR Link
 pub struct Link<S, K, M> {
@@ -30,13 +30,26 @@ pub struct LinkHandle<K, M> {
 
 type LinkContext<'a, S, K, M> = Context<'a, S, LinkHandle<K, M>>;
 
+impl<S, K, M> Handler<(), ReactorHandle<K, M>, LinkOperation<K, M>> for Link<S, K, M>
+where
+    K: Hash + Eq,
+{
+    fn handle(&mut self, _: Context<(), ReactorHandle<K, M>>, m: &mut LinkOperation<K, M>) {
+        let ctx = LinkContext {
+            state: &mut self.state,
+            handle: &mut self.handles,
+        };
 
-impl<S, K, M> Handler<(), ReactorHandle<K, M>, M> for Link<S, K, M> {
-    fn handle(&mut self, c: Context<(), ReactorHandle<K, M>>, m: &mut M) {
-
+        match m {
+            LinkOperation::InternalMessage(id, message) => {
+                self.internal_handlers.get_mut(id).map(|h| h.handle(ctx, message));
+            },
+            LinkOperation::ExternalMessage(id, message) => {
+                self.external_handlers.get_mut(id).map(|h| h.handle(ctx, message));
+            },
+        };
     }
 }
-
 
 // ANCHOR Params
 pub struct LinkParams<S, K, M> {

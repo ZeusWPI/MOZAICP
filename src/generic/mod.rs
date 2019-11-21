@@ -50,7 +50,12 @@ impl<'a, S, C> Context<'a, S, C> {
 /// (SourceHandle, TargetHandle)
 type Handles<K, M> = (Sender<K, M>, Sender<K, M>);
 type LinkSpawner<K, M> =
-    Box<dyn Fn(Handles<K, M>) -> Box<dyn Handler<(), ReactorHandle<K, M>, M> + Send> + Send>;
+    Box<dyn Fn(Handles<K, M>) -> Box<dyn Handler<(), ReactorHandle<K, M>, LinkOperation<K, M>> + Send> + Send>;
+
+enum LinkOperation<K, M> {
+    InternalMessage(K, M),
+    ExternalMessage(K, M),
+}
 
 ///
 /// The actual messages that are sent
