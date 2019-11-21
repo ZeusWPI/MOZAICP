@@ -3,21 +3,24 @@ use futures::{Async, Future, Poll, Stream};
 
 use std::any;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 mod message;
 pub use self::message::Message;
-mod types;
-mod reactor;
 mod link;
+mod reactor;
+mod types;
 
-pub use self::reactor::{Reactor, ReactorHandle};
-pub use self::link::{Link, LinkHandle};
+pub use self::link::{Link, LinkHandle, LinkParams};
+pub use self::reactor::{CoreParams, Reactor, ReactorHandle};
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
+
+/// Shortcut types
+type Sender<K, M> = mpsc::UnboundedSender<Operation<K, M>>;
+type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
 
 // ANCHOR Traits
 ///
@@ -44,6 +47,11 @@ impl<'a, S, C> Context<'a, S, C> {
     }
 }
 
+/// (SourceHandle, TargetHandle)
+type Handles<K, M> = (Sender<K, M>, Sender<K, M>);
+type LinkSpawner<K, M> =
+    Box<dyn Fn(Handles<K, M>) -> Box<dyn Handler<(), ReactorHandle<K, M>, M> + Send> + Send>;
+
 ///
 /// The actual messages that are sent
 /// These get consumed by the reactors
@@ -52,7 +60,7 @@ enum Operation<K, M> {
     InternalMessage(K, M),
     ExternalMessage(ReactorID, K, M),
     Close(),
-    OpenLink(ReactorID),
+    OpenLink(ReactorID, LinkSpawner<K, M>),
     CloseLink(ReactorID),
 }
 
@@ -63,15 +71,22 @@ enum Operation<K, M> {
 /// And spawn Reactors etc
 ///
 struct Broker<K, M> {
-    reactors: HashMap<ReactorID, mpsc::UnboundedSender<Operation<K, M>>>,
+    reactors: HashMap<ReactorID, Sender<K, M>>,
 }
 
 ///
 /// BrokerHandle wraps the Broker, for easy mutex manipulation
 ///
-#[derive(Clone)]
 pub struct BrokerHandle<K, M> {
     broker: Arc<Mutex<Broker<K, M>>>,
+}
+
+impl<K, M> Clone for BrokerHandle<K, M> {
+    fn clone(&self) -> Self {
+        BrokerHandle {
+            broker: self.broker.clone(),
+        }
+    }
 }
 
 impl<K, M> BrokerHandle<K, M> {
@@ -93,11 +108,11 @@ impl<K, M> BrokerHandle<K, M> {
         let mut broker = self.broker.lock().unwrap();
         broker.reactors.remove(&params);
     }
-}
 
-/// Shortcut types
-type Sender<K, M> = mpsc::UnboundedSender<Operation<K, M>>;
-type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
+    fn get(&self, id: &ReactorID) -> Option<Sender<K, M>> {
+        self.broker.lock().unwrap().reactors.get(id).cloned()
+    }
+}
 
 ///
 /// FunctionHandler<S, T, F, R> makes a Handler from a function

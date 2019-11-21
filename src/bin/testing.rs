@@ -17,10 +17,12 @@ struct Bar {
 }
 
 fn main() {
-    let mut reactor = generic::Reactor::new((), 0.into());
+    let mut params = generic::CoreParams::new(());
 
-    reactor.add_handler(FunctionHandler::from(test_bar));
-    reactor.add_handler(FunctionHandler::from(test_foo));
+    params.handler(FunctionHandler::from(test_bar));
+    params.handler(FunctionHandler::from(test_foo));
+
+    let reactor = generic::Reactor::new(0.into(), BrokerHandle::new(), params);
 
     tokio::run(
         futures::lazy(move || {
