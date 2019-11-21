@@ -17,7 +17,9 @@ impl Message {
             type_id: TypeId::of::<T>(),
 
             destroy: Box::new(|ptr| {
-                unsafe { std::ptr::drop_in_place(ptr.cast::<T>()) };
+                if !ptr.is_null() {
+                    unsafe { Box::from_raw(ptr.cast::<T>()) };
+                }
             })
         }
     }

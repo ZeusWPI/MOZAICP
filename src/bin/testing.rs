@@ -7,7 +7,7 @@ use mozaic::generic;
 use mozaic::generic::*;
 
 struct Foo {
-    bar: usize,
+    bar: u64,
 }
 
 impl generic::IDed for Foo {
@@ -18,7 +18,7 @@ impl generic::IDed for Foo {
 
 impl Drop for Foo {
     fn drop(&mut self) {
-        println!("Dropping foo");
+        println!("Dropping foo {}", self.bar);
     }
 }
 
@@ -43,7 +43,7 @@ fn main() {
             let mut handle = reactor.get_handle();
 
             tokio::spawn(reactor);
-            handle.send_internal(Bar { foobar: 2 });
+            handle.send_internal(Bar { foobar: 100 });
             Ok(())
         }
     ));
@@ -52,12 +52,16 @@ fn main() {
 fn test_foo(_state: &mut (), handle: &mut ReactorHandle<Message>, value: &Foo) {
     println!("foo: {}", value.bar);
 
-    handle.send_internal(Bar { foobar: 2 });
+    handle.send_internal(Bar { foobar: value.bar - 1 });
 }
 
 
 fn test_bar(_state: &mut (), handle: &mut ReactorHandle<Message>, value: &Bar) {
     println!("foo: {}", value.foobar);
 
-    handle.send_internal(Foo { bar: 0 });
+    if value.foobar > 0 {
+        handle.send_internal(Foo { bar: value.foobar });
+    } else {
+        handle.close();
+    }
 }

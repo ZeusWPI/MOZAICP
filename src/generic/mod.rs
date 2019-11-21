@@ -37,6 +37,7 @@ impl<'a, S, C> Context<'a, S, C> {
 enum Operation<M> {
     InternalMessage(TypeID, M),
     ExternalMessage(ReactorID, TypeID, M),
+    Close,
     // OpenLink
     // CloseLink
 }
@@ -133,10 +134,13 @@ impl<S, M> Future for Reactor<S, M> {
                         };
 
                         self.i_msg_h.get_mut(&id).map(|h| h.handle(ctx, &mut msg));
-                    }
+                    },
                     Operation::ExternalMessage(_reactor, _id, _msg) => {
                         unimplemented!();
-                    }
+                    },
+                    Operation::Close => {
+                        return Ok(Async::Ready(()))
+                    },
                 },
             }
         }
@@ -158,6 +162,10 @@ impl ReactorHandle<Message> {
         self.chan
             .unbounded_send(Operation::InternalMessage(id, msg))
             .expect("crashed");
+    }
+
+    pub fn close(&mut self) {
+        self.chan.unbounded_send(Operation::Close).expect("Couldn't close");
     }
 
     pub fn spawn(&mut self, _params: u32) {
