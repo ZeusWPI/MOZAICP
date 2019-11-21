@@ -12,12 +12,6 @@ struct Foo {
     bar: u64,
 }
 
-impl Drop for Foo {
-    fn drop(&mut self) {
-        println!("Dropping foo {}", self.bar);
-    }
-}
-
 struct Bar {
     foobar: u64,
 }
@@ -25,29 +19,28 @@ struct Bar {
 fn main() {
     let mut reactor = generic::Reactor::new((), 0.into());
 
-    reactor.add_handler(ReactorHandler::from(test_bar));
-    reactor.add_handler(ReactorHandler::from(test_foo));
+    reactor.add_handler(FunctionHandler::from(test_bar));
+    reactor.add_handler(FunctionHandler::from(test_foo));
 
     tokio::run(
         futures::lazy(move || {
             let mut handle = reactor.get_handle();
 
             tokio::spawn(reactor);
-            handle.send_internal(Bar { foobar: 100 });
+            handle.send_internal(Bar { foobar: 100000 });
             Ok(())
         }
     ));
 }
 
 fn test_foo(_state: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, value: &Foo) {
-    println!("foo: {}", value.bar);
+    // println!("foo: {}", value.bar);
 
     handle.send_internal(Bar { foobar: value.bar - 1 });
 }
 
-
 fn test_bar(_state: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, value: &Bar) {
-    println!("foo: {}", value.foobar);
+    // println!("foo: {}", value.foobar);
 
     if value.foobar > 0 {
         handle.send_internal(Foo { bar: value.foobar });
