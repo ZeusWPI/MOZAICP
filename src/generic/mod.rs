@@ -90,6 +90,10 @@ impl<K, M> BrokerHandle<K, M> {
 }
 
 // ANCHOR Reactor
+/// Shortcut types
+type Sender<K, M> = mpsc::UnboundedSender<Operation<K, M>>;
+type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
+
 ///
 /// Reactor is the meat and the potatoes of MOZAIC
 /// You can register Handers (just functions)
@@ -103,8 +107,8 @@ where
     state: S,
     msg_handlers: HashMap<K, Box<dyn Handler<S, ReactorHandle<K, M>, M> + Send>>,
 
-    tx: mpsc::UnboundedSender<Operation<K, M>>,
-    rx: mpsc::UnboundedReceiver<Operation<K, M>>,
+    tx: Sender<K, M>,
+    rx: Receiver<K, M>,
 }
 
 impl<S, K, M> Reactor<S, K, M>
@@ -177,11 +181,13 @@ where
     }
 }
 
+
+
 ///
 /// ReactorHandle wraps a channel to send operations to the reactor
 ///
 pub struct ReactorHandle<K, M> {
-    chan: mpsc::UnboundedSender<Operation<K, M>>,
+    chan: Sender<K, M>,
 }
 
 /// A context with a ReactorHandle is a ReactorContext
@@ -191,12 +197,12 @@ type ReactorContext<'a, S, K, M> = Context<'a, S, ReactorHandle<K, M>>;
 /// FunctionHandler<S, T, F, R> makes a Handler from a function
 /// For Messages that is
 ///
-pub struct FunctionHandler<S, T, F, R> {
-    phantom: PhantomData<(S, T, R)>,
+pub struct FunctionHandler<F, S, R, T> {
+    phantom: PhantomData<(S, R, T)>,
     function: F,
 }
 
-impl<S, T, F, R> FunctionHandler<S, T, F, R>
+impl<F, S, R, T> FunctionHandler<F, S, R, T>
 where
     F: Fn(&mut S, &mut R, &T) -> () + Send,
     T: 'static,
@@ -239,13 +245,13 @@ impl ReactorHandle<any::TypeId, Message> {
     }
 }
 
-impl<S, F, T, R> Into<(any::TypeId, Box<dyn Handler<S, R, Message> + Send>)>
-    for Box<FunctionHandler<S, T, F, R>>
+impl<F, S, R, T> Into<(any::TypeId, Box<dyn Handler<S, R, Message> + Send>)>
+    for Box<FunctionHandler<F, S, R, T>>
 where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
-    T: 'static + Send,
     S: 'static + Send,
     R: 'static + Send,
+    T: 'static + Send,
 {
     fn into(self) -> (any::TypeId, Box<dyn Handler<S, R, Message> + Send>) {
         let id = any::TypeId::of::<T>();
@@ -267,11 +273,11 @@ where
 // Like a T: FromPointerReader in capnproto's case
 //
 
-impl<S, T, F, R> Handler<S, R, Message> for FunctionHandler<S, T, F, R>
+impl<F, S, R, T> Handler<S, R, Message> for FunctionHandler<F, S, R, T>
 where
     F: Fn(&mut S, &mut R, &T) -> () + Send,
-    T: 'static,
     R: 'static + Send,
+    T: 'static,
 {
     fn handle(&mut self, c: Context<S, R>, message: &mut Message) {
         let (state, handle) = c.split();
