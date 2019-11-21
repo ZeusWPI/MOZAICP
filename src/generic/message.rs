@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn exploration() {
-        let mut maybe = Message::new(Val { value: 333 });
+        let mut maybe = Message::from(Val { value: 333 });
         let result = maybe.take::<Val>().map(|x| x.value );
         assert_eq!(result, Some(333));
 

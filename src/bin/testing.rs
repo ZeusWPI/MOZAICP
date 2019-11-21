@@ -27,14 +27,10 @@ impl generic::IDed for Bar {
 }
 
 fn main() {
-    println!("hallo");
-
     let mut reactor = generic::Reactor::new((), 0.into());
 
-
-    reactor.add_handler(Bar::get_id(), ReactorHandler::from(test_bar));
-    reactor.add_handler(Foo::get_id(), ReactorHandler::from(test_foo));
-
+    reactor.add_handler(ReactorHandler::from(test_bar));
+    reactor.add_handler(ReactorHandler::from(test_foo));
 
     tokio::run(
         futures::lazy(move || {
@@ -46,7 +42,6 @@ fn main() {
         }
     ));
 }
-
 
 fn test_foo(_state: &mut (), handle: &mut ReactorHandle<Message>, value: &Foo) {
     println!("foo: {}", value.bar);
