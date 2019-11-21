@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicPtr;
 pub struct Message {
     ptr: AtomicPtr<u8>,
     type_id: TypeId,
+    destroy: Box<dyn Fn(&mut *mut u8) -> () + 'static + Send>
 }
 
 impl Message {
@@ -14,6 +15,10 @@ impl Message {
         Message {
             ptr: AtomicPtr::new(Box::into_raw(boxed).cast()),
             type_id: TypeId::of::<T>(),
+
+            destroy: Box::new(|ptr| {
+                unsafe { std::ptr::drop_in_place(ptr.cast::<T>()) };
+            })
         }
     }
 }
@@ -57,9 +62,7 @@ impl Message {
 
 impl Drop for Message {
     fn drop(&mut self) {
-        let ptr = self.ptr.get_mut();
-
-        unsafe { std::ptr::drop_in_place(ptr) };
+        (self.destroy)(self.ptr.get_mut());
     }
 }
 

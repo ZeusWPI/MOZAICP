@@ -16,6 +16,12 @@ impl generic::IDed for Foo {
     }
 }
 
+impl Drop for Foo {
+    fn drop(&mut self) {
+        println!("Dropping foo");
+    }
+}
+
 struct Bar {
     foobar: u64,
 }
