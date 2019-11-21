@@ -3,17 +3,13 @@ extern crate mozaic;
 extern crate tokio;
 extern crate futures;
 
+use std::any;
+
 use mozaic::generic;
 use mozaic::generic::*;
 
 struct Foo {
     bar: u64,
-}
-
-impl generic::IDed for Foo {
-    fn get_id() -> TypeID {
-        0.into()
-    }
 }
 
 impl Drop for Foo {
@@ -24,12 +20,6 @@ impl Drop for Foo {
 
 struct Bar {
     foobar: u64,
-}
-
-impl generic::IDed for Bar {
-    fn get_id() -> TypeID {
-        1.into()
-    }
 }
 
 fn main() {
@@ -49,14 +39,14 @@ fn main() {
     ));
 }
 
-fn test_foo(_state: &mut (), handle: &mut ReactorHandle<Message>, value: &Foo) {
+fn test_foo(_state: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, value: &Foo) {
     println!("foo: {}", value.bar);
 
     handle.send_internal(Bar { foobar: value.bar - 1 });
 }
 
 
-fn test_bar(_state: &mut (), handle: &mut ReactorHandle<Message>, value: &Bar) {
+fn test_bar(_state: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, value: &Bar) {
     println!("foo: {}", value.foobar);
 
     if value.foobar > 0 {
