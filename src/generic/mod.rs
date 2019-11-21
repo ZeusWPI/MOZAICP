@@ -20,12 +20,18 @@ pub trait IDed {
 }
 
 pub trait Handler<S, C, M> {
-    fn handle(&mut self, c: Context<S, C>, m: M);
+    fn handle(&mut self, c: Context<S, C>, m: &mut M);
 }
 
 pub struct Context<'a, S, C> {
     state: &'a mut S,
     handle: &'a mut C,
+}
+
+impl<'a, S, C> Context<'a, S, C> {
+    fn split(self) -> (&'a mut S, &'a mut C) {
+        (self.state, self.handle)
+    }
 }
 
 
@@ -76,7 +82,7 @@ impl<M> BrokerHandle<M> {
 pub struct Reactor<S, M> {
     id: ReactorID,
     state: S,
-    i_msg_h: HashMap<TypeID, Box<dyn Handler<S, ReactorHandle<M>, M>>>,
+    i_msg_h: HashMap<TypeID, Box<dyn Handler<S, ReactorHandle<M>, M> + Send>>,
 
     self_chan: mpsc::UnboundedSender<Operation<M>>,
     msg_chan: mpsc::UnboundedReceiver<Operation<M>>,
@@ -85,11 +91,23 @@ pub struct Reactor<S, M> {
 type ReactorContext<'a, S, M> = Context<'a, S, ReactorHandle<M>>;
 
 impl<S, M> Reactor<S, M> {
-    pub fn add_handler(&mut self, id: TypeID, handler: Box<dyn Handler<S, ReactorHandle<M>, M>>) {
+    pub fn new(state: S, id: ReactorID) -> Self {
+        let (tx, rx) = mpsc::unbounded();
+
+        Reactor {
+            id, state,
+
+            i_msg_h: HashMap::new(),
+            self_chan: tx,
+            msg_chan: rx
+        }
+    }
+
+    pub fn add_handler(&mut self, id: TypeID, handler: Box<dyn Handler<S, ReactorHandle<M>, M> + Send>) {
         self.i_msg_h.insert(id, handler);
     }
 
-    fn get_handle(&self) -> ReactorHandle<M> {
+    pub fn get_handle(&self) -> ReactorHandle<M> {
         ReactorHandle {
             chan: self.self_chan.clone()
         }
@@ -106,7 +124,7 @@ impl<S, M> Future for Reactor<S, M> {
                 None => return Ok(Async::Ready(())),
                 Some(item) => {
                     match item {
-                        Operation::InternalMessage(id, msg) => {
+                        Operation::InternalMessage(id, mut msg) => {
                             let mut handle = self.get_handle();
 
                             let ctx = Context {
@@ -115,9 +133,8 @@ impl<S, M> Future for Reactor<S, M> {
                             };
 
                             self.i_msg_h.get_mut(&id).map(|h|
-                                h.handle(ctx, msg)
+                                h.handle(ctx, &mut msg)
                             );
-
                         },
                         Operation::ExternalMessage(_reactor, _id, _msg) => {
                             unimplemented!();
@@ -133,27 +150,48 @@ pub struct ReactorHandle<M> {
     chan: mpsc::UnboundedSender<Operation<M>>,
 }
 
-impl<M> ReactorHandle<M> {
-    fn open_link(&mut self) {
+impl ReactorHandle<Message> {
+    pub fn open_link(&mut self) {
         unimplemented!();
     }
 
-    fn send_internal<T>(&mut self, _msg: T) {
-        unimplemented!();
+    pub fn send_internal<T: IDed + 'static>(&mut self, msg: T) {
+        let id = T::get_id();
+        let msg = Message::from(msg);
+        self.chan.unbounded_send(Operation::InternalMessage(id, msg)).expect("crashed");
     }
 
-    fn spawn(&mut self, _params: u32) {
+    pub fn spawn(&mut self, _params: u32) {
         unimplemented!();
     }
 }
 
-pub struct ReactorHandler<T, F> {
+pub struct ReactorHandler<S, T, F> {
     t: PhantomData<T>,
+    s: PhantomData<S>,
     f: F,
 }
 
-impl<S, M, T, F> Handler<S, ReactorHandle<M>, M> for ReactorHandler<T, F> {
-    fn handle(&mut self, _c: ReactorContext<S, M>, _m: M) {
-        unimplemented!();
+impl<S, T, F> ReactorHandler<S, T, F>
+    where F: Fn(&mut S, &mut ReactorHandle<Message> , &T) -> () + Send,
+          T: 'static {
+
+    pub fn from(f: F) -> Box<Self> {
+        Box::new(Self {
+            t: PhantomData,
+            s: PhantomData,
+            f
+        })
+    }
+}
+
+
+impl<S, T, F> Handler<S, ReactorHandle<Message>, Message> for ReactorHandler<S, T, F>
+    where F: Fn(&mut S, &mut ReactorHandle<Message> , &T) -> () + Send,
+          T: 'static {
+
+    fn handle(&mut self, c: ReactorContext<S, Message>, m: &mut Message) {
+        let (state, handle) = c.split();
+        m.borrow().map(|t| (self.f)(state, handle, t)).expect("fuck off");
     }
 }

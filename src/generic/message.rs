@@ -1,30 +1,28 @@
 
 use std::any::TypeId;
-use std::mem;
+use std::sync::atomic::AtomicPtr;
 
 pub struct Message {
-    ptr: *mut u8,
+    ptr: AtomicPtr<u8>,
     type_id: TypeId,
-    destroy: Box<dyn Fn(*mut u8) -> ()>
 }
 
 impl Message {
-    fn new<T: 'static>(value: T) -> Message {
+    pub fn from<T: 'static>(value: T) -> Message {
         let boxed = Box::new(value);
 
         Message {
-            ptr: Box::into_raw(boxed).cast(),
+            ptr: AtomicPtr::new(Box::into_raw(boxed).cast()),
             type_id: TypeId::of::<T>(),
-            destroy: Box::new(|ptr| {
-                unsafe { mem::transmute::<*mut u8, Box<T>>(ptr) };
-            })
         }
     }
 }
 
 impl Message {
-    fn take<T: 'static>(&mut self) -> Option<T> {
-        match self.ptr.is_null() {
+    pub fn take<T: 'static>(&mut self) -> Option<T> {
+        let ptr = self.ptr.get_mut();
+
+        match ptr.is_null() {
             true => None, // When ptr is null return None
             false => match TypeId::of::<T>() == self.type_id {
                 true => { // When types match
@@ -32,10 +30,24 @@ impl Message {
                     // Transmute into returned value and set internal pointer to
                     // null, so we avoid owning same value in several places.
 
-                    let result: Box<T> = unsafe { Box::from_raw(self.ptr.cast()) };
-                    self.ptr = std::ptr::null_mut();
+                    let result: Box<T> = unsafe { Box::from_raw(ptr.cast()) };
+                    self.ptr = AtomicPtr::new(std::ptr::null_mut());
 
                     Some(*result) // Unbox and return Some
+                },
+                false => None, // When types do not match return None
+            },
+        }
+    }
+
+    pub fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T> {
+        let ptr = self.ptr.get_mut();
+        match ptr.is_null() {
+            true => None, // When ptr is null return None
+            false => match TypeId::of::<T>() == self.type_id {
+                true => { // When types match
+                    let ptr: *const T = ptr.cast();
+                    unsafe { ptr.as_ref() }
                 },
                 false => None, // When types do not match return None
             },
@@ -45,10 +57,9 @@ impl Message {
 
 impl Drop for Message {
     fn drop(&mut self) {
-        match self.ptr.is_null() {
-            true => (),
-            false => (self.destroy)(self.ptr),
-        }
+        let ptr = self.ptr.get_mut();
+
+        unsafe { std::ptr::drop_in_place(ptr) };
     }
 }
 
