@@ -1,7 +1,10 @@
 use futures::sync::mpsc;
 use futures::{Async, Future, Poll, Stream};
 
+use rand;
+
 use std::any;
+use std::hash::Hash;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -48,20 +51,24 @@ impl<'a, S, C> Context<'a, S, C> {
 }
 
 /// (SourceHandle, TargetHandle)
-type Handles<K, M> = (Sender<K, M>, Sender<K, M>);
-type LinkSpawner<K, M> =
-    Box<dyn Fn(Handles<K, M>) -> Box<dyn Handler<(), ReactorHandle<K, M>, LinkOperation<K, M>> + Send> + Send>;
+type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID);
+pub type LinkSpawner<K, M> = Box<
+    dyn FnOnce(
+            Handles<K, M>,
+        ) -> Box<dyn for<'a> Handler<(), ReactorHandle<K, M>, LinkOperation<'a, K, M>> + Send>
+        + Send,
+>;
 
-enum LinkOperation<K, M> {
-    InternalMessage(K, M),
-    ExternalMessage(K, M),
+pub enum LinkOperation<'a, K, M> {
+    InternalMessage(&'a K, &'a mut M),
+    ExternalMessage(&'a K, &'a mut M),
 }
 
 ///
 /// The actual messages that are sent
 /// These get consumed by the reactors
 ///
-enum Operation<K, M> {
+pub enum Operation<K, M> {
     InternalMessage(K, M),
     ExternalMessage(ReactorID, K, M),
     Close(),
@@ -105,10 +112,6 @@ impl<K, M> BrokerHandle<K, M> {
         }
     }
 
-    pub fn spawn(&self, _params: u32) -> ReactorID {
-        unimplemented!()
-    }
-
     pub fn remove(&self, params: &ReactorID) {
         let mut broker = self.broker.lock().unwrap();
         broker.reactors.remove(&params);
@@ -116,6 +119,25 @@ impl<K, M> BrokerHandle<K, M> {
 
     fn get(&self, id: &ReactorID) -> Option<Sender<K, M>> {
         self.broker.lock().unwrap().reactors.get(id).cloned()
+    }
+}
+
+impl<K, M> BrokerHandle<K, M>
+where
+    K: 'static + Eq + Hash + Send,
+    M: 'static + Send,
+{
+    pub fn spawn<S: 'static + Send>(&self, params: CoreParams<S, K, M>) -> (ReactorID, ReactorHandle<K, M>) {
+        let id = rand::random::<u64>().into();
+        let (reactor, sender) = Reactor::new(id, self.clone(), params);
+        let handle = reactor.get_handle();
+
+        self.broker.lock().unwrap().reactors.insert(id.clone(), sender);
+
+        tokio::spawn(reactor);
+
+
+        (id, handle)
     }
 }
 

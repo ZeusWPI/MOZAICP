@@ -18,8 +18,8 @@ where
     state: S,
     msg_handlers: HashMap<K, Box<dyn Handler<S, ReactorHandle<K, M>, M> + Send>>,
 
-
-    links: HashMap<ReactorID, Box<dyn Handler<(), ReactorHandle<K, M>, LinkOperation<K, M>> + Send>>,
+    links:
+        HashMap<ReactorID, Box<dyn for<'a> Handler<(), ReactorHandle<K, M>, LinkOperation<'a, K, M>> + Send>>,
 
     tx: Sender<K, M>,
     rx: Receiver<K, M>,
@@ -29,10 +29,12 @@ impl<S, K, M> Reactor<S, K, M>
 where
     K: Hash + Eq,
 {
-    pub fn new(id: ReactorID, broker: BrokerHandle<K, M>, params: CoreParams<S, K, M>) -> Self {
+    pub fn new(id: ReactorID, broker: BrokerHandle<K, M>, params: CoreParams<S, K, M>) -> (Self, Sender<K, M>) {
         let (tx, rx) = mpsc::unbounded();
 
-        Reactor {
+        let sender = tx.clone();
+
+        (Reactor {
             id,
             broker,
             state: params.state,
@@ -40,7 +42,7 @@ where
             links: HashMap::new(),
             tx,
             rx,
-        }
+        }, sender)
     }
 
     pub fn get_handle(&self) -> ReactorHandle<K, M> {
@@ -51,6 +53,8 @@ where
     }
 
     fn handle_internal_msg(&mut self, id: K, mut msg: M) {
+        println!("Handling internal message");
+
         let mut handle = self.get_handle();
 
         let ctx = Context {
@@ -61,15 +65,34 @@ where
         self.msg_handlers
             .get_mut(&id)
             .map(|h| h.handle(ctx, &mut msg));
+
+        let mut m = LinkOperation::InternalMessage(&id, &mut msg);
+        for (_, link) in self.links.iter_mut() {
+            let ctx = Context {
+                state: &mut (),
+                handle: &mut handle,
+            };
+            link.handle(ctx, &mut m);
+        }
+    }
+
+    fn handle_external_msg(&mut self, target: ReactorID, id: K, mut msg: M) {
+        println!("Handling external message");
+        let mut handle = self.get_handle();
+
+        let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
+        let ctx = Context {
+            state: &mut (),
+            handle: &mut handle,
+        };
+
+        self.links.get_mut(&target).map(|h| h.handle(ctx, &mut m)).expect("AAAAAAAAAAHHHHHHHHHHHH");
     }
 
     fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>) {
-
+        println!("Opening link");
         if let Some(tx) = self.broker.get(&target) {
-            let handles = (
-                self.tx.clone(),
-                tx,
-            );
+            let handles = (self.tx.clone(), tx, target);
             self.links.insert(target, spawner(handles));
         } else {
             eprintln!("No such reactor");
@@ -99,10 +122,7 @@ where
                     Operation::Close() => return Ok(Async::Ready(())),
                     Operation::OpenLink(id, spawner) => self.open_link(id, spawner),
                     Operation::CloseLink(id) => self.close_link(id),
-
-                    _ => {
-                        unimplemented!();
-                    }
+                    Operation::ExternalMessage(target, id, msg) => self.handle_external_msg(target, id, msg),
                 },
             }
         }
@@ -118,6 +138,16 @@ pub struct ReactorHandle<K, M> {
     broker: BrokerHandle<K, M>,
 }
 
+impl<K, M> ReactorHandle<K, M> {
+    pub fn open_link<L>(&mut self, target: ReactorID, spawner: L)
+    where
+        L: Into<LinkSpawner<K, M>>,
+    {
+        // TODO: This should be handled immediately, not send through an mpsc ..
+        self.chan.unbounded_send(Operation::OpenLink(target, spawner.into())).expect("Fuck me");
+    }
+}
+
 /// A context with a ReactorHandle is a ReactorContext
 type ReactorContext<'a, S, K, M> = Context<'a, S, ReactorHandle<K, M>>;
 
@@ -128,9 +158,6 @@ type ReactorContext<'a, S, K, M> = Context<'a, S, ReactorHandle<K, M>>;
 /// But you may want to implement this again, with for example Capnproto messages
 /// so you can send messages over the internet
 impl ReactorHandle<any::TypeId, Message> {
-    pub fn open_link(&mut self) {
-        unimplemented!();
-    }
 
     pub fn send_internal<T: 'static>(&mut self, msg: T) {
         let id = any::TypeId::of::<T>();
@@ -150,7 +177,6 @@ impl ReactorHandle<any::TypeId, Message> {
         unimplemented!();
     }
 }
-
 
 // ANCHOR Params
 pub struct CoreParams<S, K, M> {

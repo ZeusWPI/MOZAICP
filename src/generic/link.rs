@@ -26,11 +26,23 @@ impl<S, K, M> Link<S, K, M> {
 pub struct LinkHandle<K, M> {
     source: Sender<K, M>,
     target: Sender<K, M>,
+    target_id: ReactorID,
+}
+
+impl LinkHandle<any::TypeId, Message> {
+    pub fn send_message<T: 'static>(&mut self, msg: T) {
+        println!("Sending message 2");
+        let id = any::TypeId::of::<T>();
+        let msg = Message::from(msg);
+        self.target
+            .unbounded_send(Operation::ExternalMessage(self.target_id.clone(), id, msg))
+            .expect("Crashed");
+    }
 }
 
 type LinkContext<'a, S, K, M> = Context<'a, S, LinkHandle<K, M>>;
 
-impl<S, K, M> Handler<(), ReactorHandle<K, M>, LinkOperation<K, M>> for Link<S, K, M>
+impl<'a, S, K, M> Handler<(), ReactorHandle<K, M>, LinkOperation<'a, K, M>> for Link<S, K, M>
 where
     K: Hash + Eq,
 {
@@ -42,11 +54,15 @@ where
 
         match m {
             LinkOperation::InternalMessage(id, message) => {
-                self.internal_handlers.get_mut(id).map(|h| h.handle(ctx, message));
-            },
+                self.internal_handlers
+                    .get_mut(id)
+                    .map(|h| h.handle(ctx, message));
+            }
             LinkOperation::ExternalMessage(id, message) => {
-                self.external_handlers.get_mut(id).map(|h| h.handle(ctx, message));
-            },
+                self.external_handlers
+                    .get_mut(id)
+                    .map(|h| h.handle(ctx, message));
+            }
         };
     }
 }
@@ -84,5 +100,22 @@ where
     {
         let (id, handler) = handler.into();
         self.external_handlers.insert(id, handler);
+    }
+}
+
+impl<S, K, M> Into<LinkSpawner<K, M>> for LinkParams<S, K, M>
+where
+    S: 'static + Send,
+    M: 'static + Send,
+    K: 'static + Eq + Hash + Send,
+{
+    fn into(self) -> LinkSpawner<K, M> {
+        Box::new(move |(source, target, target_id)| {
+            let handles = LinkHandle {
+                source, target, target_id,
+            };
+
+            Box::new(Link::new(handles, self))
+        })
     }
 }

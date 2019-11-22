@@ -8,45 +8,62 @@ use std::any;
 use mozaic::generic;
 use mozaic::generic::*;
 
+struct E;
+struct Init(u64, bool);
+
 struct Foo {
     bar: u64,
 }
 
-struct Bar {
-    foobar: u64,
-}
-
 fn main() {
-    let mut params = generic::CoreParams::new(());
+    let mut p1 = generic::CoreParams::new(());
 
-    params.handler(FunctionHandler::from(test_bar));
-    params.handler(FunctionHandler::from(test_foo));
+    p1.handler(FunctionHandler::from(init));
+    p1.handler(FunctionHandler::from(inner));
 
-    let reactor = generic::Reactor::new(0.into(), BrokerHandle::new(), params);
+    let broker = BrokerHandle::new();
+
+
+    let mut p2 = generic::CoreParams::new(());
+    p2.handler(FunctionHandler::from(init));
 
     tokio::run(
         futures::lazy(move || {
-            let mut handle = reactor.get_handle();
+            let (id1, mut h1) = broker.spawn(p1);
+            let (id2, mut h2) = broker.spawn(p2);
 
-            tokio::spawn(reactor);
-            handle.send_internal(Bar { foobar: 100000 });
+            h2.send_internal(Init(id1.into(), false));
+            h1.send_internal(Init(id2.into(), true));
+
             Ok(())
         }
     ));
 }
 
-fn test_foo(_state: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, value: &Foo) {
-    // println!("foo: {}", value.bar);
+fn init(_: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, init: &Init) {
+    println!("Init {}", init.0);
+    let mut params = LinkParams::new(Foo { bar: 5 });
+    params.internal_handler(FunctionHandler::from(test_bar));
+    params.external_handler(FunctionHandler::from(test_bar));
 
-    handle.send_internal(Bar { foobar: value.bar - 1 });
+    handle.open_link(init.0.into(), params);
+
+    if init.1 {
+        println!("Sending internal");
+        handle.send_internal(());
+    }
 }
 
-fn test_bar(_state: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, value: &Bar) {
-    // println!("foo: {}", value.foobar);
+fn inner(_: &mut (), _: &mut ReactorHandle<any::TypeId, Message>, _: &()) {
+    println!("here");
+}
 
-    if value.foobar > 0 {
-        handle.send_internal(Foo { bar: value.foobar });
-    } else {
-        handle.close();
+fn test_bar(state: &mut Foo, handle: &mut LinkHandle<any::TypeId, Message>, _: &()) {
+    state.bar -= 1;
+    println!("At {}", state.bar);
+
+    if state.bar > 0 {
+        println!("Sending message");
+        handle.send_message(());
     }
 }
