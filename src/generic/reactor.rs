@@ -16,10 +16,15 @@ where
 
     broker: BrokerHandle<K, M>,
     state: S,
-    msg_handlers: HashMap<K, Box<dyn Handler<S, ReactorHandle<K, M>, M> + Send>>,
+    msg_handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>>,
 
-    links:
-        HashMap<ReactorID, Box<dyn for<'a> Handler<(), ReactorHandle<K, M>, LinkOperation<'a, K, M>> + Send>>,
+    links: HashMap<
+        ReactorID,
+        Box<
+            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
+                + Send,
+        >,
+    >,
 
     tx: Sender<K, M>,
     rx: Receiver<K, M>,
@@ -29,47 +34,60 @@ impl<S, K, M> Reactor<S, K, M>
 where
     K: Hash + Eq,
 {
-    pub fn new(id: ReactorID, broker: BrokerHandle<K, M>, params: CoreParams<S, K, M>) -> (Self, Sender<K, M>) {
+    pub fn new(
+        id: ReactorID,
+        broker: BrokerHandle<K, M>,
+        params: CoreParams<S, K, M>,
+    ) -> (Self, Sender<K, M>) {
         let (tx, rx) = mpsc::unbounded();
 
         let sender = tx.clone();
 
-        (Reactor {
-            id,
-            broker,
-            state: params.state,
-            msg_handlers: params.handlers,
-            links: HashMap::new(),
-            tx,
-            rx,
-        }, sender)
+        (
+            Reactor {
+                id,
+                broker,
+                state: params.state,
+                msg_handlers: params.handlers,
+                links: HashMap::new(),
+                tx,
+                rx,
+            },
+            sender,
+        )
     }
 
-    pub fn get_handle(&self) -> ReactorHandle<K, M> {
+    pub fn get_handle<'a>(&'a self) -> ReactorHandle<'a, K, M> {
         ReactorHandle {
-            chan: self.tx.clone(),
-            broker: self.broker.clone(),
+            chan: &self.tx,
+            // broker: &mut self.broker,
         }
     }
 
     fn handle_internal_msg(&mut self, id: K, mut msg: M) {
         println!("Handling internal message");
 
-        let mut handle = self.get_handle();
-
-        let ctx = Context {
-            state: &mut self.state,
-            handle: &mut handle,
+        let mut handle = ReactorHandle {
+            chan: &self.tx,
+            // broker: &mut self.broker,
         };
 
-        self.msg_handlers
-            .get_mut(&id)
-            .map(|h| h.handle(ctx, &mut msg));
+        {
+            let ctx = Context {
+                state: &mut self.state,
+                handle: &mut handle,
+            };
+
+            self.msg_handlers
+                .get_mut(&id)
+                .map(|h| h.handle(ctx, &mut msg));
+        }
 
         let mut m = LinkOperation::InternalMessage(&id, &mut msg);
+        let mut state = ();
         for (_, link) in self.links.iter_mut() {
             let ctx = Context {
-                state: &mut (),
+                state: &mut state,
                 handle: &mut handle,
             };
             link.handle(ctx, &mut m);
@@ -78,7 +96,10 @@ where
 
     fn handle_external_msg(&mut self, target: ReactorID, id: K, mut msg: M) {
         println!("Handling external message");
-        let mut handle = self.get_handle();
+        let mut handle = ReactorHandle {
+            chan: &self.tx,
+            // broker: &mut self.broker,
+        };
 
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
         let ctx = Context {
@@ -86,7 +107,10 @@ where
             handle: &mut handle,
         };
 
-        self.links.get_mut(&target).map(|h| h.handle(ctx, &mut m)).expect("AAAAAAAAAAHHHHHHHHHHHH");
+        self.links
+            .get_mut(&target)
+            .map(|h| h.handle(ctx, &mut m))
+            .expect("AAAAAAAAAAHHHHHHHHHHHH");
     }
 
     fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>) {
@@ -122,7 +146,9 @@ where
                     Operation::Close() => return Ok(Async::Ready(())),
                     Operation::OpenLink(id, spawner) => self.open_link(id, spawner),
                     Operation::CloseLink(id) => self.close_link(id),
-                    Operation::ExternalMessage(target, id, msg) => self.handle_external_msg(target, id, msg),
+                    Operation::ExternalMessage(target, id, msg) => {
+                        self.handle_external_msg(target, id, msg)
+                    }
                 },
             }
         }
@@ -133,38 +159,24 @@ where
 /// ReactorHandle wraps a channel to send operations to the reactor
 ///
 // TODO: Only references please, this is shitty
-pub struct ReactorHandle<K, M> {
-    chan: Sender<K, M>,
-    broker: BrokerHandle<K, M>,
+pub struct ReactorHandle<'a, K, M> {
+    chan: &'a Sender<K, M>,
+    // broker: &'a mut BrokerHandle<K, M>,
 }
 
-impl<K, M> ReactorHandle<K, M> {
+impl<'a, K, M> ReactorHandle<'a, K, M>
+where
+    K: 'static + Eq + Hash + Send,
+    M: 'static + Send,
+{
     pub fn open_link<L>(&mut self, target: ReactorID, spawner: L)
     where
         L: Into<LinkSpawner<K, M>>,
     {
         // TODO: This should be handled immediately, not send through an mpsc ..
-        self.chan.unbounded_send(Operation::OpenLink(target, spawner.into())).expect("Fuck me");
-    }
-}
-
-/// A context with a ReactorHandle is a ReactorContext
-type ReactorContext<'a, S, K, M> = Context<'a, S, ReactorHandle<K, M>>;
-
-// ANCHOR Implementation with any::TypeId
-/// To use MOZAIC a few things
-/// Everything your handlers use, so the Context and how to get from M to T
-/// This is already implemented for every T, with the use of Rusts TypeIds
-/// But you may want to implement this again, with for example Capnproto messages
-/// so you can send messages over the internet
-impl ReactorHandle<any::TypeId, Message> {
-
-    pub fn send_internal<T: 'static>(&mut self, msg: T) {
-        let id = any::TypeId::of::<T>();
-        let msg = Message::from(msg);
         self.chan
-            .unbounded_send(Operation::InternalMessage(id, msg))
-            .expect("crashed");
+            .unbounded_send(Operation::OpenLink(target, spawner.into()))
+            .expect("Fuck me");
     }
 
     pub fn close(&mut self) {
@@ -173,15 +185,35 @@ impl ReactorHandle<any::TypeId, Message> {
             .expect("Couldn't close");
     }
 
-    pub fn spawn(&mut self, _params: u32) {
-        unimplemented!();
+    pub fn spawn<S: 'static + Send>(&mut self, _params: CoreParams<S, K, M>) -> ReactorID {
+        // self.broker.spawn(params)
+        0.into()
+    }
+}
+
+/// A context with a ReactorHandle is a ReactorContext
+type ReactorContext<'a, S, K, M> = Context<'a, S, ReactorHandle<'a, K, M>>;
+
+// ANCHOR Implementation with any::TypeId
+/// To use MOZAIC a few things
+/// Everything your handlers use, so the Context and how to get from M to T
+/// This is already implemented for every T, with the use of Rusts TypeIds
+/// But you may want to implement this again, with for example Capnproto messages
+/// so you can send messages over the internet
+impl<'a> ReactorHandle<'a, any::TypeId, Message> {
+    pub fn send_internal<T: 'static>(&mut self, msg: T) {
+        let id = any::TypeId::of::<T>();
+        let msg = Message::from(msg);
+        self.chan
+            .unbounded_send(Operation::InternalMessage(id, msg))
+            .expect("crashed");
     }
 }
 
 // ANCHOR Params
 pub struct CoreParams<S, K, M> {
     state: S,
-    handlers: HashMap<K, Box<dyn Handler<S, ReactorHandle<K, M>, M> + Send>>,
+    handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>>,
 }
 
 impl<S, K, M> CoreParams<S, K, M>
@@ -198,7 +230,10 @@ where
 
     pub fn handler<H>(&mut self, handler: H)
     where
-        H: Into<(K, Box<dyn Handler<S, ReactorHandle<K, M>, M> + Send>)>,
+        H: Into<(
+            K,
+            Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>,
+        )>,
     {
         let (id, handler) = handler.into();
         self.handlers.insert(id, handler);

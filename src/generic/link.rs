@@ -42,11 +42,11 @@ impl LinkHandle<any::TypeId, Message> {
 
 type LinkContext<'a, S, K, M> = Context<'a, S, LinkHandle<K, M>>;
 
-impl<'a, S, K, M> Handler<(), ReactorHandle<K, M>, LinkOperation<'a, K, M>> for Link<S, K, M>
+impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> for Link<S, K, M>
 where
     K: Hash + Eq,
 {
-    fn handle(&mut self, _: Context<(), ReactorHandle<K, M>>, m: &mut LinkOperation<K, M>) {
+    fn handle(&mut self, _: Context<(), ReactorHandle<'b, K, M>>, m: &mut LinkOperation<K, M>) {
         let ctx = LinkContext {
             state: &mut self.state,
             handle: &mut self.handles,

@@ -8,7 +8,6 @@ use std::any;
 use mozaic::generic;
 use mozaic::generic::*;
 
-struct E;
 struct Init(u64, bool);
 
 struct Foo {
@@ -29,18 +28,18 @@ fn main() {
 
     tokio::run(
         futures::lazy(move || {
-            let (id1, mut h1) = broker.spawn(p1);
-            let (id2, mut h2) = broker.spawn(p2);
+            let id1 = broker.spawn(p1);
+            let id2 = broker.spawn(p2);
 
-            h2.send_internal(Init(id1.into(), false));
-            h1.send_internal(Init(id2.into(), true));
+            // h2.send_internal(Init(id1.into(), false));
+            // h1.send_internal(Init(id2.into(), true));
 
             Ok(())
         }
     ));
 }
 
-fn init(_: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, init: &Init) {
+fn init(_: &mut (), handle: &mut ReactorHandle<'_, any::TypeId, Message>, init: &Init) {
     println!("Init {}", init.0);
     let mut params = LinkParams::new(Foo { bar: 5 });
     params.internal_handler(FunctionHandler::from(test_bar));
@@ -54,7 +53,7 @@ fn init(_: &mut (), handle: &mut ReactorHandle<any::TypeId, Message>, init: &Ini
     }
 }
 
-fn inner(_: &mut (), _: &mut ReactorHandle<any::TypeId, Message>, _: &()) {
+fn inner(_: &mut (), _: &mut ReactorHandle<'_, any::TypeId, Message>, _: &()) {
     println!("here");
 }
 

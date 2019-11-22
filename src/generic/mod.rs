@@ -4,8 +4,8 @@ use futures::{Async, Future, Poll, Stream};
 use rand;
 
 use std::any;
-use std::hash::Hash;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
@@ -32,7 +32,7 @@ type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
 /// And use handle specific functions
 ///
 pub trait Handler<S, C, M> {
-    fn handle(&mut self, c: Context<S, C>, m: &mut M);
+    fn handle<'a>(&mut self, c: Context<'a, S, C>, m: &mut M);
 }
 
 ///
@@ -55,8 +55,9 @@ type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID);
 pub type LinkSpawner<K, M> = Box<
     dyn FnOnce(
             Handles<K, M>,
-        ) -> Box<dyn for<'a> Handler<(), ReactorHandle<K, M>, LinkOperation<'a, K, M>> + Send>
-        + Send,
+        ) -> Box<
+            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send,
+        > + Send,
 >;
 
 pub enum LinkOperation<'a, K, M> {
@@ -127,17 +128,19 @@ where
     K: 'static + Eq + Hash + Send,
     M: 'static + Send,
 {
-    pub fn spawn<S: 'static + Send>(&self, params: CoreParams<S, K, M>) -> (ReactorID, ReactorHandle<K, M>) {
+    pub fn spawn<S: 'static + Send>(&self, params: CoreParams<S, K, M>) -> ReactorID {
         let id = rand::random::<u64>().into();
         let (reactor, sender) = Reactor::new(id, self.clone(), params);
-        let handle = reactor.get_handle();
 
-        self.broker.lock().unwrap().reactors.insert(id.clone(), sender);
+        self.broker
+            .lock()
+            .unwrap()
+            .reactors
+            .insert(id.clone(), sender);
 
         tokio::spawn(reactor);
 
-
-        (id, handle)
+        id
     }
 }
 
@@ -145,15 +148,23 @@ where
 /// FunctionHandler<S, T, F, R> makes a Handler from a function
 /// For Messages that is
 ///
-pub struct FunctionHandler<F, S, R, T> {
+pub struct FunctionHandler<F, S, R, T>
+where
+    F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
+    S: 'static + Send,
+    R: 'static + Send,
+    T: 'static + Send,
+{
     phantom: PhantomData<(S, R, T)>,
     function: F,
 }
 
 impl<F, S, R, T> FunctionHandler<F, S, R, T>
 where
-    F: Fn(&mut S, &mut R, &T) -> () + Send,
-    T: 'static,
+    F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
+    S: 'static + Send,
+    R: 'static + Send,
+    T: 'static + Send,
 {
     pub fn from(function: F) -> Box<Self> {
         Box::new(Self {
@@ -193,11 +204,12 @@ where
 
 impl<F, S, R, T> Handler<S, R, Message> for FunctionHandler<F, S, R, T>
 where
-    F: Fn(&mut S, &mut R, &T) -> () + Send,
+    F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
+    S: 'static + Send,
     R: 'static + Send,
-    T: 'static,
+    T: 'static + Send,
 {
-    fn handle(&mut self, c: Context<S, R>, message: &mut Message) {
+    fn handle<'a>(&mut self, c: Context<'a, S, R>, message: &mut Message) {
         let (state, handle) = c.split();
         message
             .borrow()
