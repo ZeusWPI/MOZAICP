@@ -222,18 +222,18 @@ where
 // Like a T: FromPointerReader in capnproto's case
 //
 
-impl<F, S, H, T> Handler<S, H, Message>
-    for FunctionHandler<F, S, H, T>
+impl<'a, K, F, S, T> Handler<S, ReactorHandle<'a, K, Message>, Message>
+    for FunctionHandler<F, S, ReactorHandle<'_, K, Message>, T>
 where
-    F: 'static + Send + for<'a> Fn(&mut S, &mut H, &T) -> (),
+    F: 'static + Send + for<'b> Fn(&mut S, &mut ReactorHandle<'b, K, Message>, &T) -> (),
     S: 'static + Send,
     T: 'static + Send,
-    H: 'static + Send,
+    K: 'static + Send,
 {
-    fn handle(
+    fn handle<'b>(
         &mut self,
         state: &mut S,
-        handle: &mut H,
+        handle: &mut ReactorHandle<'b, K, Message>,
         message: &mut Message,
     ) {
         message
@@ -242,3 +242,46 @@ where
             .expect("No message found at pointer location");
     }
 }
+
+impl<K, F, S, T> Handler<S, LinkHandle<K, Message>, Message>
+    for FunctionHandler<F, S, LinkHandle<K, Message>, T>
+where
+    F: 'static + Send + Fn(&mut S, &mut LinkHandle<K, Message>, &T) -> (),
+    S: 'static + Send,
+    T: 'static + Send,
+    K: 'static + Send,
+{
+    fn handle(
+        &mut self,
+        state: &mut S,
+        handle: &mut LinkHandle<K, Message>,
+        message: &mut Message,
+    ) {
+        message
+            .borrow()
+            .map(|item| (self.function)(state, handle, item))
+            .expect("No message found at pointer location");
+    }
+}
+
+
+// impl<F, S, H, T> Handler<S, H, Message>
+//     for FunctionHandler<F, S, H, T>
+// where
+//     F: 'static + Send + for<'a> Fn(&mut S, &mut H, &T) -> (),
+//     S: 'static + Send,
+//     T: 'static + Send,
+//     H: 'static + Send,
+// {
+//     fn handle(
+//         &mut self,
+//         state: &mut S,
+//         handle: &mut H,
+//         message: &mut Message,
+//     ) {
+//         message
+//             .borrow()
+//             .map(|item| (self.function)(state, handle, item))
+//             .expect("No message found at pointer location");
+//     }
+// }

@@ -208,7 +208,7 @@ where
         }
     }
 
-    pub fn handler<H>(
+    pub fn handler(
         &mut self,
         id: K,
         handler: Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>,
