@@ -186,27 +186,27 @@ where
 //     }
 // }
 
-impl<F, S, H, T>
-    Into<(
-        any::TypeId,
-        Box<(dyn Handler<S, H, Message> + Send + 'static)>,
-    )> for FunctionHandler<F, S, H, T>
-where
-    F: 'static + Send + Fn(&mut S, &mut H, &T) -> (),
-    S: 'static + Send,
-    H: 'static + Send,
-    T: 'static + Send,
-{
-    fn into(
-        self,
-    ) -> (
-        any::TypeId,
-        Box<(dyn for<'a> Handler<S, H, Message> + Send + 'static)>,
-    ) {
-        let id = any::TypeId::of::<T>();
-        (id, Box::new(self))
-    }
-}
+// impl<F, S, H, T>
+//     Into<(
+//         any::TypeId,
+//         Box<(dyn Handler<S, H, Message> + Send + 'static)>,
+//     )> for FunctionHandler<F, S, H, T>
+// where
+//     F: 'static + Send + Fn(&mut S, &mut H, &T) -> (),
+//     S: 'static + Send,
+//     H: 'static + Send,
+//     T: 'static + Send,
+// {
+//     fn into(
+//         self,
+//     ) -> (
+//         any::TypeId,
+//         Box<(dyn for<'a> Handler<S, H, Message> + Send + 'static)>,
+//     ) {
+//         let id = any::TypeId::of::<T>();
+//         (id, Box::new(self))
+//     }
+// }
 
 //
 // Somewhere I want to make Message generic, but that wouldn't be useful
