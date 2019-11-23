@@ -72,25 +72,14 @@ where
             // broker: &mut self.broker,
         };
 
-        {
-            let ctx = Context {
-                state: &mut self.state,
-                handle: &mut handle,
-            };
-
-            self.msg_handlers
-                .get_mut(&id)
-                .map(|h| h.handle(ctx, &mut msg));
+        if let Some(h) = self.msg_handlers.get_mut(&id) {
+            h.handle(&mut self.state, &mut handle, &mut msg);
         }
 
         let mut m = LinkOperation::InternalMessage(&id, &mut msg);
         let mut state = ();
         for (_, link) in self.links.iter_mut() {
-            let ctx = Context {
-                state: &mut state,
-                handle: &mut handle,
-            };
-            link.handle(ctx, &mut m);
+            link.handle(&mut state, &mut handle, &mut m);
         }
     }
 
@@ -102,14 +91,10 @@ where
         };
 
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
-        let ctx = Context {
-            state: &mut (),
-            handle: &mut handle,
-        };
 
         self.links
             .get_mut(&target)
-            .map(|h| h.handle(ctx, &mut m))
+            .map(|h| h.handle(&mut (), &mut handle, &mut m))
             .expect("AAAAAAAAAAHHHHHHHHHHHH");
     }
 
@@ -159,6 +144,7 @@ where
 /// ReactorHandle wraps a channel to send operations to the reactor
 ///
 // TODO: Only references please, this is shitty
+
 pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,
     // broker: &'a mut BrokerHandle<K, M>,
@@ -190,9 +176,6 @@ where
         0.into()
     }
 }
-
-/// A context with a ReactorHandle is a ReactorContext
-type ReactorContext<'a, S, K, M> = Context<'a, S, ReactorHandle<'a, K, M>>;
 
 // ANCHOR Implementation with any::TypeId
 /// To use MOZAIC a few things

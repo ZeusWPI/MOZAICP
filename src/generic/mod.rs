@@ -31,24 +31,24 @@ type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
 /// This should apply one message to S
 /// And use handle specific functions
 ///
-pub trait Handler<S, C, M> {
-    fn handle<'a>(&mut self, c: Context<'a, S, C>, m: &mut M);
+pub trait Handler<S, H, M> {
+    fn handle<'a>(&mut self, s: &mut S, h: &mut H, m: &mut M);
 }
 
-///
-/// Context bundles a state and a handle
-/// That handle is usually used to send new messages
-///
-pub struct Context<'a, S, C> {
-    state: &'a mut S,
-    handle: &'a mut C,
-}
+// ///
+// /// Context bundles a state and a handle
+// /// That handle is usually used to send new messages
+// ///
+// pub struct Context<'a, S, C> {
+//     state: &'a mut S,
+//     handle: &'a mut C,
+// }
 
-impl<'a, S, C> Context<'a, S, C> {
-    fn split(self) -> (&'a mut S, &'a mut C) {
-        (self.state, self.handle)
-    }
-}
+// impl<'a, S, C> Context<'a, S, C> {
+//     fn split(self) -> (&'a mut S, &'a mut C) {
+//         (self.state, self.handle)
+//     }
+// }
 
 /// (SourceHandle, TargetHandle)
 type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID);
@@ -174,17 +174,17 @@ where
     }
 }
 
-impl<F, S, R, T> Into<(any::TypeId, Box<dyn Handler<S, R, Message> + Send>)>
-    for Box<FunctionHandler<F, S, R, T>>
+impl<F, S, T> Into<(any::TypeId, Box<dyn for<'a> Handler<S, ReactorHandle<'a, any::TypeId, Message>, Message> + Send>)>
+    for FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>
 where
-    F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
+    F: 'static + Send + Fn(&mut S, &mut ReactorHandle<'_, any::TypeId, Message>, &T) -> (),
     S: 'static + Send,
-    R: 'static + Send,
+    // R: 'static + Send,
     T: 'static + Send,
 {
-    fn into(self) -> (any::TypeId, Box<dyn Handler<S, R, Message> + Send>) {
+    fn into(self) -> (any::TypeId, Box<dyn for<'a> Handler<S, ReactorHandle<'a, any::TypeId, Message>, Message> + Send>) {
         let id = any::TypeId::of::<T>();
-        (id, self)
+        (id, Box::new(self))
     }
 }
 
@@ -202,15 +202,13 @@ where
 // Like a T: FromPointerReader in capnproto's case
 //
 
-impl<F, S, R, T> Handler<S, R, Message> for FunctionHandler<F, S, R, T>
+impl<'a, F, S, T> Handler<S, ReactorHandle<'a, any::TypeId, Message>, Message> for FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>
 where
-    F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
+    F: 'static + Send + Fn(&mut S, &mut ReactorHandle<'_, any::TypeId, Message>, &T) -> (),
     S: 'static + Send,
-    R: 'static + Send,
     T: 'static + Send,
 {
-    fn handle<'a>(&mut self, c: Context<'a, S, R>, message: &mut Message) {
-        let (state, handle) = c.split();
+    fn handle(&mut self, state: &mut S, handle: &mut ReactorHandle<'a, any::TypeId, Message>, message: &mut Message) {
         message
             .borrow()
             .map(|item| (self.function)(state, handle, item))

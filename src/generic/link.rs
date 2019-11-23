@@ -40,28 +40,21 @@ impl LinkHandle<any::TypeId, Message> {
     }
 }
 
-type LinkContext<'a, S, K, M> = Context<'a, S, LinkHandle<K, M>>;
-
 impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> for Link<S, K, M>
 where
     K: Hash + Eq,
 {
-    fn handle(&mut self, _: Context<(), ReactorHandle<'b, K, M>>, m: &mut LinkOperation<K, M>) {
-        let ctx = LinkContext {
-            state: &mut self.state,
-            handle: &mut self.handles,
-        };
-
+    fn handle(&mut self, _: &mut (), _handle: &mut ReactorHandle<'b, K, M>, m: &mut LinkOperation<K, M>) {
         match m {
             LinkOperation::InternalMessage(id, message) => {
-                self.internal_handlers
-                    .get_mut(id)
-                    .map(|h| h.handle(ctx, message));
+                if let Some(h) = self.internal_handlers.get_mut(id) {
+                    h.handle(&mut self.state, &mut self.handles, message);
+                }
             }
             LinkOperation::ExternalMessage(id, message) => {
-                self.external_handlers
-                    .get_mut(id)
-                    .map(|h| h.handle(ctx, message));
+                if let Some(h) = self.external_handlers.get_mut(id) {
+                    h.handle(&mut self.state, &mut self.handles, message);
+                }
             }
         };
     }
