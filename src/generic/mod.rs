@@ -32,7 +32,7 @@ type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
 /// And use handle specific functions
 ///
 pub trait Handler<S, H, M> {
-    fn handle<'a>(&mut self, s: &mut S, h: &mut H, m: &mut M);
+    fn handle(&mut self, s: &mut S, h: &mut H, m: &mut M);
 }
 
 // ///
@@ -174,15 +174,35 @@ where
     }
 }
 
-impl<F, S, T> Into<(any::TypeId, Box<dyn for<'a> Handler<S, ReactorHandle<'a, any::TypeId, Message>, Message> + Send>)>
-    for FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>
+// impl<F, S, T> From<FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>> for (any::TypeId, Box<dyn Handler<S, ReactorHandle<'_, any::TypeId, Message>, Message> + Send>)
+// where
+// F: 'static + Send + Fn(&mut S, &mut ReactorHandle<'_, any::TypeId, Message>, &T) -> (),
+// S: 'static + Send,
+// T: 'static + Send,
+// {
+//     fn from(other: FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>) -> Self {
+//         let id = any::TypeId::of::<T>();
+//         (id, Box::new(other))
+//     }
+// }
+
+impl<F, S, H, T>
+    Into<(
+        any::TypeId,
+        Box<(dyn Handler<S, H, Message> + Send + 'static)>,
+    )> for FunctionHandler<F, S, H, T>
 where
-    F: 'static + Send + Fn(&mut S, &mut ReactorHandle<'_, any::TypeId, Message>, &T) -> (),
+    F: 'static + Send + Fn(&mut S, &mut H, &T) -> (),
     S: 'static + Send,
-    // R: 'static + Send,
+    H: 'static + Send,
     T: 'static + Send,
 {
-    fn into(self) -> (any::TypeId, Box<dyn for<'a> Handler<S, ReactorHandle<'a, any::TypeId, Message>, Message> + Send>) {
+    fn into(
+        self,
+    ) -> (
+        any::TypeId,
+        Box<(dyn for<'a> Handler<S, H, Message> + Send + 'static)>,
+    ) {
         let id = any::TypeId::of::<T>();
         (id, Box::new(self))
     }
@@ -202,13 +222,20 @@ where
 // Like a T: FromPointerReader in capnproto's case
 //
 
-impl<'a, F, S, T> Handler<S, ReactorHandle<'a, any::TypeId, Message>, Message> for FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>
+impl<F, S, H, T> Handler<S, H, Message>
+    for FunctionHandler<F, S, H, T>
 where
-    F: 'static + Send + Fn(&mut S, &mut ReactorHandle<'_, any::TypeId, Message>, &T) -> (),
+    F: 'static + Send + for<'a> Fn(&mut S, &mut H, &T) -> (),
     S: 'static + Send,
     T: 'static + Send,
+    H: 'static + Send,
 {
-    fn handle(&mut self, state: &mut S, handle: &mut ReactorHandle<'a, any::TypeId, Message>, message: &mut Message) {
+    fn handle(
+        &mut self,
+        state: &mut S,
+        handle: &mut H,
+        message: &mut Message,
+    ) {
         message
             .borrow()
             .map(|item| (self.function)(state, handle, item))

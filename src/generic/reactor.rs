@@ -20,10 +20,7 @@ where
 
     links: HashMap<
         ReactorID,
-        Box<
-            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
-                + Send,
-        >,
+        Box<dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send>,
     >,
 
     tx: Sender<K, M>,
@@ -211,14 +208,11 @@ where
         }
     }
 
-    pub fn handler<H>(&mut self, handler: H)
-    where
-        H: Into<(
-            K,
-            Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>,
-        )>,
-    {
-        let (id, handler) = handler.into();
+    pub fn handler<H>(
+        &mut self,
+        id: K,
+        handler: Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>,
+    ) {
         self.handlers.insert(id, handler);
     }
 }

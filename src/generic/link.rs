@@ -40,11 +40,17 @@ impl LinkHandle<any::TypeId, Message> {
     }
 }
 
-impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> for Link<S, K, M>
+impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
+    for Link<S, K, M>
 where
     K: Hash + Eq,
 {
-    fn handle(&mut self, _: &mut (), _handle: &mut ReactorHandle<'b, K, M>, m: &mut LinkOperation<K, M>) {
+    fn handle(
+        &mut self,
+        _: &mut (),
+        _handle: &mut ReactorHandle<'b, K, M>,
+        m: &mut LinkOperation<K, M>,
+    ) {
         match m {
             LinkOperation::InternalMessage(id, message) => {
                 if let Some(h) = self.internal_handlers.get_mut(id) {
@@ -79,19 +85,19 @@ where
         }
     }
 
-    pub fn internal_handler<H>(&mut self, handler: H)
-    where
-        H: Into<(K, Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>)>,
-    {
-        let (id, handler) = handler.into();
+    pub fn internal_handler(
+        &mut self,
+        id: K,
+        handler: Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>,
+    ) {
         self.internal_handlers.insert(id, handler);
     }
 
-    pub fn external_handler<H>(&mut self, handler: H)
-    where
-        H: Into<(K, Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>)>,
-    {
-        let (id, handler) = handler.into();
+    pub fn external_handler(
+        &mut self,
+        id: K,
+        handler: Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>,
+    ) {
         self.external_handlers.insert(id, handler);
     }
 }
@@ -105,7 +111,9 @@ where
     fn into(self) -> LinkSpawner<K, M> {
         Box::new(move |(source, target, target_id)| {
             let handles = LinkHandle {
-                source, target, target_id,
+                source,
+                target,
+                target_id,
             };
 
             Box::new(Link::new(handles, self))
