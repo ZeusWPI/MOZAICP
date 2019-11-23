@@ -9,7 +9,6 @@ use mozaic::generic;
 use mozaic::generic::*;
 
 struct E;
-struct Init(u64, bool);
 
 struct Foo {
     bar: u64,
@@ -35,41 +34,38 @@ impl Foo {
     }
 }
 
-fn main() {
-    let mut p1 = generic::CoreParams::new(());
+impl ReactorState<any::TypeId, Message> for Foo {
+    fn init<'a>(&mut self, handle: &mut ReactorHandle<'_, any::TypeId, Message> ) {
+        let id: u64 = **handle.id();
+        println!("Init {}", id);
 
-    p1.handler(any::TypeId::of::<()>(), FunctionHandler::from(init));
+        if id == 0 {
+            handle.open_link(1.into(), Foo::params());
+        } else {
+            handle.open_link(0.into(), Foo::params());
+            handle.send_internal(E);
+        }
+    }
+}
+
+fn main() {
+    let mut p1 = generic::CoreParams::new(Foo { bar: 0 });
     p1.handler(any::TypeId::of::<()>(), FunctionHandler::from(inner));
 
     let broker = BrokerHandle::new();
 
-
-    let mut p2 = generic::CoreParams::new(());
-    p2.handler(any::TypeId::of::<()>(), FunctionHandler::from(init));
+    let p2 = generic::CoreParams::new(());
 
     tokio::run(
         futures::lazy(move || {
-            let id1 = broker.spawn(p1);
-            let id2 = broker.spawn(p2);
-
-            // h2.send_internal(Init(id1.into(), false));
-            // h1.send_internal(Init(id2.into(), true));
+            broker.spawn(p1, Some(1.into()));
+            broker.spawn(p2, Some(0.into()));
 
             Ok(())
         }
     ));
 }
 
-fn init<'a>(_: &mut (), handle: &mut ReactorHandle<'a, any::TypeId, Message>, init: &Init) {
-    println!("Init {}", init.0);
-    handle.open_link(init.0.into(), Foo::params());
-
-    if init.1 {
-        println!("Sending internal");
-        handle.send_internal(E);
-    }
-}
-
-fn inner(_: &mut (), _: &mut ReactorHandle<'_, any::TypeId, Message>, _: &E) {
+fn inner(_: &mut Foo, _: &mut ReactorHandle<'_, any::TypeId, Message>, _: &E) {
     println!("here");
 }

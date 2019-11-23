@@ -3,6 +3,12 @@ use std::hash::Hash;
 
 use super::*;
 
+pub trait ReactorState<K, M> {
+    fn init<'a>(&mut self, &mut ReactorHandle<'a, K, M>) {}
+}
+
+impl<K, M> ReactorState<K, M> for () {}
+
 ///
 /// Reactor is the meat and the potatoes of MOZAIC
 /// You can register Handers (just functions)
@@ -57,6 +63,7 @@ where
     pub fn get_handle<'a>(&'a self) -> ReactorHandle<'a, K, M> {
         ReactorHandle {
             chan: &self.tx,
+            id: &self.id,
             // broker: &mut self.broker,
         }
     }
@@ -66,6 +73,7 @@ where
 
         let mut handle = ReactorHandle {
             chan: &self.tx,
+            id: &self.id,
             // broker: &mut self.broker,
         };
 
@@ -84,6 +92,7 @@ where
         println!("Handling external message");
         let mut handle = ReactorHandle {
             chan: &self.tx,
+            id: &self.id,
             // broker: &mut self.broker,
         };
 
@@ -107,6 +116,21 @@ where
 
     fn close_link(&mut self, target: ReactorID) {
         self.links.remove(&target);
+    }
+}
+
+impl<S, K, M> Reactor<S, K, M>
+where
+    K: Hash + Eq,
+    S: ReactorState<K, M>,
+{
+    pub fn init(&mut self) {
+        let mut handle = ReactorHandle {
+            chan: &self.tx,
+            id: &self.id,
+        };
+
+        self.state.init(&mut handle);
     }
 }
 
@@ -144,6 +168,7 @@ where
 
 pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,
+    id: &'a ReactorID,
     // broker: &'a mut BrokerHandle<K, M>,
 }
 
@@ -171,6 +196,10 @@ where
     pub fn spawn<S: 'static + Send>(&mut self, _params: CoreParams<S, K, M>) -> ReactorID {
         // self.broker.spawn(params)
         0.into()
+    }
+
+    pub fn id(&mut self) -> &'a ReactorID {
+        &self.id
     }
 }
 

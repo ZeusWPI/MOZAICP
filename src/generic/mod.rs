@@ -16,10 +16,12 @@ mod reactor;
 mod types;
 
 pub use self::link::{Link, LinkHandle, LinkParams};
-pub use self::reactor::{CoreParams, Reactor, ReactorHandle};
+pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState};
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
+
+pub struct Initialize();
 
 /// Shortcut types
 type Sender<K, M> = mpsc::UnboundedSender<Operation<K, M>>;
@@ -128,9 +130,10 @@ where
     K: 'static + Eq + Hash + Send,
     M: 'static + Send,
 {
-    pub fn spawn<S: 'static + Send>(&self, params: CoreParams<S, K, M>) -> ReactorID {
-        let id = rand::random::<u64>().into();
-        let (reactor, sender) = Reactor::new(id, self.clone(), params);
+    pub fn spawn<S: 'static + Send + ReactorState<K, M>>(&self, params: CoreParams<S, K, M>, id: Option<ReactorID>) -> ReactorID {
+        let id = id.unwrap_or_else(|| rand::random::<u64>().into());
+        println!("Spawning {:?}", id);
+        let (mut reactor, sender) = Reactor::new(id, self.clone(), params);
 
         self.broker
             .lock()
@@ -138,6 +141,8 @@ where
             .reactors
             .insert(id.clone(), sender);
 
+
+        reactor.init();
         tokio::spawn(reactor);
 
         id
