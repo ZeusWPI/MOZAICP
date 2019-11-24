@@ -248,18 +248,18 @@ where
     }
 }
 
-impl<K, F, S, T> Handler<S, LinkHandle<K, Message>, Message>
-    for FunctionHandler<F, S, LinkHandle<K, Message>, T>
+impl<'a, K, F, S, T> Handler<S, LinkHandle<'a, K, Message>, Message>
+    for FunctionHandler<F, S, LinkHandle<'_, K, Message>, T>
 where
-    F: 'static + Send + Fn(&mut S, &mut LinkHandle<K, Message>, &T) -> (),
+    F: 'static + Send + for<'b> Fn(&mut S, &mut LinkHandle<'b, K, Message>, &T) -> (),
     S: 'static + Send,
     T: 'static + Send,
     K: 'static + Send,
 {
-    fn handle(
+    fn handle<'b>(
         &mut self,
         state: &mut S,
-        handle: &mut LinkHandle<K, Message>,
+        handle: &mut LinkHandle<'b, K, Message>,
         message: &mut Message,
     ) {
         message

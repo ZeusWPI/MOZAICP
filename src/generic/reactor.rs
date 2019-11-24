@@ -3,6 +3,15 @@ use std::hash::Hash;
 
 use super::*;
 
+macro_rules! reactorHandle {
+    ($e:expr) => {
+        ReactorHandle {
+            chan: &$e.tx,
+            id: &$e.id,
+        };
+    };
+}
+
 pub trait ReactorState<K, M> {
     fn init<'a>(&mut self, &mut ReactorHandle<'a, K, M>) {}
 }
@@ -61,21 +70,13 @@ where
     }
 
     pub fn get_handle<'a>(&'a self) -> ReactorHandle<'a, K, M> {
-        ReactorHandle {
-            chan: &self.tx,
-            id: &self.id,
-            // broker: &mut self.broker,
-        }
+        reactorHandle!(self)
     }
 
     fn handle_internal_msg(&mut self, id: K, mut msg: M) {
         println!("Handling internal message");
 
-        let mut handle = ReactorHandle {
-            chan: &self.tx,
-            id: &self.id,
-            // broker: &mut self.broker,
-        };
+        let mut handle = reactorHandle!(self);
 
         if let Some(h) = self.msg_handlers.get_mut(&id) {
             h.handle(&mut self.state, &mut handle, &mut msg);
@@ -90,11 +91,8 @@ where
 
     fn handle_external_msg(&mut self, target: ReactorID, id: K, mut msg: M) {
         println!("Handling external message");
-        let mut handle = ReactorHandle {
-            chan: &self.tx,
-            id: &self.id,
-            // broker: &mut self.broker,
-        };
+        let mut handle = reactorHandle!(self);
+
 
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
 
@@ -125,10 +123,8 @@ where
     S: ReactorState<K, M>,
 {
     pub fn init(&mut self) {
-        let mut handle = ReactorHandle {
-            chan: &self.tx,
-            id: &self.id,
-        };
+        let mut handle = reactorHandle!(self);
+
 
         self.state.init(&mut handle);
     }

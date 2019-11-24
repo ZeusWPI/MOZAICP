@@ -1,20 +1,34 @@
 use super::*;
 use std::hash::Hash;
 
+macro_rules! linkHandle {
+    ($e:expr) => {
+        LinkHandle {
+            state: &$e.link_state,
+        };
+    };
+}
+
+struct LinkState<K, M> {
+    source: Sender<K, M>,
+    target: Sender<K, M>,
+    target_id: ReactorID,
+}
+
 // ANCHOR Link
 pub struct Link<S, K, M> {
     state: S,
 
-    internal_handlers: HashMap<K, Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>>,
-    external_handlers: HashMap<K, Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>>,
+    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
+    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
 
-    handles: LinkHandle<K, M>,
+    link_state: LinkState<K, M>,
 }
 
 impl<S, K, M> Link<S, K, M> {
-    pub fn new(handles: LinkHandle<K, M>, params: LinkParams<S, K, M>) -> Self {
+    fn new(link_state: LinkState<K, M>, params: LinkParams<S, K, M>) -> Self {
         Self {
-            handles,
+            link_state,
             state: params.state,
             internal_handlers: params.internal_handlers,
             external_handlers: params.external_handlers,
@@ -23,19 +37,17 @@ impl<S, K, M> Link<S, K, M> {
 }
 
 #[derive(Clone)]
-pub struct LinkHandle<K, M> {
-    source: Sender<K, M>,
-    target: Sender<K, M>,
-    target_id: ReactorID,
+pub struct LinkHandle<'a, K, M> {
+    state: &'a LinkState<K, M>,
 }
 
-impl LinkHandle<any::TypeId, Message> {
+impl<'a> LinkHandle<'a, any::TypeId, Message> {
     pub fn send_message<T: 'static>(&mut self, msg: T) {
         println!("Sending message 2");
         let id = any::TypeId::of::<T>();
         let msg = Message::from(msg);
-        self.target
-            .unbounded_send(Operation::ExternalMessage(self.target_id.clone(), id, msg))
+        self.state.target
+            .unbounded_send(Operation::ExternalMessage(self.state.target_id.clone(), id, msg))
             .expect("Crashed");
     }
 }
@@ -54,12 +66,12 @@ where
         match m {
             LinkOperation::InternalMessage(id, message) => {
                 if let Some(h) = self.internal_handlers.get_mut(id) {
-                    h.handle(&mut self.state, &mut self.handles, message);
+                    h.handle(&mut self.state, &mut linkHandle!(self), message);
                 }
             }
             LinkOperation::ExternalMessage(id, message) => {
                 if let Some(h) = self.external_handlers.get_mut(id) {
-                    h.handle(&mut self.state, &mut self.handles, message);
+                    h.handle(&mut self.state, &mut linkHandle!(self), message);
                 }
             }
         };
@@ -69,8 +81,8 @@ where
 // ANCHOR Params
 pub struct LinkParams<S, K, M> {
     state: S,
-    internal_handlers: HashMap<K, Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>>,
-    external_handlers: HashMap<K, Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>>,
+    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
+    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
 }
 
 impl<S, K, M> LinkParams<S, K, M>
@@ -88,7 +100,7 @@ where
     pub fn internal_handler(
         &mut self,
         id: K,
-        handler: Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>,
+        handler: Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>,
     ) {
         self.internal_handlers.insert(id, handler);
     }
@@ -96,7 +108,7 @@ where
     pub fn external_handler(
         &mut self,
         id: K,
-        handler: Box<dyn Handler<S, LinkHandle<K, M>, M> + Send>,
+        handler: Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>,
     ) {
         self.external_handlers.insert(id, handler);
     }
@@ -110,7 +122,7 @@ where
 {
     fn into(self) -> LinkSpawner<K, M> {
         Box::new(move |(source, target, target_id)| {
-            let handles = LinkHandle {
+            let handles = LinkState {
                 source,
                 target,
                 target_id,
