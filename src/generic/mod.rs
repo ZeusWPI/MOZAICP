@@ -170,6 +170,7 @@ where
         let mut reactor = Reactor::new(id, self.clone(), params, self.connect(id).expect("Already connected"));
 
         reactor.init();
+
         tokio::spawn(reactor);
 
         id

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 
 use super::*;
@@ -8,6 +8,7 @@ macro_rules! reactorHandle {
         ReactorHandle {
             chan: &$e.tx,
             id: &$e.id,
+            inner_ops: &mut $e.inner_ops,
         };
     };
 }
@@ -40,6 +41,8 @@ where
 
     tx: Sender<K, M>,
     rx: Receiver<K, M>,
+
+    inner_ops: VecDeque<InnerOp<K, M>>,
 }
 
 impl<S, K, M> Reactor<S, K, M>
@@ -61,10 +64,11 @@ where
             links: HashMap::new(),
             tx,
             rx,
+            inner_ops: VecDeque::new(),
         }
     }
 
-    pub fn get_handle<'a>(&'a self) -> ReactorHandle<'a, K, M> {
+    pub fn get_handle<'a>(&'a mut self) -> ReactorHandle<'a, K, M> {
         reactorHandle!(self)
     }
 
@@ -80,6 +84,7 @@ where
         let mut m = LinkOperation::InternalMessage(&id, &mut msg);
         let mut state = ();
         for (_, link) in self.links.iter_mut() {
+            println!("Handling internal message for link");
             link.handle(&mut state, &mut handle, &mut m);
         }
     }
@@ -135,16 +140,29 @@ where
                 None => return Ok(Async::Ready(())),
                 Some(item) => match item {
                     Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),
-                    Operation::Close() => return Ok(Async::Ready(())),
-                    Operation::OpenLink(id, spawner) => self.open_link(id, spawner),
-                    Operation::CloseLink(id) => self.close_link(id),
                     Operation::ExternalMessage(target, id, msg) => {
                         self.handle_external_msg(target, id, msg)
                     }
+                    _ => unimplemented!(),
                 },
+            }
+
+            while let Some(op) = self.inner_ops.pop_back() {
+                match op {
+                    InnerOp::OpenLink(id, spawner) => self.open_link(id, spawner),
+                    InnerOp::Close() => return Ok(Async::Ready(())),
+                    InnerOp::CloseLink(id) => self.close_link(id),
+                }
             }
         }
     }
+}
+
+
+pub enum InnerOp<K, M> {
+    OpenLink(ReactorID, LinkSpawner<K, M>),
+    CloseLink(ReactorID),
+    Close(),
 }
 
 ///
@@ -155,7 +173,7 @@ where
 pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,
     id: &'a ReactorID,
-    // broker: &'a mut BrokerHandle<K, M>,
+    inner_ops: &'a mut VecDeque<InnerOp<K, M>>,
 }
 
 impl<'a, K, M> ReactorHandle<'a, K, M>
@@ -167,21 +185,20 @@ where
     where
         L: Into<LinkSpawner<K, M>>,
     {
-        // TODO: This should be handled immediately, not send through an mpsc ..
-        self.chan
-            .unbounded_send(Operation::OpenLink(target, spawner.into()))
-            .expect("Fuck me");
+        self.inner_ops.push_back(
+            InnerOp::OpenLink(target, spawner.into())
+        );
     }
 
     pub fn close(&mut self) {
-        self.chan
-            .unbounded_send(Operation::Close())
-            .expect("Couldn't close");
+        self.inner_ops.push_back(
+            InnerOp::Close(),
+        );
     }
 
     pub fn spawn<S: 'static + Send>(&mut self, _params: CoreParams<S, K, M>) -> ReactorID {
+        unimplemented!();
         // self.broker.spawn(params)
-        0.into()
     }
 
     pub fn id(&mut self) -> &'a ReactorID {
