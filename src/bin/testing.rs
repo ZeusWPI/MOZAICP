@@ -58,8 +58,8 @@ fn main() {
 
     tokio::run(
         futures::lazy(move || {
-            broker.spawn(p1, Some(1.into()));
             broker.spawn(p2, Some(0.into()));
+            broker.spawn(p1, Some(1.into()));
 
             Ok(())
         }

@@ -50,23 +50,18 @@ where
         id: ReactorID,
         broker: BrokerHandle<K, M>,
         params: CoreParams<S, K, M>,
-    ) -> (Self, Sender<K, M>) {
-        let (tx, rx) = mpsc::unbounded();
+        (tx, rx): (Sender<K, M>, Receiver<K, M>),
+    ) -> Self {
 
-        let sender = tx.clone();
-
-        (
-            Reactor {
-                id,
-                broker,
-                state: params.state,
-                msg_handlers: params.handlers,
-                links: HashMap::new(),
-                tx,
-                rx,
-            },
-            sender,
-        )
+        Reactor {
+            id,
+            broker,
+            state: params.state,
+            msg_handlers: params.handlers,
+            links: HashMap::new(),
+            tx,
+            rx,
+        }
     }
 
     pub fn get_handle<'a>(&'a self) -> ReactorHandle<'a, K, M> {
@@ -103,12 +98,9 @@ where
 
     fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>) {
         println!("Opening link");
-        if let Some(tx) = self.broker.get(&target) {
-            let handles = (self.tx.clone(), tx, target);
-            self.links.insert(target, spawner(handles));
-        } else {
-            eprintln!("No such reactor");
-        }
+        let tx = self.broker.get(&target);
+        let handles = (self.tx.clone(), tx, target);
+        self.links.insert(target, spawner(handles));
     }
 
     fn close_link(&mut self, target: ReactorID) {

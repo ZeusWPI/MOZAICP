@@ -54,12 +54,13 @@ pub trait Handler<S, H, M> {
 
 /// (SourceHandle, TargetHandle)
 type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID);
+
 pub type LinkSpawner<K, M> = Box<
-    dyn FnOnce(
-            Handles<K, M>,
-        ) -> Box<
-            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send,
-        > + Send,
+dyn FnOnce(
+    Handles<K, M>,
+) -> Box<
+dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send,
+> + Send,
 >;
 
 pub enum LinkOperation<'a, K, M> {
@@ -80,13 +81,17 @@ pub enum Operation<K, M> {
 }
 
 // ANCHOR Broker
+enum ReactorChannel<K, M> {
+    Connected(Sender<K, M>),
+    ToConnect(Sender<K, M>, Receiver<K, M>),
+}
 ///
 /// A broker is nothing more then a map ReactorID -> ReactorChannel
 /// So you can open links with just knowing a ReactorID
 /// And spawn Reactors etc
 ///
 struct Broker<K, M> {
-    reactors: HashMap<ReactorID, Sender<K, M>>,
+    reactors: HashMap<ReactorID, ReactorChannel<K, M>>,
 }
 
 ///
@@ -120,8 +125,36 @@ impl<K, M> BrokerHandle<K, M> {
         broker.reactors.remove(&params);
     }
 
-    fn get(&self, id: &ReactorID) -> Option<Sender<K, M>> {
-        self.broker.lock().unwrap().reactors.get(id).cloned()
+    fn get(&self, id: &ReactorID) -> Sender<K, M> {
+        let mut broker = self.broker.lock().unwrap();
+        if let Some(item) = broker.reactors.get(id) {
+            match item {
+                ReactorChannel::Connected(sender) => sender.clone(),
+                ReactorChannel::ToConnect(sender, _) => sender.clone(),
+            }
+        } else {
+            let (tx, rx) = mpsc::unbounded();
+            broker.reactors.insert(id.clone(), ReactorChannel::ToConnect(tx.clone(), rx));
+            tx
+        }
+    }
+
+    fn connect(&self, id: ReactorID) -> Option<(Sender<K, M>, Receiver<K, M>)> {
+        let mut broker = self.broker.lock().unwrap();
+
+        let (channel, receiver) = if let Some(item) = broker.reactors.remove(&id) {
+            match item {
+                ReactorChannel::Connected(sender) => (ReactorChannel::Connected(sender), None),
+                ReactorChannel::ToConnect(sender, receiver) => (ReactorChannel::Connected(sender.clone()), Some((sender, receiver))),
+            }
+        } else {
+            let (tx, rx) = mpsc::unbounded();
+            (ReactorChannel::Connected(tx.clone()), Some((tx, rx)))
+        };
+
+        broker.reactors.insert(id, channel);
+
+        receiver
     }
 }
 
@@ -133,14 +166,8 @@ where
     pub fn spawn<S: 'static + Send + ReactorState<K, M>>(&self, params: CoreParams<S, K, M>, id: Option<ReactorID>) -> ReactorID {
         let id = id.unwrap_or_else(|| rand::random::<u64>().into());
         println!("Spawning {:?}", id);
-        let (mut reactor, sender) = Reactor::new(id, self.clone(), params);
 
-        self.broker
-            .lock()
-            .unwrap()
-            .reactors
-            .insert(id.clone(), sender);
-
+        let mut reactor = Reactor::new(id, self.clone(), params, self.connect(id).expect("Already connected"));
 
         reactor.init();
         tokio::spawn(reactor);
