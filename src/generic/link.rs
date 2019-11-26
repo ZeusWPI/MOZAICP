@@ -97,20 +97,22 @@ where
         }
     }
 
-    pub fn internal_handler(
-        &mut self,
-        id: K,
-        handler: Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>,
-    ) {
-        self.internal_handlers.insert(id, handler);
+    pub fn internal_handler<H, J>(&mut self, handler: H)
+    where
+        H: Into<(K, J)>,
+        J: for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send + 'static,
+    {
+        let (id, handler) = handler.into();
+        self.internal_handlers.insert(id, Box::new(handler));
     }
 
-    pub fn external_handler(
-        &mut self,
-        id: K,
-        handler: Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>,
-    ) {
-        self.external_handlers.insert(id, handler);
+    pub fn external_handler<H, J>(&mut self, handler: H)
+    where
+        H: Into<(K, J)>,
+        J: for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send + 'static,
+    {
+        let (id, handler) = handler.into();
+        self.external_handlers.insert(id, Box::new(handler));
     }
 }
 

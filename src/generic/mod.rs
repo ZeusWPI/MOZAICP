@@ -171,47 +171,28 @@ where
     R: 'static + Send,
     T: 'static + Send,
 {
-    pub fn from(function: F) -> Box<Self> {
-        Box::new(Self {
+    pub fn from(function: F) -> Self {
+        Self {
             phantom: PhantomData,
             function,
-        })
+        }
     }
 }
 
-// impl<F, S, T> From<FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>> for (any::TypeId, Box<dyn Handler<S, ReactorHandle<'_, any::TypeId, Message>, Message> + Send>)
-// where
-// F: 'static + Send + Fn(&mut S, &mut ReactorHandle<'_, any::TypeId, Message>, &T) -> (),
-// S: 'static + Send,
-// T: 'static + Send,
-// {
-//     fn from(other: FunctionHandler<F, S, ReactorHandle<'_, any::TypeId, Message>, T>) -> Self {
-//         let id = any::TypeId::of::<T>();
-//         (id, Box::new(other))
-//     }
-// }
-
-// impl<F, S, H, T>
-//     Into<(
-//         any::TypeId,
-//         Box<(dyn Handler<S, H, Message> + Send + 'static)>,
-//     )> for FunctionHandler<F, S, H, T>
-// where
-//     F: 'static + Send + Fn(&mut S, &mut H, &T) -> (),
-//     S: 'static + Send,
-//     H: 'static + Send,
-//     T: 'static + Send,
-// {
-//     fn into(
-//         self,
-//     ) -> (
-//         any::TypeId,
-//         Box<(dyn for<'a> Handler<S, H, Message> + Send + 'static)>,
-//     ) {
-//         let id = any::TypeId::of::<T>();
-//         (id, Box::new(self))
-//     }
-// }
+impl<F, S, R, T> Into<(any::TypeId, Self)> for FunctionHandler<F, S, R, T>
+where
+    F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
+    S: 'static + Send,
+    R: 'static + Send,
+    T: 'static + Send,
+{
+    fn into(self) -> (any::TypeId, Self) {
+        (
+            any::TypeId::of::<T>(),
+            self
+        )
+    }
+}
 
 //
 // Somewhere I want to make Message generic, but that wouldn't be useful
@@ -268,25 +249,3 @@ where
             .expect("No message found at pointer location");
     }
 }
-
-
-// impl<F, S, H, T> Handler<S, H, Message>
-//     for FunctionHandler<F, S, H, T>
-// where
-//     F: 'static + Send + for<'a> Fn(&mut S, &mut H, &T) -> (),
-//     S: 'static + Send,
-//     T: 'static + Send,
-//     H: 'static + Send,
-// {
-//     fn handle(
-//         &mut self,
-//         state: &mut S,
-//         handle: &mut H,
-//         message: &mut Message,
-//     ) {
-//         message
-//             .borrow()
-//             .map(|item| (self.function)(state, handle, item))
-//             .expect("No message found at pointer location");
-//     }
-// }

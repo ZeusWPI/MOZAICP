@@ -17,8 +17,8 @@ struct Foo {
 impl Foo {
     fn params() -> LinkParams<Foo, any::TypeId, Message> {
         let mut params = LinkParams::new(Foo { bar: 5 });
-        params.internal_handler(any::TypeId::of::<E>(), FunctionHandler::from(Self::test_bar));
-        params.external_handler(any::TypeId::of::<E>(), FunctionHandler::from(Self::test_bar));
+        params.internal_handler(FunctionHandler::from(Self::test_bar));
+        params.external_handler(FunctionHandler::from(Self::test_bar));
 
         params
     }
@@ -50,7 +50,7 @@ impl ReactorState<any::TypeId, Message> for Foo {
 
 fn main() {
     let mut p1 = generic::CoreParams::new(Foo { bar: 0 });
-    p1.handler(any::TypeId::of::<()>(), FunctionHandler::from(inner));
+    p1.handler(FunctionHandler::from(inner));
 
     let broker = BrokerHandle::new();
 

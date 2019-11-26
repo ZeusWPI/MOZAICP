@@ -93,7 +93,6 @@ where
         println!("Handling external message");
         let mut handle = reactorHandle!(self);
 
-
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
 
         self.links
@@ -124,7 +123,6 @@ where
 {
     pub fn init(&mut self) {
         let mut handle = reactorHandle!(self);
-
 
         self.state.init(&mut handle);
     }
@@ -233,11 +231,12 @@ where
         }
     }
 
-    pub fn handler(
-        &mut self,
-        id: K,
-        handler: Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>,
-    ) {
-        self.handlers.insert(id, handler);
+    pub fn handler<H, J>(&mut self, handler: H)
+    where
+        H: Into<(K, J)>,
+        J: for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send + 'static,
+    {
+        let (id, handler) = handler.into();
+        self.handlers.insert(id, Box::new(handler));
     }
 }
