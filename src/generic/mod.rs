@@ -37,22 +37,8 @@ pub trait Handler<S, H, M> {
     fn handle(&mut self, s: &mut S, h: &mut H, m: &mut M);
 }
 
-// ///
-// /// Context bundles a state and a handle
-// /// That handle is usually used to send new messages
-// ///
-// pub struct Context<'a, S, C> {
-//     state: &'a mut S,
-//     handle: &'a mut C,
-// }
-
-// impl<'a, S, C> Context<'a, S, C> {
-//     fn split(self) -> (&'a mut S, &'a mut C) {
-//         (self.state, self.handle)
-//     }
-// }
-
-/// (SourceHandle, TargetHandle)
+/// (SourceHandle, TargetHandle, SourceId, TargetID)
+/// This is used to not expose Operation
 type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID, ReactorID);
 
 pub type LinkSpawner<K, M> = Box<
@@ -81,10 +67,15 @@ pub enum Operation<K, M> {
 }
 
 // ANCHOR Broker
+///
+/// Reactor channel is a struct that represents a reactor,
+/// this reactor may not have spawned yet, see the ToConnect variant
+///
 enum ReactorChannel<K, M> {
     Connected(Sender<K, M>),
     ToConnect(Sender<K, M>, Receiver<K, M>),
 }
+
 ///
 /// A broker is nothing more then a map ReactorID -> ReactorChannel
 /// So you can open links with just knowing a ReactorID
@@ -110,6 +101,7 @@ impl<K, M> Clone for BrokerHandle<K, M> {
 }
 
 impl<K, M> BrokerHandle<K, M> {
+    /// Creates a new broker
     pub fn new() -> BrokerHandle<K, M> {
         let broker = Broker {
             reactors: HashMap::new(),
@@ -120,11 +112,14 @@ impl<K, M> BrokerHandle<K, M> {
         }
     }
 
+    /// Removes a perticular reactor
     pub fn remove(&self, params: &ReactorID) {
         let mut broker = self.broker.lock().unwrap();
         broker.reactors.remove(&params);
     }
 
+    /// Returns a channel to send messages to a reactor,
+    /// this reactor may not be spawned yet
     fn get(&self, id: &ReactorID) -> Sender<K, M> {
         let mut broker = self.broker.lock().unwrap();
         if let Some(item) = broker.reactors.get(id) {
@@ -141,6 +136,8 @@ impl<K, M> BrokerHandle<K, M> {
         }
     }
 
+    /// Tell the broker that this reactor is getting spawned,
+    /// giving up ownership of the receiver side of the message channel
     fn connect(&self, id: ReactorID) -> Option<(Sender<K, M>, Receiver<K, M>)> {
         let mut broker = self.broker.lock().unwrap();
 
@@ -168,6 +165,7 @@ where
     K: 'static + Eq + Hash + Send,
     M: 'static + Send,
 {
+    /// Spawns a perticular reactor
     pub fn spawn<S: 'static + Send + ReactorState<K, M>>(
         &self,
         params: CoreParams<S, K, M>,
@@ -232,20 +230,17 @@ where
     }
 }
 
-//
-// Somewhere I want to make Message generic, but that wouldn't be useful
-// You would need a TryBorrow trait to go from &'a mut M -> Option<&'a T>
-// But to implement this trait you would need to be able to do that for every T
-// Which only can with this Message type, or equivalents
-//
-// pub trait TryBorrow {
-//     fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T>;
-// }
-//
-// And I don't know if you give this trait a trait to only try to be applied to special T's
-// Like a T: FromPointerReader in capnproto's case
-//
-
+///
+/// This is just stupid, you shouldn't have to implement Handler for ReactorHandle and LinkHandle
+/// but this for<'b> is fucking the compiler up.
+///
+/// As long as no fix is found, this will have to do
+/// It is just stupid for every M type, here Message you would have to implement it twice
+/// though it is the same implementation
+///
+/// For clarification, this implementation goes from a generic Message
+/// to a specific T that is expected for F
+///
 impl<'a, K, F, S, T> Handler<S, ReactorHandle<'a, K, Message>, Message>
     for FunctionHandler<F, S, ReactorHandle<'_, K, Message>, T>
 where

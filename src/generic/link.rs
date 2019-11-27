@@ -1,6 +1,8 @@
 use super::*;
 use std::hash::Hash;
 
+/// Macro to create link handles
+/// This does not borrow the entire Link like a function would
 macro_rules! linkHandle {
     ($e:expr) => {
         LinkHandle {
@@ -9,6 +11,7 @@ macro_rules! linkHandle {
     };
 }
 
+/// Package channels and id's neatly together
 struct LinkState<K, M> {
     source: Sender<K, M>,
     target: Sender<K, M>,
@@ -17,6 +20,8 @@ struct LinkState<K, M> {
 }
 
 // ANCHOR Link
+/// A link pair links 2 reactors together
+/// Which enables them to communicate with messages
 pub struct Link<S, K, M> {
     state: S,
 
@@ -37,6 +42,8 @@ impl<S, K, M> Link<S, K, M> {
     }
 }
 
+/// Handle to manipulate a link
+/// Being able so send new messages and close the link
 #[derive(Clone)]
 pub struct LinkHandle<'a, K, M> {
     state: &'a LinkState<K, M>,
@@ -50,8 +57,18 @@ impl<'a> LinkHandle<'a, any::TypeId, Message> {
             .unbounded_send(Operation::ExternalMessage(self.state.source_id.clone(), id, msg))
             .expect("Link handle crashed");
     }
+
+    pub fn send_internal<T: 'static>(&mut self, _msg: T) {
+        unimplemented!();
+    }
+
+    pub fn close_link<T: 'static>(&mut self) {
+        unimplemented!();
+    }
 }
 
+/// A link is a handler without a real state that handles LinkOperations
+/// These link operations are incomming messages
 impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
     for Link<S, K, M>
 where
@@ -79,6 +96,7 @@ where
 }
 
 // ANCHOR Params
+/// Builder pattern for constructing links
 pub struct LinkParams<S, K, M> {
     state: S,
     internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
@@ -116,6 +134,7 @@ where
     }
 }
 
+/// It is useful to be able to spawn a link when you have the bundled channels and ids
 impl<S, K, M> Into<LinkSpawner<K, M>> for LinkParams<S, K, M>
 where
     S: 'static + Send,

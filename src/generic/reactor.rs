@@ -3,21 +3,25 @@ use std::hash::Hash;
 
 use super::*;
 
+/// Gives the option for an init function on a reactor
+pub trait ReactorState<K, M> {
+    fn init<'a>(&mut self, &mut ReactorHandle<'a, K, M>) {}
+}
+
+/// Blanket implementation for ()
+impl<K, M> ReactorState<K, M> for () {}
+
+/// Macro to create reactor handle
+/// This does not borrow the entire Reactor like a function would
 macro_rules! reactorHandle {
     ($e:expr) => {
         ReactorHandle {
-            chan: &$e.tx,
+            chan: &$e.channels.0,
             id: &$e.id,
             inner_ops: &mut $e.inner_ops,
         };
     };
 }
-
-pub trait ReactorState<K, M> {
-    fn init<'a>(&mut self, &mut ReactorHandle<'a, K, M>) {}
-}
-
-impl<K, M> ReactorState<K, M> for () {}
 
 ///
 /// Reactor is the meat and the potatoes of MOZAIC
@@ -39,8 +43,7 @@ where
         Box<dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send>,
     >,
 
-    tx: Sender<K, M>,
-    rx: Receiver<K, M>,
+    channels: (Sender<K, M>, Receiver<K, M>),
 
     inner_ops: VecDeque<InnerOp<K, M>>,
 }
@@ -49,29 +52,34 @@ impl<S, K, M> Reactor<S, K, M>
 where
     K: Hash + Eq,
 {
+    /// Pretty ugly function to create a reactor
+    /// TODO: Make less of an eye sore
     pub fn new(
         id: ReactorID,
         broker: BrokerHandle<K, M>,
         params: CoreParams<S, K, M>,
-        (tx, rx): (Sender<K, M>, Receiver<K, M>),
+        channels: (Sender<K, M>, Receiver<K, M>),
     ) -> Self {
-
         Reactor {
             id,
             broker,
             state: params.state,
             msg_handlers: params.handlers,
             links: HashMap::new(),
-            tx,
-            rx,
+            channels,
             inner_ops: VecDeque::new(),
         }
     }
 
+    /// Returns a handle to the reactor
     pub fn get_handle<'a>(&'a mut self) -> ReactorHandle<'a, K, M> {
         reactorHandle!(self)
     }
 
+    /// Handles an internal message
+    ///
+    /// First looking up his own internal message handler for that message
+    /// Then letting all links handle that message
     fn handle_internal_msg(&mut self, id: K, mut msg: M) {
         let mut handle = reactorHandle!(self);
 
@@ -87,23 +95,30 @@ where
         }
     }
 
-    fn handle_external_msg(&mut self, target: ReactorID, id: K, mut msg: M) {
+    /// Handles an external message
+    ///
+    /// This message is sent by a link to this reactor
+    /// Look up the corresponding link and letting him/her handle the message
+    fn handle_external_msg(&mut self, origin: ReactorID, id: K, mut msg: M) {
         let mut handle = reactorHandle!(self);
 
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
 
         self.links
-            .get_mut(&target)
+            .get_mut(&origin)
             .map(|h| h.handle(&mut (), &mut handle, &mut m))
             .expect("No link found to that reactor");
     }
 
+    /// Opens a link to the target reactor
+    /// You can only have a most one link to a reactor
     fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>) {
         let tx = self.broker.get(&target);
-        let handles = (self.tx.clone(), tx, self.id, target);
+        let handles = (self.channels.0.clone(), tx, self.id, target);
         self.links.insert(target, spawner(handles));
     }
 
+    /// Closes a link to the target reactor
     fn close_link(&mut self, target: ReactorID) {
         self.links.remove(&target);
     }
@@ -114,6 +129,7 @@ where
     K: Hash + Eq,
     S: ReactorState<K, M>,
 {
+    /// Initializes the spawned reactor
     pub fn init(&mut self) {
         let mut handle = reactorHandle!(self);
 
@@ -138,9 +154,11 @@ where
     type Item = ();
     type Error = ();
 
+    /// Handles on message at a time, clearing the inner ops queue every time
+    /// This opens/closes links and has to be up to date at all times
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match try_ready!(self.rx.poll()) {
+            match try_ready!(self.channels.1.poll()) {
                 None => return Ok(Async::Ready(())),
                 Some(item) => match item {
                     Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),
@@ -162,17 +180,14 @@ where
     }
 }
 
-
+/// Inner op for reactors
 pub enum InnerOp<K, M> {
     OpenLink(ReactorID, LinkSpawner<K, M>),
     CloseLink(ReactorID),
     Close(),
 }
 
-///
-/// ReactorHandle wraps a channel to send operations to the reactor
-///
-
+/// Handle to the reactor, managing operation and messages
 pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,
     id: &'a ReactorID,
@@ -188,15 +203,12 @@ where
     where
         L: Into<LinkSpawner<K, M>>,
     {
-        self.inner_ops.push_back(
-            InnerOp::OpenLink(target, spawner.into())
-        );
+        self.inner_ops
+            .push_back(InnerOp::OpenLink(target, spawner.into()));
     }
 
     pub fn close(&mut self) {
-        self.inner_ops.push_back(
-            InnerOp::Close(),
-        );
+        self.inner_ops.push_back(InnerOp::Close());
     }
 
     pub fn spawn<S: 'static + Send>(&mut self, _params: CoreParams<S, K, M>) -> ReactorID {
@@ -210,11 +222,11 @@ where
 }
 
 // ANCHOR Implementation with any::TypeId
-/// To use MOZAIC a few things
-/// Everything your handlers use, so the Context and how to get from M to T
-/// This is already implemented for every T, with the use of Rusts TypeIds
-/// But you may want to implement this again, with for example Capnproto messages
-/// so you can send messages over the internet
+/// Generic implementation of reactor handle, this one is able to handle every T
+/// Making it generic by forming a Message and sending it through
+///
+/// You would want to implement this again with Capnproto messages
+/// to be able to send them over the internet
 impl<'a> ReactorHandle<'a, any::TypeId, Message> {
     pub fn send_internal<T: 'static>(&mut self, msg: T) {
         let id = any::TypeId::of::<T>();
@@ -226,6 +238,7 @@ impl<'a> ReactorHandle<'a, any::TypeId, Message> {
 }
 
 // ANCHOR Params
+/// Builder pattern for constructing reactors
 pub struct CoreParams<S, K, M> {
     state: S,
     handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>>,
