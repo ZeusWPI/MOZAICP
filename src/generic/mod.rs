@@ -53,14 +53,14 @@ pub trait Handler<S, H, M> {
 // }
 
 /// (SourceHandle, TargetHandle)
-type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID);
+type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID, ReactorID);
 
 pub type LinkSpawner<K, M> = Box<
-dyn FnOnce(
-    Handles<K, M>,
-) -> Box<
-dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send,
-> + Send,
+    dyn FnOnce(
+            Handles<K, M>,
+        ) -> Box<
+            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send,
+        > + Send,
 >;
 
 pub enum LinkOperation<'a, K, M> {
@@ -134,7 +134,9 @@ impl<K, M> BrokerHandle<K, M> {
             }
         } else {
             let (tx, rx) = mpsc::unbounded();
-            broker.reactors.insert(id.clone(), ReactorChannel::ToConnect(tx.clone(), rx));
+            broker
+                .reactors
+                .insert(id.clone(), ReactorChannel::ToConnect(tx.clone(), rx));
             tx
         }
     }
@@ -145,7 +147,10 @@ impl<K, M> BrokerHandle<K, M> {
         let (channel, receiver) = if let Some(item) = broker.reactors.remove(&id) {
             match item {
                 ReactorChannel::Connected(sender) => (ReactorChannel::Connected(sender), None),
-                ReactorChannel::ToConnect(sender, receiver) => (ReactorChannel::Connected(sender.clone()), Some((sender, receiver))),
+                ReactorChannel::ToConnect(sender, receiver) => (
+                    ReactorChannel::Connected(sender.clone()),
+                    Some((sender, receiver)),
+                ),
             }
         } else {
             let (tx, rx) = mpsc::unbounded();
@@ -163,11 +168,19 @@ where
     K: 'static + Eq + Hash + Send,
     M: 'static + Send,
 {
-    pub fn spawn<S: 'static + Send + ReactorState<K, M>>(&self, params: CoreParams<S, K, M>, id: Option<ReactorID>) -> ReactorID {
+    pub fn spawn<S: 'static + Send + ReactorState<K, M>>(
+        &self,
+        params: CoreParams<S, K, M>,
+        id: Option<ReactorID>,
+    ) -> ReactorID {
         let id = id.unwrap_or_else(|| rand::random::<u64>().into());
-        println!("Spawning {:?}", id);
 
-        let mut reactor = Reactor::new(id, self.clone(), params, self.connect(id).expect("Already connected"));
+        let mut reactor = Reactor::new(
+            id,
+            self.clone(),
+            params,
+            self.connect(id).expect("Already connected"),
+        );
 
         reactor.init();
 
@@ -215,10 +228,7 @@ where
     T: 'static + Send,
 {
     fn into(self) -> (any::TypeId, Self) {
-        (
-            any::TypeId::of::<T>(),
-            self
-        )
+        (any::TypeId::of::<T>(), self)
     }
 }
 

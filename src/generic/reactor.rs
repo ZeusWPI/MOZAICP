@@ -73,8 +73,6 @@ where
     }
 
     fn handle_internal_msg(&mut self, id: K, mut msg: M) {
-        println!("Handling internal message");
-
         let mut handle = reactorHandle!(self);
 
         if let Some(h) = self.msg_handlers.get_mut(&id) {
@@ -83,14 +81,13 @@ where
 
         let mut m = LinkOperation::InternalMessage(&id, &mut msg);
         let mut state = ();
+
         for (_, link) in self.links.iter_mut() {
-            println!("Handling internal message for link");
             link.handle(&mut state, &mut handle, &mut m);
         }
     }
 
     fn handle_external_msg(&mut self, target: ReactorID, id: K, mut msg: M) {
-        println!("Handling external message");
         let mut handle = reactorHandle!(self);
 
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
@@ -98,13 +95,12 @@ where
         self.links
             .get_mut(&target)
             .map(|h| h.handle(&mut (), &mut handle, &mut m))
-            .expect("AAAAAAAAAAHHHHHHHHHHHH");
+            .expect("No link found to that reactor");
     }
 
     fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>) {
-        println!("Opening link");
         let tx = self.broker.get(&target);
-        let handles = (self.tx.clone(), tx, target);
+        let handles = (self.tx.clone(), tx, self.id, target);
         self.links.insert(target, spawner(handles));
     }
 
@@ -122,6 +118,14 @@ where
         let mut handle = reactorHandle!(self);
 
         self.state.init(&mut handle);
+
+        while let Some(op) = self.inner_ops.pop_back() {
+            match op {
+                InnerOp::OpenLink(id, spawner) => self.open_link(id, spawner),
+                InnerOp::Close() => unimplemented!(),
+                InnerOp::CloseLink(id) => self.close_link(id),
+            }
+        }
     }
 }
 
@@ -150,7 +154,7 @@ where
             while let Some(op) = self.inner_ops.pop_back() {
                 match op {
                     InnerOp::OpenLink(id, spawner) => self.open_link(id, spawner),
-                    InnerOp::Close() => return Ok(Async::Ready(())),
+                    InnerOp::Close() => unimplemented!(),
                     InnerOp::CloseLink(id) => self.close_link(id),
                 }
             }
@@ -168,7 +172,6 @@ pub enum InnerOp<K, M> {
 ///
 /// ReactorHandle wraps a channel to send operations to the reactor
 ///
-// TODO: Only references please, this is shitty
 
 pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,

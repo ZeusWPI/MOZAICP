@@ -12,6 +12,7 @@ macro_rules! linkHandle {
 struct LinkState<K, M> {
     source: Sender<K, M>,
     target: Sender<K, M>,
+    source_id: ReactorID,
     target_id: ReactorID,
 }
 
@@ -43,12 +44,11 @@ pub struct LinkHandle<'a, K, M> {
 
 impl<'a> LinkHandle<'a, any::TypeId, Message> {
     pub fn send_message<T: 'static>(&mut self, msg: T) {
-        println!("Sending message 2");
         let id = any::TypeId::of::<T>();
         let msg = Message::from(msg);
         self.state.target
-            .unbounded_send(Operation::ExternalMessage(self.state.target_id.clone(), id, msg))
-            .expect("Crashed");
+            .unbounded_send(Operation::ExternalMessage(self.state.source_id.clone(), id, msg))
+            .expect("Link handle crashed");
     }
 }
 
@@ -123,10 +123,11 @@ where
     K: 'static + Eq + Hash + Send,
 {
     fn into(self) -> LinkSpawner<K, M> {
-        Box::new(move |(source, target, target_id)| {
+        Box::new(move |(source, target, source_id, target_id)| {
             let handles = LinkState {
                 source,
                 target,
+                source_id,
                 target_id,
             };
 
