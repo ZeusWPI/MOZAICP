@@ -58,8 +58,12 @@ impl<'a> LinkHandle<'a, any::TypeId, Message> {
             .expect("Link handle crashed");
     }
 
-    pub fn send_internal<T: 'static>(&mut self, _msg: T) {
-        unimplemented!();
+    pub fn send_internal<T: 'static>(&mut self, msg: T) {
+        let id = any::TypeId::of::<T>();
+        let msg = Message::from(msg);
+        self.state.source
+            .unbounded_send(Operation::InternalMessage(id, msg))
+            .expect("Link handle crashed");
     }
 
     pub fn close_link<T: 'static>(&mut self) {
