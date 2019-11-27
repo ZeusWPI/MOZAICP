@@ -31,21 +31,24 @@ impl FooReactor {
         let id = handle.id().clone();
 
         if id == 0.into() {
-            handle.open_link(FooLink::params(1.into(), self.0))?;
-            let joined = MsgBuffer::<identify::Owned>::new();
+            handle.open_link(FooLink::params(1.into()))?;
+            let mut joined = MsgBuffer::<identify::Owned>::new();
+            joined.build(|b| {
+                b.set_key(self.0);
+            });
             handle.send_internal(joined)?;
         } else {
-            handle.open_link(FooLink::params(0.into(), self.0  + 1))?;
+            handle.open_link(FooLink::params(0.into()))?;
         }
 
         return Ok(());
     }
 }
 
-struct FooLink(u64);
+struct FooLink();
 impl FooLink {
-    fn params<C: Ctx>(foreign_id: ReactorId, size: u64) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(foreign_id, FooLink(size));
+    fn params<C: Ctx>(foreign_id: ReactorId) -> LinkParams<Self, C> {
+        let mut params = LinkParams::new(foreign_id, FooLink());
 
         params.external_handler(identify::Owned, CtxHandler::new(Self::handle_message));
 
@@ -57,12 +60,15 @@ impl FooLink {
     fn handle_message<C: Ctx>(
         &mut self,
         handle: &mut LinkHandle<C>,
-        _: identify::Reader,
+        e: identify::Reader,
     ) -> Result<()> {
-        self.0 -= 1;
+        let e = e.get_key() - 1;
 
-        if self.0 > 0 {
-            let joined = MsgBuffer::<identify::Owned>::new();
+        if e > 0 {
+            let mut joined = MsgBuffer::<identify::Owned>::new();
+            joined.build(|b| {
+                b.set_key(e);
+            });
             handle.send_message(joined)?;
         } else {
             println!("Done");

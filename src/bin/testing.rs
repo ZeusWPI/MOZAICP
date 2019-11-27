@@ -2,14 +2,14 @@ extern crate futures;
 extern crate mozaic;
 extern crate tokio;
 
-use std::process;
 use std::any;
 use std::env;
+use std::process;
 
 use mozaic::generic;
 use mozaic::generic::*;
 
-struct E;
+struct E(u64);
 
 struct FooReactor(u64);
 
@@ -24,18 +24,18 @@ impl ReactorState<any::TypeId, Message> for FooReactor {
         let id: u64 = **handle.id();
 
         if id == 0 {
-            handle.open_link(1.into(), FooLink::params(self.0));
-            handle.send_internal(E);
+            handle.open_link(1.into(), FooLink::params());
+            handle.send_internal(E(self.0));
         } else {
-            handle.open_link(0.into(), FooLink::params(self.0 + 1));
+            handle.open_link(0.into(), FooLink::params());
         }
     }
 }
 
-struct FooLink(u64);
+struct FooLink();
 impl FooLink {
-    fn params(size: u64) -> LinkParams<FooLink, any::TypeId, Message> {
-        let mut params = LinkParams::new(FooLink(size));
+    fn params() -> LinkParams<FooLink, any::TypeId, Message> {
+        let mut params = LinkParams::new(FooLink());
 
         params.internal_handler(FunctionHandler::from(Self::handle_message));
         params.external_handler(FunctionHandler::from(Self::handle_message));
@@ -43,11 +43,11 @@ impl FooLink {
         return params;
     }
 
-    fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, _: &E) {
-        self.0 -= 1;
+    fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &E) {
+        let e = e.0 - 1;
 
-        if self.0 > 0 {
-            handle.send_message(E);
+        if e > 0 {
+            handle.send_message(E(e));
         } else {
             println!("Done");
             process::exit(0);
@@ -57,7 +57,10 @@ impl FooLink {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let amount = args.get(1).and_then(|x| x.parse::<u64>().ok()).unwrap_or(10);
+    let amount = args
+        .get(1)
+        .and_then(|x| x.parse::<u64>().ok())
+        .unwrap_or(10);
 
     let broker = BrokerHandle::new();
     let p1 = FooReactor::params(amount);
