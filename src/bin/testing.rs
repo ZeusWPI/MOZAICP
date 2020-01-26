@@ -2,7 +2,6 @@ extern crate futures;
 extern crate mozaic;
 extern crate tokio;
 
-use std::process;
 use std::any;
 use std::env;
 
@@ -24,10 +23,10 @@ impl ReactorState<any::TypeId, Message> for FooReactor {
         let id: u64 = **handle.id();
 
         if id == 0 {
-            handle.open_link(1.into(), FooLink::params(self.0));
+            handle.open_link(1.into(), FooLink::params(self.0), true);
             handle.send_internal(E);
         } else {
-            handle.open_link(0.into(), FooLink::params(self.0 + 1));
+            handle.open_link(0.into(), FooLink::params(self.0 + 1), true);
         }
     }
 }
@@ -49,8 +48,8 @@ impl FooLink {
         if self.0 > 0 {
             handle.send_message(E);
         } else {
-            println!("Done");
-            process::exit(0);
+            println!("Done {:?} -> {:?}", handle.source_id(), handle.target_id());
+            handle.close_link();
         }
     }
 }

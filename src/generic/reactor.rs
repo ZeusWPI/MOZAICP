@@ -40,7 +40,13 @@ where
 
     links: HashMap<
         ReactorID,
-        Box<dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send>,
+        (
+            Box<
+                dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
+                    + Send,
+            >,
+            bool,
+        ),
     >,
 
     channels: (Sender<K, M>, Receiver<K, M>),
@@ -91,7 +97,7 @@ where
         let mut state = ();
 
         for (_, link) in self.links.iter_mut() {
-            link.handle(&mut state, &mut handle, &mut m);
+            link.0.handle(&mut state, &mut handle, &mut m);
         }
     }
 
@@ -106,21 +112,43 @@ where
 
         self.links
             .get_mut(&origin)
-            .map(|h| h.handle(&mut (), &mut handle, &mut m))
+            .map(|h| h.0.handle(&mut (), &mut handle, &mut m))
             .expect("No link found to that reactor");
     }
 
     /// Opens a link to the target reactor
     /// You can only have a most one link to a reactor
-    fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>) {
+    fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>, cascade: bool) {
         let tx = self.broker.get(&target);
         let handles = (self.channels.0.clone(), tx, self.id, target);
-        self.links.insert(target, spawner(handles));
+        self.links.insert(target, (spawner(handles), cascade));
     }
 
     /// Closes a link to the target reactor
     fn close_link(&mut self, target: ReactorID) {
-        self.links.remove(&target);
+        let mut handle = reactorHandle!(self);
+
+        if let Some((mut link, cascade)) = self.links.remove(&target) {
+            link.handle(&mut (), &mut handle, &mut LinkOperation::Close());
+            if cascade {
+                self.inner_ops.push_back(InnerOp::Close());
+            }
+        }
+    }
+
+    fn close(&mut self) {
+        let mut handle = reactorHandle!(self);
+
+        // Send close message to all links
+        let mut m = LinkOperation::Close();
+        let mut state = ();
+
+        for (_, link) in self.links.iter_mut() {
+            link.0.handle(&mut state, &mut handle, &mut m);
+        }
+
+        // Stop Future
+        self.channels.1.close();
     }
 }
 
@@ -137,8 +165,8 @@ where
 
         while let Some(op) = self.inner_ops.pop_back() {
             match op {
-                InnerOp::OpenLink(id, spawner) => self.open_link(id, spawner),
-                InnerOp::Close() => unimplemented!(),
+                InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
+                InnerOp::Close() => self.close(),
                 InnerOp::CloseLink(id) => self.close_link(id),
             }
         }
@@ -162,17 +190,17 @@ where
                 None => return Ok(Async::Ready(())),
                 Some(item) => match item {
                     Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),
-                    Operation::ExternalMessage(target, id, msg) => {
-                        self.handle_external_msg(target, id, msg)
-                    }
+                    Operation::ExternalMessage(target, id, msg) => self.handle_external_msg(target, id, msg),
+                    Operation::CloseLink(id) => self.close_link(id),
+                    Operation::Close() => self.close(),
                     _ => unimplemented!(),
                 },
             }
 
             while let Some(op) = self.inner_ops.pop_back() {
                 match op {
-                    InnerOp::OpenLink(id, spawner) => self.open_link(id, spawner),
-                    InnerOp::Close() => unimplemented!(),
+                    InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
+                    InnerOp::Close() => self.close(),
                     InnerOp::CloseLink(id) => self.close_link(id),
                 }
             }
@@ -180,9 +208,18 @@ where
     }
 }
 
+impl<S, K, M> Drop for Reactor<S, K, M>
+where
+    K: Hash + Eq,
+{
+    fn drop(&mut self) {
+        println!("Dropping {:?}", self.id);
+    }
+}
+
 /// Inner op for reactors
 pub enum InnerOp<K, M> {
-    OpenLink(ReactorID, LinkSpawner<K, M>),
+    OpenLink(ReactorID, LinkSpawner<K, M>, bool),
     CloseLink(ReactorID),
     Close(),
 }
@@ -199,12 +236,12 @@ where
     K: 'static + Eq + Hash + Send,
     M: 'static + Send,
 {
-    pub fn open_link<L>(&mut self, target: ReactorID, spawner: L)
+    pub fn open_link<L>(&mut self, target: ReactorID, spawner: L, cascade: bool)
     where
         L: Into<LinkSpawner<K, M>>,
     {
         self.inner_ops
-            .push_back(InnerOp::OpenLink(target, spawner.into()));
+            .push_back(InnerOp::OpenLink(target, spawner.into(), cascade));
     }
 
     pub fn close(&mut self) {

@@ -38,5 +38,5 @@ Internal messages get handled as follows: first the reactor tries to find a corr
 
 External messages get handled as follows: the reactor reads that messages from his channel and looks for the corresponding link (this might fail). That links tries to handle that message with the correct handler (this might fail).
 
-Everything is dependant on what messages can be transported, being the M type parameter. This is made clear with the Broker I guess.
+Everything is dependent on what messages can be transported, being the M type parameter. This is made clear with the Broker I guess.
 A Broker only distributes the mpsc::Sender<M> for all reactors in that Broker.

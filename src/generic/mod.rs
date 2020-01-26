@@ -38,7 +38,7 @@ pub trait Handler<S, H, M> {
 }
 
 /// (SourceHandle, TargetHandle, SourceId, TargetID)
-/// This is used to not expose Operation
+/// This is used to not expose Operation, not really working though lol
 type Handles<K, M> = (Sender<K, M>, Sender<K, M>, ReactorID, ReactorID);
 
 pub type LinkSpawner<K, M> = Box<
@@ -52,6 +52,7 @@ pub type LinkSpawner<K, M> = Box<
 pub enum LinkOperation<'a, K, M> {
     InternalMessage(&'a K, &'a mut M),
     ExternalMessage(&'a K, &'a mut M),
+    Close(),
 }
 
 ///
@@ -68,7 +69,7 @@ pub enum Operation<K, M> {
 
 // ANCHOR Broker
 ///
-/// Reactor channel is a struct that represents a reactor,
+/// Reactor channel is an enum that represents a reactor,
 /// this reactor may not have spawned yet, see the ToConnect variant
 ///
 enum ReactorChannel<K, M> {
@@ -121,6 +122,7 @@ impl<K, M> BrokerHandle<K, M> {
     /// Returns a channel to send messages to a reactor,
     /// this reactor may not be spawned yet
     fn get(&self, id: &ReactorID) -> Sender<K, M> {
+
         let mut broker = self.broker.lock().unwrap();
         if let Some(item) = broker.reactors.get(id) {
             match item {
