@@ -14,9 +14,11 @@ pub use self::message::Message;
 mod link;
 mod reactor;
 mod types;
+mod translator;
 
 pub use self::link::{Link, LinkHandle, LinkParams};
 pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState};
+pub use self::translator::{Translator};
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
@@ -114,9 +116,9 @@ impl<K, M> BrokerHandle<K, M> {
     }
 
     /// Removes a perticular reactor
-    pub fn remove(&self, params: &ReactorID) {
+    pub fn remove(&self, id: &ReactorID) {
         let mut broker = self.broker.lock().unwrap();
-        broker.reactors.remove(&params);
+        broker.reactors.remove(&id);
     }
 
     /// Returns a channel to send messages to a reactor,

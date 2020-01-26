@@ -124,6 +124,19 @@ where
         self.links.insert(target, (spawner(handles), cascade));
     }
 
+    /// Opens a link like
+    /// This is useful for creative reactors, like timeout generators
+    fn open_link_like(
+        &mut self,
+        target: ReactorID,
+        spawner: LinkSpawner<K, M>,
+        cascade: bool,
+        tx: Sender<K, M>,
+    ) {
+        let handles = (self.channels.0.clone(), tx, self.id, target);
+        self.links.insert(target, (spawner(handles), cascade));
+    }
+
     /// Closes a link to the target reactor
     fn close_link(&mut self, target: ReactorID) {
         let mut handle = reactorHandle!(self);
@@ -166,6 +179,9 @@ where
         while let Some(op) = self.inner_ops.pop_back() {
             match op {
                 InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
+                InnerOp::OpenLinkLike(id, spawner, cascade, tx) => {
+                    self.open_link_like(id, spawner, cascade, tx)
+                }
                 InnerOp::Close() => self.close(),
                 InnerOp::CloseLink(id) => self.close_link(id),
             }
@@ -190,7 +206,9 @@ where
                 None => return Ok(Async::Ready(())),
                 Some(item) => match item {
                     Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),
-                    Operation::ExternalMessage(target, id, msg) => self.handle_external_msg(target, id, msg),
+                    Operation::ExternalMessage(target, id, msg) => {
+                        self.handle_external_msg(target, id, msg)
+                    }
                     Operation::CloseLink(id) => self.close_link(id),
                     Operation::Close() => self.close(),
                     _ => unimplemented!(),
@@ -200,6 +218,9 @@ where
             while let Some(op) = self.inner_ops.pop_back() {
                 match op {
                     InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
+                    InnerOp::OpenLinkLike(id, spawner, cascade, tx) => {
+                        self.open_link_like(id, spawner, cascade, tx)
+                    }
                     InnerOp::Close() => self.close(),
                     InnerOp::CloseLink(id) => self.close_link(id),
                 }
@@ -220,6 +241,7 @@ where
 /// Inner op for reactors
 pub enum InnerOp<K, M> {
     OpenLink(ReactorID, LinkSpawner<K, M>, bool),
+    OpenLinkLike(ReactorID, LinkSpawner<K, M>, bool, Sender<K, M>),
     CloseLink(ReactorID),
     Close(),
 }
@@ -242,6 +264,20 @@ where
     {
         self.inner_ops
             .push_back(InnerOp::OpenLink(target, spawner.into(), cascade));
+    }
+
+    // This cascade might be useless
+    pub fn open_link_like<L>(
+        &mut self,
+        target: ReactorID,
+        spawner: L,
+        cascade: bool,
+        tx: Sender<K, M>,
+    ) where
+        L: Into<LinkSpawner<K, M>>,
+    {
+        self.inner_ops
+            .push_back(InnerOp::OpenLinkLike(target, spawner.into(), cascade, tx));
     }
 
     pub fn close(&mut self) {
