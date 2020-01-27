@@ -113,10 +113,14 @@ where
                 }
             }
             LinkOperation::Close() => {
-                self.link_state
+                if let Result::Err(_) = self
+                    .link_state
                     .target
                     .unbounded_send(Operation::CloseLink(self.link_state.source_id))
-                    .expect("Link handle crashed");
+                {
+                    // The problem is this doesn't happen always
+                    println!("Cannot send close message, channel closed");
+                }
             }
         };
     }

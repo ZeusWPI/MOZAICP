@@ -4,7 +4,6 @@ extern crate tokio;
 
 use std::any;
 use std::env;
-use std::process;
 
 use mozaic::generic;
 use mozaic::generic::*;
@@ -24,10 +23,10 @@ impl ReactorState<any::TypeId, Message> for FooReactor {
         let id: u64 = **handle.id();
 
         if id == 0 {
-            handle.open_link(1.into(), FooLink::params(self.0), true);
-            handle.send_internal(E);
+            handle.open_link(1.into(), FooLink::params(), true);
+            handle.send_internal(E(self.0));
         } else {
-            handle.open_link(0.into(), FooLink::params(self.0 + 1), true);
+            handle.open_link(0.into(), FooLink::params(), true);
         }
     }
 }
