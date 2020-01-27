@@ -53,21 +53,38 @@ impl<'a> LinkHandle<'a, any::TypeId, Message> {
     pub fn send_message<T: 'static>(&mut self, msg: T) {
         let id = any::TypeId::of::<T>();
         let msg = Message::from(msg);
-        self.state.target
-            .unbounded_send(Operation::ExternalMessage(self.state.source_id.clone(), id, msg))
+        self.state
+            .target
+            .unbounded_send(Operation::ExternalMessage(
+                self.state.source_id.clone(),
+                id,
+                msg,
+            ))
             .expect("Link handle crashed");
     }
 
     pub fn send_internal<T: 'static>(&mut self, msg: T) {
         let id = any::TypeId::of::<T>();
         let msg = Message::from(msg);
-        self.state.source
+        self.state
+            .source
             .unbounded_send(Operation::InternalMessage(id, msg))
             .expect("Link handle crashed");
     }
 
-    pub fn close_link<T: 'static>(&mut self) {
-        unimplemented!();
+    pub fn close_link(&mut self) {
+        self.state
+            .source
+            .unbounded_send(Operation::CloseLink(self.state.target_id))
+            .expect("Link handle crashed");
+    }
+
+    pub fn target_id(&'a self) -> &'a ReactorID {
+        &self.state.target_id
+    }
+
+    pub fn source_id(&'a self) -> &'a ReactorID {
+        &self.state.source_id
     }
 }
 
@@ -94,6 +111,12 @@ where
                 if let Some(h) = self.external_handlers.get_mut(id) {
                     h.handle(&mut self.state, &mut linkHandle!(self), message);
                 }
+            }
+            LinkOperation::Close() => {
+                self.link_state
+                    .target
+                    .unbounded_send(Operation::CloseLink(self.link_state.source_id))
+                    .expect("Link handle crashed");
             }
         };
     }

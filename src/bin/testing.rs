@@ -24,10 +24,10 @@ impl ReactorState<any::TypeId, Message> for FooReactor {
         let id: u64 = **handle.id();
 
         if id == 0 {
-            handle.open_link(1.into(), FooLink::params());
-            handle.send_internal(E(self.0));
+            handle.open_link(1.into(), FooLink::params(self.0), true);
+            handle.send_internal(E);
         } else {
-            handle.open_link(0.into(), FooLink::params());
+            handle.open_link(0.into(), FooLink::params(self.0 + 1), true);
         }
     }
 }
@@ -49,8 +49,8 @@ impl FooLink {
         if e > 0 {
             handle.send_message(E(e));
         } else {
-            println!("Done");
-            process::exit(0);
+            println!("Done {:?} -> {:?}", handle.source_id(), handle.target_id());
+            handle.close_link();
         }
     }
 }
