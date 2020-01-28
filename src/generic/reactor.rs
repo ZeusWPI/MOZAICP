@@ -300,13 +300,16 @@ where
 ///
 /// You would want to implement this again with Capnproto messages
 /// to be able to send them over the internet
-impl<'a> ReactorHandle<'a, any::TypeId, Message> {
+impl<'a, K, M> ReactorHandle<'a, K, M>
+where
+    M: Transmutable<K>,
+{
     pub fn send_internal<T: 'static>(&mut self, msg: T) {
-        let id = any::TypeId::of::<T>();
-        let msg = Message::from(msg);
-        self.chan
-            .unbounded_send(Operation::InternalMessage(id, msg))
-            .expect("crashed");
+        if let Some((id, msg)) = M::transmute(msg) {
+            self.chan
+                .unbounded_send(Operation::InternalMessage(id, msg))
+                .expect("crashed");
+        }
     }
 }
 

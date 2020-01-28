@@ -13,12 +13,12 @@ mod message;
 pub use self::message::Message;
 mod link;
 mod reactor;
-mod types;
 mod translator;
+mod types;
 
 pub use self::link::{Link, LinkHandle, LinkParams};
 pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState};
-pub use self::translator::{Translator};
+pub use self::translator::Translator;
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
@@ -124,7 +124,6 @@ impl<K, M> BrokerHandle<K, M> {
     /// Returns a channel to send messages to a reactor,
     /// this reactor may not be spawned yet
     fn get(&self, id: &ReactorID) -> Sender<K, M> {
-
         let mut broker = self.broker.lock().unwrap();
         if let Some(item) = broker.reactors.get(id) {
             match item {
@@ -192,6 +191,17 @@ where
     }
 }
 
+pub trait Borrowable {
+    fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T>;
+}
+
+pub trait Transmutable<K>
+where
+    Self: Sized,
+{
+    fn transmute<T: 'static>(value: T) -> Option<(K, Self)>;
+}
+
 ///
 /// FunctionHandler<S, T, F, R> makes a Handler from a function
 /// For Messages that is
@@ -245,20 +255,16 @@ where
 /// For clarification, this implementation goes from a generic Message
 /// to a specific T that is expected for F
 ///
-impl<'a, K, F, S, T> Handler<S, ReactorHandle<'a, K, Message>, Message>
-    for FunctionHandler<F, S, ReactorHandle<'_, K, Message>, T>
+impl<'a, K, F, S, T, M> Handler<S, ReactorHandle<'a, K, M>, M>
+    for FunctionHandler<F, S, ReactorHandle<'_, K, M>, T>
 where
-    F: 'static + Send + for<'b> Fn(&mut S, &mut ReactorHandle<'b, K, Message>, &T) -> (),
+    F: 'static + Send + for<'b> Fn(&mut S, &mut ReactorHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
     T: 'static + Send,
     K: 'static + Send,
+    M: 'static + Send + Borrowable,
 {
-    fn handle<'b>(
-        &mut self,
-        state: &mut S,
-        handle: &mut ReactorHandle<'b, K, Message>,
-        message: &mut Message,
-    ) {
+    fn handle<'b>(&mut self, state: &mut S, handle: &mut ReactorHandle<'b, K, M>, message: &mut M) {
         message
             .borrow()
             .map(|item| (self.function)(state, handle, item))
@@ -266,20 +272,16 @@ where
     }
 }
 
-impl<'a, K, F, S, T> Handler<S, LinkHandle<'a, K, Message>, Message>
-    for FunctionHandler<F, S, LinkHandle<'_, K, Message>, T>
+impl<'a, K, F, S, T, M> Handler<S, LinkHandle<'a, K, M>, M>
+    for FunctionHandler<F, S, LinkHandle<'_, K, M>, T>
 where
-    F: 'static + Send + for<'b> Fn(&mut S, &mut LinkHandle<'b, K, Message>, &T) -> (),
+    F: 'static + Send + for<'b> Fn(&mut S, &mut LinkHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
     T: 'static + Send,
     K: 'static + Send,
+    M: 'static + Send + Borrowable,
 {
-    fn handle<'b>(
-        &mut self,
-        state: &mut S,
-        handle: &mut LinkHandle<'b, K, Message>,
-        message: &mut Message,
-    ) {
+    fn handle<'b>(&mut self, state: &mut S, handle: &mut LinkHandle<'b, K, M>, message: &mut M) {
         message
             .borrow()
             .map(|item| (self.function)(state, handle, item))

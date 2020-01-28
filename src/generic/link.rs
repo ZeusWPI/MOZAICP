@@ -49,27 +49,30 @@ pub struct LinkHandle<'a, K, M> {
     state: &'a LinkState<K, M>,
 }
 
-impl<'a> LinkHandle<'a, any::TypeId, Message> {
+impl<'a, K, M> LinkHandle<'a, K, M>
+where
+    M: Transmutable<K>,
+{
     pub fn send_message<T: 'static>(&mut self, msg: T) {
-        let id = any::TypeId::of::<T>();
-        let msg = Message::from(msg);
-        self.state
-            .target
-            .unbounded_send(Operation::ExternalMessage(
-                self.state.source_id.clone(),
-                id,
-                msg,
-            ))
-            .expect("Link handle crashed");
+        if let Some((id, msg)) = M::transmute(msg) {
+            self.state
+                .target
+                .unbounded_send(Operation::ExternalMessage(
+                    self.state.source_id.clone(),
+                    id,
+                    msg,
+                ))
+                .expect("Link handle crashed");
+        }
     }
 
     pub fn send_internal<T: 'static>(&mut self, msg: T) {
-        let id = any::TypeId::of::<T>();
-        let msg = Message::from(msg);
-        self.state
-            .source
-            .unbounded_send(Operation::InternalMessage(id, msg))
-            .expect("Link handle crashed");
+        if let Some((id, msg)) = M::transmute(msg) {
+            self.state
+                .source
+                .unbounded_send(Operation::InternalMessage(id, msg))
+                .expect("Link handle crashed");
+        }
     }
 
     pub fn close_link(&mut self) {
