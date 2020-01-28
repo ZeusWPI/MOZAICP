@@ -1,5 +1,5 @@
 use errors;
-use futures::sync::mpsc;
+use tokio::sync::mpsc;
 use messaging::types::{Message, ReactorId, VecSegment};
 use runtime::BrokerHandle;
 use tokio::net::TcpStream;

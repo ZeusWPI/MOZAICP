@@ -4,8 +4,6 @@ extern crate bytes;
 extern crate hex;
 
 extern crate tokio;
-extern crate tokio_core;
-extern crate tokio_process;
 #[macro_use]
 extern crate futures;
 extern crate rand;
@@ -61,32 +59,32 @@ macro_rules! add_gen {
     $(
       pub mod $name {
 
-          pub fn e_to_i<C: ::messaging::reactor::Ctx, T>(
+          pub fn e_to_i<C: crate::messaging::reactor::Ctx, T>(
             _: &mut T,
-            h: &mut ::messaging::reactor::LinkHandle<C>,
-            r: Reader) -> ::errors::Result<()>
+            h: &mut crate::messaging::reactor::LinkHandle<C>,
+            r: Reader) -> crate::errors::Result<()>
         {
-            let m = ::messaging::types::MsgBuffer::<Owned>::from_reader(r)?;
+            let m = crate::messaging::types::MsgBuffer::<Owned>::from_reader(r)?;
             h.send_internal(m)?;
             Ok(())
         }
 
-        pub fn i_to_e<C: ::messaging::reactor::Ctx, T>(
+        pub fn i_to_e<C: crate::messaging::reactor::Ctx, T>(
             _: &mut T,
-            h: &mut ::messaging::reactor::LinkHandle<C>,
-            r: Reader) -> ::errors::Result<()>
+            h: &mut crate::messaging::reactor::LinkHandle<C>,
+            r: Reader) -> crate::errors::Result<()>
         {
-            let m = ::messaging::types::MsgBuffer::<Owned>::from_reader(r)?;
+            let m = crate::messaging::types::MsgBuffer::<Owned>::from_reader(r)?;
             h.send_message(m)?;
             Ok(())
         }
 
-        impl<'a> ::HasNamedTypeId for Reader<'a> {
+        impl<'a> crate::HasNamedTypeId for Reader<'a> {
             fn get_name()->&'static str {
               stringify!($name)
             }
         }
-        impl<'a> ::HasNamedTypeId for Builder<'a> {
+        impl<'a> crate::HasNamedTypeId for Builder<'a> {
             fn get_name()->&'static str {
               stringify!($name)
             }

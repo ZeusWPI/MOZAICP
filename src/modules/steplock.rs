@@ -243,9 +243,8 @@ impl HostLink {
 use std::time::{Duration, Instant};
 
 use futures::future::Future;
-use futures::{Async, Poll};
-use tokio::prelude::Stream;
-use tokio::timer::Delay;
+use futures::task::{Poll};
+use tokio::time::Delay;
 
 struct Timer {
     inner: Option<Delay>,
@@ -273,13 +272,12 @@ impl Timer {
 }
 
 impl Future for Timer {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        while let Ok(Async::Ready(result)) = self.rx.poll() {
+    fn poll(&mut self) -> Poll<Self::Output> {
+        while let Poll::Ready(result) = self.rx.poll() {
             match result {
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
                 Some(action) => match action {
                     TimerAction::Reset(timeout) => {
                         self.inner =
@@ -292,14 +290,14 @@ impl Future for Timer {
             }
         }
 
-        if let Some(Ok(Async::Ready(_))) = self.inner.as_mut().map(|future| future.poll()) {
+        if let Some(Poll::Ready(_)) = self.inner.as_mut().map(|future| future.poll()) {
             self.inner = None;
             self.broker
                 .send_message(&self.id, &self.id, timeout::Owned, |_| {})
                 .display();
         }
 
-        Ok(Async::NotReady)
+        Poll::NotReady
     }
 }
 

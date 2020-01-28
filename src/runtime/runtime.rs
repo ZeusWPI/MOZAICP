@@ -332,8 +332,7 @@ impl<S: 'static> ReactorDriver<S> {
 }
 
 impl<S: 'static> Future for ReactorDriver<S> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     fn poll(&mut self) -> Poll<(), ()> {
         loop {

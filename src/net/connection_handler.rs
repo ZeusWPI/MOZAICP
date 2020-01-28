@@ -1,11 +1,11 @@
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 
-use capnp_futures::serialize::Transport;
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 
-use futures::sync::mpsc;
-use futures::{Async, AsyncSink, Future, Poll, Sink, Stream};
+use futures::{Future, Sink};
+use futures::task::Poll;
 
 use capnp;
 use capnp::any_pointer;
@@ -26,7 +26,7 @@ impl<S> ConnectionHandler<S> {
     where
         F: FnOnce(mpsc::UnboundedSender<Message>) -> HandlerCore<S>,
     {
-        let (tx, rx) = mpsc::unbounded();
+        let (tx, rx) = mpsc::unbounded_channel();
 
         let core = core_constructor(tx);
 
@@ -37,14 +37,14 @@ impl<S> ConnectionHandler<S> {
     }
 
     /// Wrap generic message in network_capnp::publish and send it over the wire
-    fn forward_messages(&mut self) -> Poll<(), ()> {
-        while let Some(msg) = try_ready!(self.rx.poll()) {
+    fn forward_messages(&mut self) -> Poll<()> {
+        while let Some(msg) = ready!(self.rx.poll()) {
             self.handler.writer().write(publish::Owned, |b| {
                 let mut publish: publish::Builder = b.init_as();
                 publish.set_message(msg.bytes());
             });
         }
-        return Ok(Async::Ready(()));
+        return Poll::Ready(());
     }
 
     pub fn writer<'a>(&'a mut self) -> Writer<'a> {
@@ -53,19 +53,18 @@ impl<S> ConnectionHandler<S> {
 }
 
 impl<S> Future for ConnectionHandler<S> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
-    fn poll(&mut self) -> Poll<(), ()> {
+    fn poll(&mut self) -> Poll<()> {
         if self.forward_messages()?.is_ready() {
             debug!("Rx closed at connection handler");
-            return Ok(Async::Ready(()));
+            return Poll::Ready(());
         }
 
         if self
             .handler
             .poll_stream()
-            .unwrap_or(Async::Ready(()))
+            .unwrap_or(Poll::Ready(()))
             .is_ready()
         {
             let mut msg = Builder::new_default();
@@ -80,10 +79,10 @@ impl<S> Future for ConnectionHandler<S> {
                 .expect("what the hell");
 
             debug!("Tcp streamed closed at connection handler");
-            return Ok(Async::Ready(()));
+            return Poll::Ready(());
         }
 
-        return Ok(Async::NotReady);
+        return Poll::NotReady;
     }
 }
 
@@ -133,15 +132,16 @@ impl<S> HandlerCore<S> {
 }
 
 pub struct StreamHandler<S> {
-    transport: Transport<TcpStream, Builder<HeapAllocator>>,
+    stream: TcpStream,
     write_queue: VecDeque<Builder<HeapAllocator>>,
     core: HandlerCore<S>,
 }
+use capnp::serialize;
 
 impl<S> StreamHandler<S> {
     pub fn new(core: HandlerCore<S>, stream: TcpStream) -> Self {
         StreamHandler {
-            transport: Transport::new(stream, ReaderOptions::default()),
+            stream: stream,
             write_queue: VecDeque::new(),
             core,
         }
@@ -153,15 +153,9 @@ impl<S> StreamHandler<S> {
         }
     }
 
-    fn flush_writes(&mut self) -> Poll<(), errors::Error> {
+    fn flush_writes(&mut self) -> Poll<()> {
         while let Some(builder) = self.write_queue.pop_front() {
-            match self.transport.start_send(builder)? {
-                AsyncSink::Ready => {} // continue
-                AsyncSink::NotReady(builder) => {
-                    self.write_queue.push_front(builder);
-                    return Ok(Async::NotReady);
-                }
-            };
+            serialize::write_message(&mut self.stream, builder)?;
         }
 
         return self.transport.poll_complete().map_err(|e| e.into());
@@ -181,16 +175,16 @@ impl<S> StreamHandler<S> {
 
     // Stream.poll() -> Result<Async<T>, errors::Error>
     /// self.transport.poll will finish with Err(disconnected), I think
-    fn poll_transport(&mut self) -> Poll<(), errors::Error> {
-        while let Some(reader) = try_ready!(self.transport.poll()) {
+    fn poll_transport(&mut self) -> Poll<()> {
+        while let Some(reader) = ready!(self.transport.poll()) {
             self.handle_message(reader)?;
-            try_ready!(self.flush_writes());
+            ready!(self.flush_writes());
         }
-        return Ok(Async::Ready(()));
+        return Poll::Ready(());
     }
 
-    fn poll_stream(&mut self) -> Poll<(), errors::Error> {
-        try_ready!(self.flush_writes());
+    fn poll_stream(&mut self) -> Poll<()> {
+        ready!(self.flush_writes());
         return self.poll_transport();
     }
 }

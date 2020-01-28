@@ -10,8 +10,8 @@ use std::thread;
 
 use runtime::BrokerHandle;
 
-use futures::sync::mpsc::channel;
-use futures::{Future, Sink, Stream};
+use tokio::sync::mpsc::channel;
+use futures::{Stream};
 
 /// Reactor to handle cmd input
 pub struct CmdReactor {
@@ -110,7 +110,7 @@ fn stdin() -> impl Stream<Item = String, Error = io::Error> {
 /// Read stdin async, and send messages from it
 /// Via broker, this is not preffered, but it's ok
 fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
-    tokio::spawn(futures::lazy(move || {
+    tokio::spawn(async move || {
         stdin()
             .for_each(|string| {
                 broker
@@ -125,5 +125,5 @@ fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
             .map_err(|_| ())
             .unwrap();
         Ok(())
-    }));
+    });
 }

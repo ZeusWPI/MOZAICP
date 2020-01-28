@@ -5,12 +5,12 @@ use std::collections::HashMap;
 
 use tracing::Span;
 
-use errors::ErrorKind::{MozaicError, NoLinkFoundError};
-use errors::{self, Consumable, Result};
+use crate::errors::ErrorKind::{MozaicError, NoLinkFoundError};
+use crate::errors::{self, Consumable, Result};
 
-use core_capnp::{mozaic_message, terminate_stream};
+use crate::core_capnp::{mozaic_message, terminate_stream};
 
-use HasNamedTypeId;
+use crate::HasNamedTypeId;
 
 /// Runtime trait
 pub trait Ctx: 'static + for<'a> Context<'a> {}

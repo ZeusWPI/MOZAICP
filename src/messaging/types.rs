@@ -7,9 +7,9 @@ use rand::Rng;
 use capnp;
 use capnp::any_pointer;
 use capnp::traits::{HasTypeId, Owned};
-use core_capnp::mozaic_message;
+use crate::core_capnp::mozaic_message;
 
-use HasNamedTypeId;
+use crate::HasNamedTypeId;
 
 /// Handles messages of type M with lifetime 'a, using state S.
 pub trait Handler<'a, S, M>: Send
@@ -284,7 +284,7 @@ where
         f(&mut builder);
     }
 
-    pub fn from_reader<'a>(reader: <T as Owned<'a>>::Reader) -> ::errors::Result<Self> {
+    pub fn from_reader<'a>(reader: <T as Owned<'a>>::Reader) -> crate::errors::Result<Self> {
         let mut me = MsgBuffer::new();
 
         let msg = me.builder.get_root::<mozaic_message::Builder>().unwrap();

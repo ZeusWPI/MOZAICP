@@ -1,4 +1,4 @@
-use messaging::types::ReactorId;
+use crate::messaging::types::ReactorId;
 
 // All possible errors for MOZAIC
 error_chain! {
@@ -67,4 +67,4 @@ impl ErrWrapper {
     }
 }
 
-pub use errors;
+// pub use self::errors;

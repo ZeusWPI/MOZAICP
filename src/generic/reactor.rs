@@ -5,7 +5,7 @@ use super::*;
 
 /// Gives the option for an init function on a reactor
 pub trait ReactorState<K, M> {
-    fn init<'a>(&mut self, &mut ReactorHandle<'a, K, M>) {}
+    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, K, M>) {}
 }
 
 /// Blanket implementation for ()
@@ -195,14 +195,13 @@ impl<S, K, M> Future for Reactor<S, K, M>
 where
     K: Hash + Eq + 'static,
 {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     /// Handles on message at a time, clearing the inner ops queue every time
     /// This opens/closes links and has to be up to date at all times
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Output> {
         loop {
-            match try_ready!(self.channels.1.poll()) {
+            match ready!(self.channels.1.poll()) {
                 None => return Ok(Async::Ready(())),
                 Some(item) => match item {
                     Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),

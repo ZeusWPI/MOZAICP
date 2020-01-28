@@ -10,9 +10,10 @@ use std::process::{Command, Stdio};
 
 use runtime::BrokerHandle;
 
-use futures::{Future, Stream};
+use futures::task::Poll;
+use futures::{Future};
 
-use tokio_process::{ChildStdout, CommandExt};
+use tokio::process::ChildStdout;
 
 enum Bot {
     ToSpawn(Vec<String>),
@@ -130,7 +131,8 @@ impl BotLink {
 
 fn setup_async_bot_stdout(mut broker: BrokerHandle, id: ReactorId, stdout: ChildStdout) {
     tokio::spawn(
-        tokio::io::lines(BufReader::new(stdout))
+        BufReader::new(stdout)
+            .lines()
             // Convert any io::Error into a failure::Error for better flexibility
             .map_err(|e| eprintln!("{:?}", e))
             .for_each(move |input| {
@@ -150,7 +152,6 @@ use std::io::Cursor;
 use tokio::sync::mpsc;
 
 use tokio::io::AsyncWrite;
-use tokio::prelude::*;
 
 struct BotSink<A> {
     rx: mpsc::Receiver<Vec<u8>>,
@@ -184,13 +185,12 @@ impl<A> Future for BotSink<A>
 where
     A: AsyncWrite,
 {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        while let Ok(Async::Ready(result)) = self.rx.poll() {
+    fn poll(&mut self) -> Poll<Self::Output> {
+        while let Poll::Ready(result) = self.rx.poll() {
             match result {
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
                 Some(vec) => {
                     self.queue.push_back(vec);
                 }
@@ -199,8 +199,8 @@ where
 
         loop {
             match self.write.poll_flush() {
-                Err(_) => return Ok(Async::Ready(())),
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(_) => return Poll::Ready(()),
+                Poll::NotReady => return Poll::NotReady,
                 _ => {}
             }
 
@@ -209,14 +209,14 @@ where
             }
 
             let current = match &mut self.current {
-                None => return Ok(Async::NotReady),
+                None => return Poll::NotReady,
                 Some(ref mut c) => c,
             };
 
             match self.write.write_buf(current) {
-                Err(_) => return Ok(Async::Ready(())),
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Ok(Async::Ready(_)) => {
+                Err(_) => return Poll::Ready(()),
+                Poll::NotReady => return Poll::NotReady,
+                Poll::Ready(_) => {
                     if !current.has_remaining() {
                         self.current = None;
                     }
