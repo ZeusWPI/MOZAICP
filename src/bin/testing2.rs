@@ -11,6 +11,10 @@ use mozaic::messaging::reactor::*;
 use mozaic::messaging::types::*;
 use mozaic::runtime::Broker;
 
+use futures::executor::ThreadPool;
+use futures::future::lazy;
+use futures::task::SpawnExt;
+
 struct FooReactor(u64);
 
 impl FooReactor {
@@ -28,6 +32,8 @@ impl FooReactor {
         handle: &mut ReactorHandle<C>,
         _: initialize::Reader,
     ) -> Result<()> {
+        println!("Here");
+
         let id = handle.id().clone();
 
         if id == 0.into() {
@@ -86,15 +92,16 @@ fn main() {
         .and_then(|x| x.parse::<u64>().ok())
         .unwrap_or(10);
 
-    let mut broker = Broker::new().unwrap();
+    let pool = ThreadPool::new().unwrap();
+
+    let mut broker = Broker::new(pool.clone()).unwrap();
     let p1 = FooReactor::params(amount);
     let p2 = FooReactor::params(amount);
 
-    tokio::run(futures::lazy(move || {
+    pool.spawn(lazy(move |_| {
         broker.spawn(0.into(), p1, "main").display();
 
         broker.spawn(1.into(), p2, "main").display();
-
-        Ok(())
-    }));
+        ()
+    })).expect("Failed to start");
 }

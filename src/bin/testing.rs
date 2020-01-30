@@ -8,6 +8,10 @@ use std::env;
 use mozaic::generic;
 use mozaic::generic::*;
 
+use futures::executor::ThreadPool;
+use futures::future::lazy;
+use futures::task::SpawnExt;
+
 struct E(u64);
 
 struct FooReactor(u64);
@@ -20,6 +24,8 @@ impl FooReactor {
 
 impl ReactorState<any::TypeId, Message> for FooReactor {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
+        println!("Here");
+
         let id: u64 = **handle.id();
 
         if id == 0 {
@@ -55,20 +61,23 @@ impl FooLink {
 }
 
 fn main() {
+
     let args: Vec<String> = env::args().collect();
     let amount = args
         .get(1)
         .and_then(|x| x.parse::<u64>().ok())
         .unwrap_or(10);
 
-    let broker = BrokerHandle::new();
+    let pool = ThreadPool::new().unwrap();
+
+    let broker = BrokerHandle::new(pool.clone());
     let p1 = FooReactor::params(amount);
     let p2 = FooReactor::params(amount);
 
-    tokio::run(futures::lazy(move || {
+    pool.spawn(lazy(move |_| {
         broker.spawn(p2, Some(0.into()));
         broker.spawn(p1, Some(1.into()));
 
-        Ok(())
-    }));
+        ()
+    })).expect("Failed to start");
 }
