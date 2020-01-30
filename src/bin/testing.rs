@@ -1,4 +1,5 @@
-#[macro_use] extern crate futures;
+#[macro_use]
+extern crate futures;
 extern crate mozaic;
 extern crate tokio;
 

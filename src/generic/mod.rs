@@ -29,8 +29,8 @@ pub use self::types::ReactorID;
 pub struct Initialize();
 
 /// Shortcut types
-type Sender<K, M> = mpsc::UnboundedSender<Operation<K, M>>;
-type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
+pub type Sender<K, M> = mpsc::UnboundedSender<Operation<K, M>>;
+pub type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
 
 // ANCHOR Traits
 ///
@@ -203,6 +203,7 @@ where
 
         let fut = self.pool.spawn_with_handle(reactor).expect("Couldn't spawn reactor");
 
+        println!("Spawned");
         (fut, id)
     }
 }

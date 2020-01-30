@@ -66,6 +66,7 @@ impl FooLink {
         handle: &mut LinkHandle<C>,
         e: identify::Reader,
     ) -> Result<()> {
+        println!("Msg");
         let e = e.get_key() - 1;
 
         if e > 0 {

@@ -1,4 +1,5 @@
 use futures::channel::mpsc;
+use futures::executor::ThreadPool;
 use futures::{Future, Stream};
 
 use super::*;
@@ -11,11 +12,19 @@ enum Combined<K1, K2, M1, M2> {
 }
 
 pub struct Translator<K1, K2, M1, M2> {
-    to: Option<(Receiver<K1, M1>, HashMap<K1, Box<dyn Fn(&K1, &M1) -> (K2, M2) + Send>>)>,
-    from: Option<(Receiver<K2, M2>, HashMap<K2, Box<dyn Fn(&K2, &M2) -> (K1, M1) + Send>>)>,
+    to: Option<(
+        Receiver<K1, M1>,
+        HashMap<K1, Box<dyn Fn(&K1, &M1) -> (K2, M2) + Send>>,
+    )>,
+    from: Option<(
+        Receiver<K2, M2>,
+        HashMap<K2, Box<dyn Fn(&K2, &M2) -> (K1, M1) + Send>>,
+    )>,
 
     s1: Sender<K1, M1>,
     s2: Sender<K2, M2>,
+    id1: ReactorID,
+    id2: ReactorID,
 }
 
 impl<K1, K2, M1, M2> Translator<K1, K2, M1, M2>
@@ -25,7 +34,7 @@ where
     M1: Send + 'static,
     M2: Send + 'static,
 {
-    pub fn new() -> Self {
+    pub fn new(id1: ReactorID, id2: ReactorID) -> Self {
         let (s1, r1) = mpsc::unbounded();
         let (s2, r2) = mpsc::unbounded();
         Self {
@@ -33,6 +42,7 @@ where
             s2: s2,
             to: Some((r1, HashMap::new())),
             from: Some((r2, HashMap::new())),
+            id1, id2,
         }
     }
 
@@ -44,36 +54,38 @@ where
         self.from.as_mut().map(|from| from.1.insert(key, from_f));
     }
 
-    pub fn attach_to(&mut self) -> (Sender<K1, M1>, LinkSpawner<K1, M1>) {
+    pub fn attach_to(&mut self, pool: ThreadPool) -> (Sender<K1, M1>, LinkSpawner<K1, M1>) {
         let (rec, map) = std::mem::replace(&mut self.to, None).unwrap();
 
         let sender = self.s2.clone();
+        let id = self.id2.clone();
         (
-            self.s1.clone(),    // This shouldn't be used
+            self.s1.clone(), // This shouldn't be used
             Box::new(move |(target, _, _, _)| {
-                tokio::spawn(OtherHelper { sender: target, receiver: rec });
+                pool.spawn_ok(OtherHelper {
+                    sender: target,
+                    receiver: rec,
+                });
 
-                Box::new(Helper::<K1, M1, K2, M2> {
-                    sender,
-                    map,
-                })
+                Box::new(Helper::<K1, M1, K2, M2> { sender, map, id })
             }),
         )
     }
 
-    pub fn attach_from(&mut self) -> (Sender<K2, M2>, LinkSpawner<K2, M2>) {
+    pub fn attach_from(&mut self, pool: ThreadPool) -> (Sender<K2, M2>, LinkSpawner<K2, M2>) {
         let (rec, map) = std::mem::replace(&mut self.from, None).unwrap();
 
         let sender = self.s1.clone();
+        let id = self.id1.clone();
         (
             self.s2.clone(),
             Box::new(move |(target, _, _, _)| {
-                tokio::spawn(OtherHelper { sender: target, receiver: rec });
+                pool.spawn_ok(OtherHelper {
+                    sender: target,
+                    receiver: rec,
+                });
 
-                Box::new(Helper::<K2, M2, K1, M1> {
-                    sender,
-                    map,
-                })
+                Box::new(Helper::<K2, M2, K1, M1> { sender, map, id })
             }),
         )
     }
@@ -81,7 +93,8 @@ where
 
 struct Helper<K1, M1, K2, M2> {
     sender: Sender<K2, M2>,
-    map: HashMap<K1, Box<dyn Fn(& K1, & M1) -> (K2, M2) + Send>>,
+    id: ReactorID,
+    map: HashMap<K1, Box<dyn Fn(&K1, &M1) -> (K2, M2) + Send>>,
 }
 
 impl<'a, 'b, K1, M1, K2, M2> Handler<(), ReactorHandle<'b, K1, M1>, LinkOperation<'a, K1, M1>>
@@ -100,12 +113,23 @@ where
                 if let Some(translator) = self.map.get(&key) {
                     let (k, m) = translator(key, message);
                     println!("Sending");
-                    self.sender.unbounded_send(
-                        Operation::ExternalMessage(0.into(), k, m)
-                    ).expect("Soemthing happend");
+                    self.sender
+                        .unbounded_send(Operation::ExternalMessage(0.into(), k, m))
+                        .expect("Soemthing happend");
                 }
             }
-            _ => unimplemented!(),
+            LinkOperation::InternalMessage(key, message) => {
+                if let Some(translator) = self.map.get(&key) {
+                    let (k, m) = translator(key, message);
+                    println!("Sending");
+                    self.sender
+                        .unbounded_send(Operation::ExternalMessage(0.into(), k, m))
+                        .expect("Soemthing happend");
+                }
+            }
+            LinkOperation::Close() => {
+                self.sender.unbounded_send(Operation::CloseLink(self.id)).expect("Bla bla here");
+            }
         }
     }
 }
@@ -128,8 +152,10 @@ impl<K, M> Future for OtherHelper<K, M> {
                 None => return Poll::Ready(()),
                 Some(item) => {
                     println!("Copying something");
-                    this.sender.unbounded_send(item).expect("Something failed");
-                },
+                    if this.sender.unbounded_send(item).is_err() {
+                        println!("Couldn't close translator channel");
+                    }
+                }
             }
         }
     }
