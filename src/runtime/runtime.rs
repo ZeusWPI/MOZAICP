@@ -6,7 +6,8 @@ use crate::core_capnp::{drop, initialize, mozaic_message};
 
 use tokio::sync::mpsc;
 use futures::{Future};
-use futures::task::Poll;
+use futures::task::{Poll, SpawnExt};
+use futures::future::RemoteHandle;
 
 use tracing::{error, field, info, span, trace, Level};
 use tracing_futures::Instrument;
@@ -79,7 +80,7 @@ pub struct ActorData {
 
 use std::pin::Pin;
 use futures::executor::ThreadPool;
-use futures::task::{SpawnExt, Context as Ctx};
+use futures::task::{Context as Ctx};
 
 #[derive(Clone)]
 pub struct BrokerHandle {
@@ -195,12 +196,12 @@ impl BrokerHandle {
         self.broker.lock().unwrap().actors.contains_key(id)
     }
 
-    pub fn spawn<S>(
+    pub fn spawn_with_handle<S>(
         &mut self,
         id: ReactorId,
         core_params: CoreParams<S, Runtime>,
         name: &str,
-    ) -> Result<()>
+    ) -> Result<RemoteHandle<()>>
     where
         S: 'static + Send + Unpin,
     {
@@ -243,13 +244,28 @@ impl BrokerHandle {
             reactor_handle.send_internal(initialize)?;
         }
 
-        self.threadpool.spawn(driver.instrument(span!(
+        // Fail here, you don't want this to happen and continue
+        let fut = self.threadpool.spawn_with_handle(driver.instrument(span!(
             Level::TRACE,
             "driver",
             name = name,
             id = field::debug(&id)
         ))).expect("Couldn't spawn reactor");
 
+        Ok(fut)
+    }
+
+    pub fn spawn<S>(
+        &mut self,
+        id: ReactorId,
+        core_params: CoreParams<S, Runtime>,
+        name: &str,
+    ) -> Result<()>
+    where
+        S: 'static + Send + Unpin,
+    {
+        let handle = self.spawn_with_handle(id, core_params, name)?;
+        handle.forget();
         Ok(())
     }
 }

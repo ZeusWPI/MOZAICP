@@ -1,9 +1,9 @@
+#[macro_use]
 extern crate futures;
 extern crate mozaic;
 extern crate tokio;
 
-use std::env;
-use std::process;
+use std::{env, time, process};
 
 use mozaic::core_capnp::{identify, initialize};
 use mozaic::errors::*;
@@ -12,8 +12,6 @@ use mozaic::messaging::types::*;
 use mozaic::runtime::Broker;
 
 use futures::executor::ThreadPool;
-use futures::future::lazy;
-use futures::task::SpawnExt;
 
 struct FooReactor(u64);
 
@@ -85,6 +83,19 @@ impl FooLink {
     }
 }
 
+async fn run(amount: u64, pool: ThreadPool) {
+    let mut broker = Broker::new(pool.clone()).unwrap();
+    let p1 = FooReactor::params(amount);
+    let p2 = FooReactor::params(amount);
+
+    join!(
+        broker.spawn_with_handle(0.into(), p1, "main").unwrap(),
+        broker.spawn_with_handle(1.into(), p2, "main").unwrap()
+    );
+}
+
+use futures::executor;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let amount = args
@@ -92,16 +103,15 @@ fn main() {
         .and_then(|x| x.parse::<u64>().ok())
         .unwrap_or(10);
 
-    let pool = ThreadPool::new().unwrap();
+    {
+        let pool = ThreadPool::builder()
+            // .after_start(|i| println!("Starting thread {}", i))
+            // .before_stop(|i| println!("Stopping thread {}", i))
+            .create()
+            .unwrap();
 
-    let mut broker = Broker::new(pool.clone()).unwrap();
-    let p1 = FooReactor::params(amount);
-    let p2 = FooReactor::params(amount);
+        executor::block_on(run(amount, pool));
+    }
 
-    pool.spawn(lazy(move |_| {
-        broker.spawn(0.into(), p1, "main").display();
-
-        broker.spawn(1.into(), p2, "main").display();
-        ()
-    })).expect("Failed to start");
+    std::thread::sleep(time::Duration::from_millis(100));
 }

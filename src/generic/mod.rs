@@ -2,6 +2,7 @@ use futures::channel::mpsc;
 use futures::{Future};
 use futures::task::SpawnExt;
 use futures::executor::ThreadPool;
+use futures::future::RemoteHandle;
 
 use rand;
 
@@ -179,6 +180,16 @@ where
         params: CoreParams<S, K, M>,
         id: Option<ReactorID>,
     ) -> ReactorID {
+        let (handle, id) = self.spawn_with_handle(params, id);
+        handle.forget();
+        id
+    }
+
+    pub fn spawn_with_handle<S: 'static + Send + ReactorState<K, M> + Unpin>(
+        &self,
+        params: CoreParams<S, K, M>,
+        id: Option<ReactorID>,
+    ) -> (RemoteHandle<()>, ReactorID) {
         let id = id.unwrap_or_else(|| rand::random::<u64>().into());
 
         let mut reactor = Reactor::new(
@@ -190,9 +201,9 @@ where
 
         reactor.init();
 
-        self.pool.spawn(reactor).expect("Couldn't spawn reactor");
+        let fut = self.pool.spawn_with_handle(reactor).expect("Couldn't spawn reactor");
 
-        id
+        (fut, id)
     }
 }
 

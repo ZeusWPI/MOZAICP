@@ -1,6 +1,5 @@
 use futures::future::FutureExt;
 use futures::executor::ThreadPool;
-use futures::task::SpawnExt;
 
 use crate::core_capnp::initialize;
 use crate::errors::{Consumable, Result};
@@ -112,7 +111,7 @@ impl ConnectionManager {
         let broker = self.broker.clone();
         let id = handle.id().clone();
         let addr = self.addr.clone();
-        self.threadpool.spawn(
+        self.threadpool.spawn_ok(
             rx.then(
                 move |_| {
                     TcpServer::new(
@@ -121,7 +120,7 @@ impl ConnectionManager {
                         addr,
                     )
                 }
-            ).map(|_| ())).expect("Couldn't spawn connection manager");
+            ).map(|_| ()));
 
         Ok(())
     }
