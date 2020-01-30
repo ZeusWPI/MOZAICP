@@ -102,7 +102,7 @@ where
 
 pub type Ed25519Key = [u8; 32];
 
-#[derive(Hash, PartialEq, Eq, Clone)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
 pub struct ReactorId {
     public_key: Ed25519Key,
 }
@@ -172,12 +172,12 @@ impl From<u8> for ReactorId {
 }
 
 pub struct VecSegment {
-    words: Vec<capnp::Word>,
+    words: Vec<u8>,
 }
 
 impl VecSegment {
     pub fn new(words: Vec<capnp::Word>) -> Self {
-        VecSegment { words }
+        VecSegment { words: capnp::Word::words_to_bytes(&words).to_vec() }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -186,16 +186,16 @@ impl VecSegment {
         }
         let mut words = capnp::Word::allocate_zeroed_vec(bytes.len() / 8);
         capnp::Word::words_to_bytes_mut(&mut words[..]).copy_from_slice(bytes);
-        return VecSegment { words };
+        return VecSegment { words: capnp::Word::words_to_bytes(&words).to_vec() };
     }
 
     pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
-        capnp::Word::words_to_bytes(&self.words)
+        &self.words
     }
 }
 
 impl<'b> capnp::message::ReaderSegments for &'b VecSegment {
-    fn get_segment<'a>(&'a self, idx: u32) -> Option<&'a [capnp::Word]> {
+    fn get_segment<'a>(&'a self, idx: u32) -> Option<&'a [u8]> {
         if idx == 0 {
             return Some(&self.words);
         } else {

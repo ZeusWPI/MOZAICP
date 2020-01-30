@@ -1,4 +1,6 @@
-use futures::Future;
+use futures::future::FutureExt;
+use futures::executor::ThreadPool;
+use futures::task::SpawnExt;
 
 use core_capnp::initialize;
 use errors::{Consumable, Result};
@@ -20,10 +22,12 @@ use super::client_controller::CCReactor;
 use modules::util::{Identifier, PlayerId};
 
 type Closer = tokio::sync::oneshot::Sender<()>;
+
 /// Main connection manager, creates handles for as many players as asked for
 /// Handles disconnects, reconnects etc, host can always send messages to everybody
 pub struct ConnectionManager {
     broker: BrokerHandle,
+    threadpool: ThreadPool,
 
     ids: HashMap<Identifier, PlayerId>, // handle send to clients
 
@@ -41,6 +45,7 @@ impl ConnectionManager {
         ids: HashMap<Identifier, PlayerId>,
         host: ReactorId,
         addr: SocketAddr,
+        threadpool: ThreadPool,
     ) -> CoreParams<Self, C> {
         let cc_count = ids.len();
         let server_reactor = Self {
@@ -50,6 +55,7 @@ impl ConnectionManager {
             addr,
             cc_count,
             at_close: None,
+            threadpool,
         };
 
         let mut params = CoreParams::new(server_reactor);
@@ -102,14 +108,20 @@ impl ConnectionManager {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         self.at_close = Some(tx);
-        tokio::spawn(
-            rx.map_err(|_| ()).select(
-                TcpServer::new(
-                    self.broker.clone(),
-                    handle.id().clone(),
-                    &self.addr,
-                )
-            ).map(|_| ()).map_err(|_| ()));
+
+        let broker = self.broker.clone();
+        let id = handle.id().clone();
+        let addr = self.addr.clone();
+        self.threadpool.spawn(
+            rx.then(
+                move |_| {
+                    TcpServer::new(
+                        broker,
+                        id,
+                        addr,
+                    )
+                }
+            ).map(|_| ()));
 
         Ok(())
     }

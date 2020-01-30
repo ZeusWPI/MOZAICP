@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex};
 use capnp::traits::{HasTypeId, Owned};
 use core_capnp::{drop, initialize, mozaic_message};
 
-use futures::sync::mpsc;
-use futures::{Async, Future, Poll, Stream};
+use tokio::sync::mpsc;
+use futures::{Future, Stream};
+use futures::task::Poll;
 use tokio;
 
 use tracing::{error, field, info, span, trace, Level};
@@ -32,7 +33,7 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new() -> Result<BrokerHandle> {
+    pub fn new(threadpool: ThreadPool) -> Result<BrokerHandle> {
         let id: ReactorId = rand::thread_rng().gen();
 
         let broker = Broker {
@@ -41,6 +42,7 @@ impl Broker {
         };
         let broker = BrokerHandle {
             broker: Arc::new(Mutex::new(broker)),
+            threadpool,
         };
 
         return Ok(broker);
@@ -64,7 +66,7 @@ impl Broker {
             }
         };
 
-        receiver.tx.unbounded_send(message).map_err(move |_| {
+        receiver.tx.send(message).map_err(move |_| {
             error!("Couldn't send {:?} -> {:?}", sender_id, receiver_id);
             format!("send failed {:?}", receiver_id)
         })?;
@@ -76,9 +78,14 @@ pub struct ActorData {
     tx: mpsc::UnboundedSender<Message>,
 }
 
+use std::pin::Pin;
+use futures::executor::ThreadPool;
+use futures::task::{SpawnExt, Context as Ctx};
+
 #[derive(Clone)]
 pub struct BrokerHandle {
     broker: Arc<Mutex<Broker>>,
+    threadpool: ThreadPool,
 }
 
 impl BrokerHandle {
@@ -207,7 +214,7 @@ impl BrokerHandle {
                 links: HashMap::new(),
             };
 
-            let (tx, rx) = mpsc::unbounded();
+            let (tx, rx) = mpsc::unbounded_channel();
             broker.actors.insert(id.clone(), ActorData { tx });
 
             ReactorDriver {
@@ -233,12 +240,12 @@ impl BrokerHandle {
             reactor_handle.send_internal(initialize)?;
         }
 
-        tokio::spawn(driver.instrument(span!(
+        self.threadpool.spawn(driver.instrument(span!(
             Level::TRACE,
             "driver",
             name = name,
             id = field::debug(&id)
-        )));
+        ))).expect("Couldn't spawn reactor");
 
         Ok(())
     }
@@ -257,6 +264,7 @@ pub struct ReactorDriver<S: 'static> {
     broker: BrokerHandle,
 
     reactor: Reactor<S, Runtime>,
+
     should_close: bool,
     internal_msgs_handled: usize,
     external_msgs_handled: usize,
@@ -334,7 +342,7 @@ impl<S: 'static> ReactorDriver<S> {
 impl<S: 'static> Future for ReactorDriver<S> {
     type Output = ();
 
-    fn poll(&mut self) -> Poll<(), ()> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Ctx) -> Poll<Self::Output> {
         loop {
             self.handle_internal_queue();
 
@@ -344,7 +352,7 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 // arrive, so the reactor can be terminated.
                 self.broker.unregister(&self.reactor.id);
 
-                return Ok(Async::Ready(()));
+                return Poll::Ready(());
             }
 
             // close if you have no links, you should close 'auto' links yourself.
@@ -366,21 +374,19 @@ impl<S: 'static> Future for ReactorDriver<S> {
                 self.should_close = true;
             }
 
-            match self.message_chan.poll() {
-                Ok(Async::Ready(None)) => {
+            match self.message_chan.try_recv() {
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    if !self.should_close {
+                        return Poll::Pending;
+                    }
+                },
+                Err(mpsc::error::TryRecvError::Closed) => {
                     self.broker.unregister(&self.reactor.id);
-                    return Ok(Async::Ready(()));
+                    return Poll::Ready(());
                 }
-                Ok(Async::Ready(Some(item))) => {
+                Ok(item) => {
                     self.handle_external_message(item);
                 }
-                // Only return if you shouldn't close
-                Ok(Async::NotReady) => {
-                    if !self.should_close {
-                        return Ok(Async::NotReady);
-                    }
-                }
-                Err(e) => return Err(e),
             }
         }
     }
@@ -414,9 +420,9 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         Ok(id)
     }
 
-    fn open_link<T>(&mut self, params: LinkParams<T, Runtime>) -> Result<()>
+    fn open_link<S>(&mut self, params: LinkParams<S, Runtime>) -> Result<()>
     where
-        T: 'static + Send,
+        S: 'static + Send + Sync,
     {
         self.internal_queue
             .push_back(InternalOp::OpenLink(Box::new(params)));

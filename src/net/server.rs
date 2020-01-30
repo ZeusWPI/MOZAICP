@@ -22,7 +22,7 @@ impl ServerHandler {
         broker: BrokerHandle,
         welcomer_id: ReactorId,
     ) -> ConnectionHandler<Self> {
-        ConnectionHandler::new(stream, |tx| {
+        ConnectionHandler::new(stream, broker.clone(), move |tx| {
             let mut handler = HandlerCore::new(ServerHandler {
                 broker,
                 tx,
@@ -115,7 +115,7 @@ impl ClientHandler {
         broker: BrokerHandle,
         welcomer_id: ReactorId,
     ) -> ConnectionHandler<Self> {
-        let mut out = ConnectionHandler::new(stream, |tx| {
+        let mut out = ConnectionHandler::new(stream, broker.clone(), move |tx| {
             let mut handler = HandlerCore::new(ClientHandler {
                 broker,
                 tx,
@@ -132,7 +132,7 @@ impl ClientHandler {
             return handler;
         });
 
-        out.writer().write(connect::Owned, |b| {
+        out.writer().write(connect::Owned, move |b| {
             let mut connect: connect::Builder = b.init_as();
             connect.set_id(welcomer_id.bytes());
         });

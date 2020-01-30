@@ -10,8 +10,8 @@ use std::thread;
 
 use runtime::BrokerHandle;
 
-use tokio::sync::mpsc::channel;
-use futures::{Stream};
+use futures::channel::mpsc;
+use futures::stream::Stream;
 
 /// Reactor to handle cmd input
 pub struct CmdReactor {
@@ -93,37 +93,37 @@ impl ForeignLink {
 }
 
 /// Helper function to make stdin async
-fn stdin() -> impl Stream<Item = String, Error = io::Error> {
-    let (mut tx, rx) = channel(1);
+fn stdin() -> impl Stream<Item = String> {
+    let (mut tx, rx) = mpsc::channel(1);
     thread::spawn(move || {
         let input = io::stdin();
         for line in input.lock().lines() {
-            match tx.send(line).wait() {
-                Ok(s) => tx = s,
+            match line
+                .map_err(|_| ())
+                .and_then(|line| tx.try_send(line).map_err(|_| ()))
+            {
+                Ok(s) => {}
                 Err(_) => break,
             }
         }
     });
-    rx.then(|e| e.unwrap())
+    rx
 }
 
+use futures::{future, StreamExt};
 /// Read stdin async, and send messages from it
 /// Via broker, this is not preffered, but it's ok
 fn setup_async_stdin(mut broker: BrokerHandle, id: ReactorId) {
-    tokio::spawn(async move || {
+    tokio::spawn(futures::future::lazy(move |_context| {
         stdin()
-            .for_each(|string| {
+            .for_each(move |string| {
                 broker
                     .send_message(&id, &id, cmd_input::Owned, move |b| {
                         let mut msg: cmd_input::Builder = b.init_as();
                         msg.set_input(&string);
                     })
                     .display();
-                Ok(())
+                future::ready(())
             })
-            .wait()
-            .map_err(|_| ())
-            .unwrap();
-        Ok(())
-    });
+    }));
 }

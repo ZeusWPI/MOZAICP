@@ -17,7 +17,7 @@ pub trait Ctx: 'static + for<'a> Context<'a> {}
 impl<C> Ctx for C where C: 'static + for<'a> Context<'a> {}
 
 pub trait Context<'a>: Sized {
-    type Handle: 'a + CtxHandle<Self>;
+    type Handle: 'a + Sync + CtxHandle<Self>;
 }
 
 pub trait CtxHandle<C> {
@@ -26,7 +26,7 @@ pub trait CtxHandle<C> {
 
     fn open_link<S>(&mut self, params: LinkParams<S, C>) -> Result<()>
     where
-        S: 'static + Send,
+        S: 'static + Send + Sync,
         C: Ctx;
 
     fn close_link(&mut self, id: &ReactorId) -> Result<()>;
@@ -340,7 +340,7 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
 
     pub fn open_link<S>(&mut self, params: LinkParams<S, C>) -> Result<()>
     where
-        S: 'static + Send,
+        S: 'static + Send + Sync,
     {
         self.ctx.open_link(params)
     }
@@ -506,7 +506,7 @@ type LinkHandler<S, C, T, E> = Box<
         any_pointer::Owned,
         Output = T,
         Error = E,
-    >,
+    > + Sync,
 >;
 
 type LinkHandlers<S, C, T, E> = HashMap<u64, (LinkHandler<S, C, T, E>, Span)>;
@@ -570,7 +570,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
 
     pub fn internal_handler<M, H>(&mut self, _m: M, h: H)
     where
-        M: for<'a> Owned<'a> + Send + 'static,
+        M: for<'a> Owned<'a> + Send + Sync + 'static,
         <M as Owned<'static>>::Reader: HasNamedTypeId,
         H: 'static
             + for<'a, 'c> Handler<
@@ -579,7 +579,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
                 M,
                 Output = (),
                 Error = errors::Error,
-            >,
+            > + Sync,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         let span = span!(
@@ -594,7 +594,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
 
     pub fn external_handler<M, H>(&mut self, _m: M, h: H)
     where
-        M: for<'a> Owned<'a> + Send + 'static,
+        M: for<'a> Owned<'a> + Send + Sync + 'static,
         <M as Owned<'static>>::Reader: HasNamedTypeId,
         H: 'static
             + for<'a, 'c> Handler<
@@ -603,7 +603,7 @@ impl<S, C: Ctx> LinkParams<S, C> {
                 M,
                 Output = (),
                 Error = errors::Error,
-            >,
+            > + Sync,
     {
         let boxed = Box::new(AnyPtrHandler::new(h));
         let span = span!(
@@ -618,15 +618,15 @@ impl<S, C: Ctx> LinkParams<S, C> {
     }
 }
 
-pub trait LinkParamsTrait<C: Ctx>: 'static + Send {
+pub trait LinkParamsTrait<C: Ctx>: 'static + Send + Sync {
     fn remote_id<'a>(&'a self) -> &'a ReactorId;
     fn into_link(self: Box<Self>) -> Link<C>;
 }
 
 impl<S, C> LinkParamsTrait<C> for LinkParams<S, C>
 where
-    S: 'static + Send,
-    C: Ctx + 'static,
+    S: 'static + Send + Sync,
+    C: Ctx + 'static + Send + Sync,
 {
     fn remote_id<'a>(&'a self) -> &'a ReactorId {
         &self.remote_id

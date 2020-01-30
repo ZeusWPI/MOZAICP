@@ -189,6 +189,10 @@ where
     }
 }
 
+use futures::stream::Stream;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
+
 /// Reactors get spawned with tokio, they only read from their channel and act on the messages
 /// They reduce over an OperationStream
 impl<S, K, M> Future for Reactor<S, K, M>
@@ -199,10 +203,10 @@ where
 
     /// Handles on message at a time, clearing the inner ops queue every time
     /// This opens/closes links and has to be up to date at all times
-    fn poll(&mut self) -> Poll<Self::Output> {
+    fn poll(self:  Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         loop {
-            match ready!(self.channels.1.poll()) {
-                None => return Ok(Async::Ready(())),
+            match ready!(Stream::poll_next(Pin::new(&mut self.channels.1), ctx)) {
+                None => return Poll::Ready(()),
                 Some(item) => match item {
                     Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),
                     Operation::ExternalMessage(target, id, msg) => {

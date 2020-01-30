@@ -1,5 +1,5 @@
-use futures::sync::mpsc;
-use futures::{Async, Future, Poll, Stream};
+use futures::channel::mpsc;
+use futures::{Future, Stream};
 
 use rand;
 

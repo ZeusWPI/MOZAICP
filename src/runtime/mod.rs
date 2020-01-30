@@ -1,9 +1,11 @@
 pub mod runtime;
 
+use std::pin::Pin;
 use std::net::SocketAddr;
 
-use futures::task::Poll;
 use futures::prelude::Future;
+use futures::task::{Poll, Context as Ctx};
+use futures::FutureExt;
 // use futures::{Async, Future, Poll};
 use tokio::net::TcpListener;
 
@@ -18,15 +20,14 @@ pub fn connect_to_server(
     greeter_id: ReactorId,
     addr: &SocketAddr,
 ) -> impl Future<Output = ()> {
-    tokio::net::TcpStream::connect(addr)
-        .map(|stream| {
-            let handler = ClientHandler::new(stream, broker, greeter_id);
-            tokio::spawn(handler.then(|_| {
-                info!("handler closed");
-                Ok(())
-            }));
-        })
-        .map_err(|e| error!("{:?}", e))
+    tokio::net::TcpStream::connect(addr.clone()).map(|stream| {
+        let handler = ClientHandler::new(stream.unwrap(), broker, greeter_id);
+        tokio::spawn(handler.then(|_| {
+            info!("handler closed");
+            futures::future::ready(())
+        }));
+        ()
+    })
 }
 
 pub struct TcpServer {
@@ -36,26 +37,32 @@ pub struct TcpServer {
 }
 
 impl TcpServer {
-    pub fn new(broker: BrokerHandle, greeter_id: ReactorId, addr: &SocketAddr) -> Self {
-        let listener = TcpListener::bind(addr).unwrap();
-
-        return TcpServer {
-            listener,
+    pub fn new(
+        broker: BrokerHandle,
+        greeter_id: ReactorId,
+        addr: SocketAddr,
+    ) -> impl Future<Output = Self> {
+        TcpListener::bind(addr).map(|listener| TcpServer {
+            listener: listener.unwrap(),
             broker,
             greeter_id,
-        };
+        })
     }
 
-    fn handle_incoming(&mut self) -> Poll<()> {
+    fn handle_incoming(&mut self, ctx: &mut Ctx) -> Poll<()> {
         if !self.broker.reactor_exists(&self.greeter_id) {
             info!("Stopping tcp server for {:?}", self.greeter_id);
             return Poll::Ready(());
         }
 
         loop {
-            if let Poll::ready((stream, _addr)) = self.listener.poll_accept() {
-                let handler = ServerHandler::new(stream, self.broker.clone(), self.greeter_id.clone());
+            if let Ok((stream, _addr)) = ready!(self.listener.poll_accept(ctx)) {
+                let handler =
+                    ServerHandler::new(stream, self.broker.clone(), self.greeter_id.clone());
                 tokio::spawn(handler);
+            } else {
+                // Can't listen for tcp sockets anymore
+                return Poll::Ready(())
             }
         }
     }
@@ -70,7 +77,7 @@ impl Drop for TcpServer {
 impl Future for TcpServer {
     type Output = ();
 
-    fn poll(&mut self) -> Poll<(), ()> {
-        Ok(self.handle_incoming().expect("failed to accept connection"))
+    fn poll(self: Pin<&mut Self>, ctx: &mut Ctx) -> Poll<Self::Output> {
+        self.handle_incoming(ctx)
     }
 }

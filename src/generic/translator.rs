@@ -1,5 +1,5 @@
-use futures::sync::mpsc;
-use futures::{Async, Future, Poll, Stream};
+use futures::channel::mpsc;
+use futures::{Future, Stream};
 
 use super::*;
 use std::collections::HashMap;
@@ -115,14 +115,16 @@ struct OtherHelper<K, M> {
     receiver: Receiver<K, M>,
 }
 
-impl<K, M> Future for OtherHelper<K, M> {
-    type Item = ();
-    type Error = ();
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+impl<K, M> Future for OtherHelper<K, M> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         loop {
-            match try_ready!(self.receiver.poll()) {
-                None => return Ok(Async::Ready(())),
+            match ready!(Stream::poll_next(Pin::new(&mut self.receiver), ctx)) {
+                None => return Poll::Ready(()),
                 Some(item) => {
                     println!("Copying something");
                     self.sender.unbounded_send(item).expect("Something failed");

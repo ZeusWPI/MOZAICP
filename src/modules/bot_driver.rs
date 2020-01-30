@@ -6,14 +6,15 @@ use messaging::types::*;
 use cmd_capnp::{bot_input, bot_return};
 
 use std::io::BufReader;
-use std::process::{Command, Stdio};
+use std::pin::Pin;
+use std::process::{ChildStdout, Command, Stdio};
 
 use runtime::BrokerHandle;
 
-use futures::task::Poll;
-use futures::{Future};
-
-use tokio::process::ChildStdout;
+use futures::executor::ThreadPool;
+use futures::task::{self, Poll};
+use futures::Future;
+use std::io::BufRead;
 
 enum Bot {
     ToSpawn(Vec<String>),
@@ -28,7 +29,11 @@ pub struct BotReactor {
 }
 
 impl BotReactor {
-    pub fn new(broker: BrokerHandle, foreign_id: ReactorId, bot_cmd: Vec<String>) -> Self {
+    pub fn new(
+        broker: BrokerHandle,
+        foreign_id: ReactorId,
+        bot_cmd: Vec<String>,
+    ) -> Self {
         Self {
             broker,
             foreign_id,
@@ -60,30 +65,28 @@ impl BotReactor {
         cmd.stdout(Stdio::piped());
         cmd.stdin(Stdio::piped());
 
-        let mut bot = cmd.spawn_async().expect("Couldn't spawn bot");
+        let mut bot = cmd.spawn().expect("Couldn't spawn bot");
 
-        let stdout = bot
-            .stdout()
-            .take()
-            .expect("child did not have a handle to stdout");
+        let stdout = bot.stdout.expect("child did not have a handle to stdout");
 
-        let stdin = bot
-            .stdin()
-            .take()
-            .expect("child did not have a handle to stdin");
+        let stdin = bot.stdin.expect("child did not have a handle to stdin");
 
-        let child_future = bot
-            .map(|status| println!("child status was: {}", status))
-            .map_err(|e| panic!("error while running child: {}", e));
+        // let child_future = bot
+        //     .map(|status| println!("child status was: {}", status))
+        //     .map_err(|e| panic!("error while running child: {}", e));
 
-        tokio::spawn(child_future);
+        // tokio::spawn(child_future);
 
         self.bot = Bot::Spawned(BotSink::new(stdin));
 
         handle.open_link(BotLink::params(handle.id().clone()))?;
         handle.open_link(ForeignLink::params(self.foreign_id.clone()))?;
 
-        setup_async_bot_stdout(self.broker.clone(), handle.id().clone(), stdout);
+        setup_async_bot_stdout(
+            self.broker.clone(),
+            handle.id().clone(),
+            stdout,
+        );
         Ok(())
     }
 
@@ -130,46 +133,43 @@ impl BotLink {
 }
 
 fn setup_async_bot_stdout(mut broker: BrokerHandle, id: ReactorId, stdout: ChildStdout) {
-    tokio::spawn(
+    std::thread::spawn(move || {
         BufReader::new(stdout)
             .lines()
             // Convert any io::Error into a failure::Error for better flexibility
-            .map_err(|e| eprintln!("{:?}", e))
+            // .map_err(|e| eprintln!("{:?}", e))
             .for_each(move |input| {
-                broker
-                    .send_message(&id, &id, bot_return::Owned, move |b| {
-                        let mut msg: bot_return::Builder = b.init_as();
-                        msg.set_message(&input.as_bytes());
-                    })
-                    .display();
-                Ok(())
-            }),
-    );
+                if let Ok(input) = input {
+                    broker
+                        .send_message(&id, &id, bot_return::Owned, move |b| {
+                            let mut msg: bot_return::Builder = b.init_as();
+                            msg.set_message(&input.as_bytes());
+                        })
+                        .display();
+                }
+            });
+    });
 }
 
 use std::collections::VecDeque;
-use std::io::Cursor;
+use std::io::Write;
 use tokio::sync::mpsc;
-
-use tokio::io::AsyncWrite;
 
 struct BotSink<A> {
     rx: mpsc::Receiver<Vec<u8>>,
-    current: Option<Cursor<Vec<u8>>>,
     write: A,
     queue: VecDeque<Vec<u8>>,
 }
 
 impl<A> BotSink<A>
 where
-    A: AsyncWrite + Send + 'static,
+    A: Write + Send + 'static,
 {
     fn new(write: A) -> mpsc::Sender<Vec<u8>> {
         let (tx, rx) = mpsc::channel(10);
 
         let me = Self {
             rx,
-            current: None,
             write,
             queue: VecDeque::new(),
         };
@@ -180,46 +180,33 @@ where
     }
 }
 
-use bytes::Buf;
 impl<A> Future for BotSink<A>
 where
-    A: AsyncWrite,
+    A: Write,
 {
     type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Output> {
-        while let Poll::Ready(result) = self.rx.poll() {
-            match result {
-                None => return Poll::Ready(()),
-                Some(vec) => {
+    fn poll(self: Pin<&mut Self>, ctx: &mut task::Context) -> Poll<Self::Output> {
+        loop {
+            match self.rx.try_recv() {
+                Err(mpsc::error::TryRecvError::Empty) => break,
+                Err(mpsc::error::TryRecvError::Closed) => return Poll::Ready(()),
+                Ok(vec) => {
                     self.queue.push_back(vec);
                 }
             }
         }
 
+        // TODO make async again
         loop {
-            match self.write.poll_flush() {
+            match self.write.flush() {
                 Err(_) => return Poll::Ready(()),
-                Poll::NotReady => return Poll::NotReady,
                 _ => {}
             }
 
-            if self.current.is_none() {
-                self.current = self.queue.pop_front().map(|v| Cursor::new(v));
-            }
-
-            let current = match &mut self.current {
-                None => return Poll::NotReady,
-                Some(ref mut c) => c,
-            };
-
-            match self.write.write_buf(current) {
-                Err(_) => return Poll::Ready(()),
-                Poll::NotReady => return Poll::NotReady,
-                Poll::Ready(_) => {
-                    if !current.has_remaining() {
-                        self.current = None;
-                    }
+            if let Some(buffer) = self.queue.pop_front() {
+                if self.write.write_all(&buffer).is_err() {
+                    return Poll::Ready(());
                 }
             }
         }

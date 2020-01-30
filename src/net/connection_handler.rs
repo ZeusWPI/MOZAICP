@@ -1,11 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
+use std::pin::Pin;
 
-use tokio::net::TcpStream;
+use tokio::net::{tcp, TcpStream};
 use tokio::sync::mpsc;
 
-use futures::{Future, Sink};
-use futures::task::Poll;
+use futures::task::{Context as Ctx, Poll};
+use futures::{Future, FutureExt};
 
 use capnp;
 use capnp::any_pointer;
@@ -15,6 +16,7 @@ use capnp::traits::{HasTypeId, Owned};
 use errors;
 use messaging::types::{AnyPtrHandler, Handler, Message};
 use network_capnp::{disconnected, network_message, publish};
+use runtime::BrokerHandle;
 
 pub struct ConnectionHandler<S> {
     handler: StreamHandler<S>,
@@ -22,7 +24,7 @@ pub struct ConnectionHandler<S> {
 }
 
 impl<S> ConnectionHandler<S> {
-    pub fn new<F>(stream: TcpStream, core_constructor: F) -> Self
+    pub fn new<F>(stream: TcpStream, broker: BrokerHandle, core_constructor: F) -> Self
     where
         F: FnOnce(mpsc::UnboundedSender<Message>) -> HandlerCore<S>,
     {
@@ -31,20 +33,25 @@ impl<S> ConnectionHandler<S> {
         let core = core_constructor(tx);
 
         return ConnectionHandler {
-            handler: StreamHandler::new(core, stream),
+            handler: StreamHandler::new(core, broker, stream),
             rx,
         };
     }
 
     /// Wrap generic message in network_capnp::publish and send it over the wire
     fn forward_messages(&mut self) -> Poll<()> {
-        while let Some(msg) = ready!(self.rx.poll()) {
-            self.handler.writer().write(publish::Owned, |b| {
-                let mut publish: publish::Builder = b.init_as();
-                publish.set_message(msg.bytes());
-            });
+        loop {
+            match self.rx.try_recv() {
+                Ok(msg) => {
+                    self.handler.writer().write(publish::Owned, |b| {
+                        let mut publish: publish::Builder = b.init_as();
+                        publish.set_message(msg.bytes());
+                    });
+                }
+                Err(mpsc::error::TryRecvError::Empty) => return Poll::Pending,
+                Err(mpsc::error::TryRecvError::Closed) => return Poll::Ready(()),
+            }
         }
-        return Poll::Ready(());
     }
 
     pub fn writer<'a>(&'a mut self) -> Writer<'a> {
@@ -55,16 +62,16 @@ impl<S> ConnectionHandler<S> {
 impl<S> Future for ConnectionHandler<S> {
     type Output = ();
 
-    fn poll(&mut self) -> Poll<()> {
-        if self.forward_messages()?.is_ready() {
+    fn poll(self: Pin<&mut Self>, ctx: &mut Ctx) -> Poll<()> {
+        if self.forward_messages().is_ready() {
             debug!("Rx closed at connection handler");
             return Poll::Ready(());
         }
 
         if self
             .handler
-            .poll_stream()
-            .unwrap_or(Poll::Ready(()))
+            .poll_stream(ctx)
+            // .unwrap_or(Poll::Ready(()))
             .is_ready()
         {
             let mut msg = Builder::new_default();
@@ -82,7 +89,7 @@ impl<S> Future for ConnectionHandler<S> {
             return Poll::Ready(());
         }
 
-        return Poll::NotReady;
+        return Poll::Pending;
     }
 }
 
@@ -132,18 +139,25 @@ impl<S> HandlerCore<S> {
 }
 
 pub struct StreamHandler<S> {
-    stream: TcpStream,
+    stream: (
+        ARead<tcp::ReadHalf<'static>>,
+        AWrite<tcp::WriteHalf<'static>>,
+    ),
     write_queue: VecDeque<Builder<HeapAllocator>>,
     core: HandlerCore<S>,
+    broker: BrokerHandle,
 }
-use capnp::serialize;
+
+use capnp_futures::serialize;
 
 impl<S> StreamHandler<S> {
-    pub fn new(core: HandlerCore<S>, stream: TcpStream) -> Self {
+    pub fn new(core: HandlerCore<S>, broker: BrokerHandle, stream: TcpStream) -> Self {
+        let (r, w) = stream.split();
         StreamHandler {
-            stream: stream,
+            stream: (ARead(r), AWrite(w)),
             write_queue: VecDeque::new(),
             core,
+            broker,
         }
     }
 
@@ -153,12 +167,12 @@ impl<S> StreamHandler<S> {
         }
     }
 
-    fn flush_writes(&mut self) -> Poll<()> {
+    fn flush_writes(&mut self, ctx: &mut Ctx) -> Poll<()> {
         while let Some(builder) = self.write_queue.pop_front() {
-            serialize::write_message(&mut self.stream, builder)?;
+            serialize::write_message(&mut self.stream.1, builder);
         }
 
-        return self.transport.poll_complete().map_err(|e| e.into());
+        return AsyncWrite::poll_flush(Pin::new(&mut self.stream.1), ctx).map(|_| ());
     }
 
     pub fn handle_message<T>(&mut self, builder: Reader<T>) -> Result<(), errors::Error>
@@ -175,17 +189,27 @@ impl<S> StreamHandler<S> {
 
     // Stream.poll() -> Result<Async<T>, errors::Error>
     /// self.transport.poll will finish with Err(disconnected), I think
-    fn poll_transport(&mut self) -> Poll<()> {
-        while let Some(reader) = ready!(self.transport.poll()) {
-            self.handle_message(reader)?;
-            ready!(self.flush_writes());
+    fn poll_transport(&mut self, ctx: &mut Ctx) -> Poll<()> {
+        loop {
+            if let Ok(item) = ready!(Future::poll(
+                Pin::new(&mut serialize::read_message(self.stream.0, ReaderOptions::new()).boxed()),
+                ctx
+            )) {
+                if let Some(reader) = item {
+                    self.handle_message(reader);
+                    ready!(self.flush_writes(ctx));
+                } else {
+                    return Poll::Pending;
+                }
+            } else {
+                return Poll::Ready(());
+            }
         }
-        return Poll::Ready(());
     }
 
-    fn poll_stream(&mut self) -> Poll<()> {
-        ready!(self.flush_writes());
-        return self.poll_transport();
+    fn poll_stream(&mut self, ctx: &mut Ctx) -> Poll<()> {
+        ready!(self.flush_writes(ctx));
+        return self.poll_transport(ctx);
     }
 }
 
@@ -259,5 +283,41 @@ impl<'a> Writer<'a> {
             }
         }
         self.write_queue.push_back(builder);
+    }
+}
+
+use futures::{AsyncRead, AsyncWrite};
+use std::marker::Unpin;
+struct AWrite<A: tokio::io::AsyncWrite + Unpin>(A);
+
+impl<A: tokio::io::AsyncWrite + Unpin> AsyncWrite for AWrite<A> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut futures::task::Context,
+        buf: &[u8],
+    ) -> Poll<Result<usize, futures::io::Error>> {
+        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.0), cx, buf)
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut futures::task::Context,
+    ) -> Poll<Result<(), futures::io::Error>> {
+        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.0), cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Ctx) -> Poll<Result<(), futures::io::Error>> {
+        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.0), cx)
+    }
+}
+
+struct ARead<A: tokio::io::AsyncRead + Unpin>(A);
+impl<A: tokio::io::AsyncRead + Unpin> AsyncRead for ARead<A> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut futures::task::Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, futures::io::Error>> {
+        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.0), cx, buf)
     }
 }

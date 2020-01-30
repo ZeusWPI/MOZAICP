@@ -7,13 +7,14 @@ use runtime::BrokerHandle;
 use super::util::PlayerId;
 use base_capnp::{client_step, from_client, host_message, to_client};
 use connection_capnp::client_kicked;
-use steplock_capnp::{set_timeout, timeout};
 use core_capnp::terminate_stream;
+use steplock_capnp::{set_timeout, timeout};
 
 use std::collections::HashMap;
 use std::convert::TryInto;
 
 use tokio::sync::mpsc;
+use futures::Future;
 
 pub struct Steplock {
     broker: BrokerHandle,
@@ -220,7 +221,10 @@ impl ClientsLink {
         params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
         params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
         params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
-        params.external_handler(terminate_stream::Owned, CtxHandler::new(terminate_stream::e_to_i));
+        params.external_handler(
+            terminate_stream::Owned,
+            CtxHandler::new(terminate_stream::e_to_i),
+        );
 
         params
     }
@@ -240,11 +244,10 @@ impl HostLink {
     }
 }
 
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 
-use futures::future::Future;
-use futures::task::{Poll};
-use tokio::time::Delay;
+use futures::task::Poll;
+use tokio::time::{self, Delay};
 
 struct Timer {
     inner: Option<Delay>,
@@ -271,33 +274,36 @@ impl Timer {
     }
 }
 
+use std::pin::Pin;
+use futures::task;
+
 impl Future for Timer {
     type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Output> {
-        while let Poll::Ready(result) = self.rx.poll() {
-            match result {
-                None => return Poll::Ready(()),
-                Some(action) => match action {
-                    TimerAction::Reset(timeout) => {
-                        self.inner =
-                            Some(Delay::new(Instant::now() + Duration::from_millis(timeout)));
-                    }
-                    TimerAction::Halt => {
-                        self.inner = None;
-                    }
-                },
+    fn poll(self:  Pin<&mut Self>, ctx: &mut task::Context) -> Poll<Self::Output> {
+        while let Ok(action) = self.rx.try_recv() {
+            match action {
+                TimerAction::Reset(timeout) => {
+                    self.inner = Some(time::delay_for(Duration::from_millis(timeout)));
+                }
+                TimerAction::Halt => {
+                    self.inner = None;
+                }
             }
         }
 
-        if let Some(Poll::Ready(_)) = self.inner.as_mut().map(|future| future.poll()) {
+        if let Some(Poll::Ready(_)) = self
+            .inner
+            .as_mut()
+            .map(|future| Future::poll(Pin::new(future), ctx))
+        {
             self.inner = None;
             self.broker
                 .send_message(&self.id, &self.id, timeout::Owned, |_| {})
                 .display();
         }
 
-        Poll::NotReady
+        Poll::Pending
     }
 }
 
