@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 
 use futures::task::{Context as Ctx, Poll};
 use futures::{Future, FutureExt};
+use futures::executor;
 
 use capnp;
 use capnp::any_pointer;
@@ -59,16 +60,19 @@ impl<S> ConnectionHandler<S> {
     }
 }
 
-impl<S> Future for ConnectionHandler<S> {
+impl<S> Future for ConnectionHandler<S>
+    where S: Unpin {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Ctx) -> Poll<()> {
-        if self.forward_messages().is_ready() {
+        let this = Pin::into_inner(self);
+
+        if this.forward_messages().is_ready() {
             debug!("Rx closed at connection handler");
             return Poll::Ready(());
         }
 
-        if self
+        if this
             .handler
             .poll_stream(ctx)
             // .unwrap_or(Poll::Ready(()))
@@ -81,7 +85,7 @@ impl<S> Future for ConnectionHandler<S> {
                 root.set_type_id(disconnected::Builder::type_id());
             }
 
-            self.handler
+            this.handler
                 .handle_message(msg.into_reader())
                 .expect("what the hell");
 
@@ -139,10 +143,7 @@ impl<S> HandlerCore<S> {
 }
 
 pub struct StreamHandler<S> {
-    stream: (
-        ARead<tcp::ReadHalf<'static>>,
-        AWrite<tcp::WriteHalf<'static>>,
-    ),
+    stream: TcpStream,
     write_queue: VecDeque<Builder<HeapAllocator>>,
     core: HandlerCore<S>,
     broker: BrokerHandle,
@@ -152,9 +153,8 @@ use capnp_futures::serialize;
 
 impl<S> StreamHandler<S> {
     pub fn new(core: HandlerCore<S>, broker: BrokerHandle, stream: TcpStream) -> Self {
-        let (r, w) = stream.split();
         StreamHandler {
-            stream: (ARead(r), AWrite(w)),
+            stream,
             write_queue: VecDeque::new(),
             core,
             broker,
@@ -168,11 +168,14 @@ impl<S> StreamHandler<S> {
     }
 
     fn flush_writes(&mut self, ctx: &mut Ctx) -> Poll<()> {
+
         while let Some(builder) = self.write_queue.pop_front() {
-            serialize::write_message(&mut self.stream.1, builder);
+            let (_, w) = self.stream.split();
+            serialize::write_message(&mut AWrite(w), builder);
         }
 
-        return AsyncWrite::poll_flush(Pin::new(&mut self.stream.1), ctx).map(|_| ());
+        let (_, w) = self.stream.split();
+        return AsyncWrite::poll_flush(Pin::new(&mut AWrite(w)), ctx).map(|_| ());
     }
 
     pub fn handle_message<T>(&mut self, builder: Reader<T>) -> Result<(), errors::Error>
@@ -191,10 +194,12 @@ impl<S> StreamHandler<S> {
     /// self.transport.poll will finish with Err(disconnected), I think
     fn poll_transport(&mut self, ctx: &mut Ctx) -> Poll<()> {
         loop {
-            if let Ok(item) = ready!(Future::poll(
-                Pin::new(&mut serialize::read_message(self.stream.0, ReaderOptions::new()).boxed()),
-                ctx
-            )) {
+            let (r, _) = self.stream.split();
+            if let Ok(item) = executor::block_on(serialize::read_message(ARead(r), ReaderOptions::new())) {
+            // if let Ok(item) = ready!(Future::poll(
+            //     Pin::new(&mut .boxed()),
+            //     ctx
+            // )) {
                 if let Some(reader) = item {
                     self.handle_message(reader);
                     ready!(self.flush_writes(ctx));
@@ -296,18 +301,18 @@ impl<A: tokio::io::AsyncWrite + Unpin> AsyncWrite for AWrite<A> {
         cx: &mut futures::task::Context,
         buf: &[u8],
     ) -> Poll<Result<usize, futures::io::Error>> {
-        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.0), cx, buf)
+        tokio::io::AsyncWrite::poll_write(Pin::new(&mut Pin::into_inner(self).0), cx, buf)
     }
 
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut futures::task::Context,
     ) -> Poll<Result<(), futures::io::Error>> {
-        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.0), cx)
+        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut Pin::into_inner(self).0), cx)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Ctx) -> Poll<Result<(), futures::io::Error>> {
-        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.0), cx)
+        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut Pin::into_inner(self).0), cx)
     }
 }
 
@@ -318,6 +323,6 @@ impl<A: tokio::io::AsyncRead + Unpin> AsyncRead for ARead<A> {
         cx: &mut futures::task::Context,
         buf: &mut [u8],
     ) -> Poll<Result<usize, futures::io::Error>> {
-        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.0), cx, buf)
+        tokio::io::AsyncRead::poll_read(Pin::new(&mut Pin::into_inner(self).0), cx, buf)
     }
 }

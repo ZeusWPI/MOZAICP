@@ -122,12 +122,13 @@ impl<K, M> Future for OtherHelper<K, M> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        let this = Pin::into_inner(self);
         loop {
-            match ready!(Stream::poll_next(Pin::new(&mut self.receiver), ctx)) {
+            match ready!(Stream::poll_next(Pin::new(&mut this.receiver), ctx)) {
                 None => return Poll::Ready(()),
                 Some(item) => {
                     println!("Copying something");
-                    self.sender.unbounded_send(item).expect("Something failed");
+                    this.sender.unbounded_send(item).expect("Something failed");
                 },
             }
         }

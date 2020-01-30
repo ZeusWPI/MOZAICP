@@ -11,8 +11,7 @@ use std::process::{ChildStdout, Command, Stdio};
 
 use runtime::BrokerHandle;
 
-use futures::executor::ThreadPool;
-use futures::task::{self, Poll};
+use futures::task::{self, Poll, SpawnExt};
 use futures::Future;
 use std::io::BufRead;
 
@@ -77,7 +76,9 @@ impl BotReactor {
 
         // tokio::spawn(child_future);
 
-        self.bot = Bot::Spawned(BotSink::new(stdin));
+        let (fut, bot_sink) = BotSink::new(stdin);
+        self.bot = Bot::Spawned(bot_sink);
+        self.broker.pool().spawn(fut);
 
         handle.open_link(BotLink::params(handle.id().clone()))?;
         handle.open_link(ForeignLink::params(self.foreign_id.clone()))?;
@@ -163,9 +164,9 @@ struct BotSink<A> {
 
 impl<A> BotSink<A>
 where
-    A: Write + Send + 'static,
+    A: Write + Send + 'static + Unpin,
 {
-    fn new(write: A) -> mpsc::Sender<Vec<u8>> {
+    fn new(write: A) -> (impl Future<Output = ()>, mpsc::Sender<Vec<u8>>) {
         let (tx, rx) = mpsc::channel(10);
 
         let me = Self {
@@ -174,38 +175,37 @@ where
             queue: VecDeque::new(),
         };
 
-        tokio::spawn(me);
-
-        tx
+        (me, tx)
     }
 }
 
 impl<A> Future for BotSink<A>
 where
-    A: Write,
+    A: Write + Unpin,
 {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, ctx: &mut task::Context) -> Poll<Self::Output> {
+        let this = Pin::into_inner(self);
         loop {
-            match self.rx.try_recv() {
+            match this.rx.try_recv() {
                 Err(mpsc::error::TryRecvError::Empty) => break,
                 Err(mpsc::error::TryRecvError::Closed) => return Poll::Ready(()),
                 Ok(vec) => {
-                    self.queue.push_back(vec);
+                    this.queue.push_back(vec);
                 }
             }
         }
 
         // TODO make async again
         loop {
-            match self.write.flush() {
+            match this.write.flush() {
                 Err(_) => return Poll::Ready(()),
                 _ => {}
             }
 
-            if let Some(buffer) = self.queue.pop_front() {
-                if self.write.write_all(&buffer).is_err() {
+            if let Some(buffer) = this.queue.pop_front() {
+                if this.write.write_all(&buffer).is_err() {
                     return Poll::Ready(());
                 }
             }

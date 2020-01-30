@@ -93,6 +93,10 @@ impl BrokerHandle {
         self.broker.lock().unwrap().runtime_id.clone()
     }
 
+    pub fn pool(&mut self) -> &mut ThreadPool {
+        &mut self.threadpool
+    }
+
     pub fn dispatch_message(&mut self, message: Message) -> Result<()> {
         let mut broker = self.broker.lock().unwrap();
         broker.dispatch_message(message)
@@ -199,7 +203,7 @@ impl BrokerHandle {
         name: &str,
     ) -> Result<()>
     where
-        S: 'static + Send,
+        S: 'static + Send + Unpin,
     {
         info!("Spawning new reactor {} {:?}", name, id);
         graph::add_node(&id, name);
@@ -339,31 +343,34 @@ impl<S: 'static> ReactorDriver<S> {
     }
 }
 
-impl<S: 'static> Future for ReactorDriver<S> {
+use std::marker::Unpin;
+impl<S: 'static + Unpin> Future for ReactorDriver<S> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Ctx) -> Poll<Self::Output> {
-        loop {
-            self.handle_internal_queue();
+        let this = Pin::into_inner(self);
 
-            if self.should_close {
+        loop {
+            this.handle_internal_queue();
+
+            if this.should_close {
                 // if self.reactor.links.keys().all(|k| k == &self.reactor.id) {
                 // all internal ops have been handled and no new messages can
                 // arrive, so the reactor can be terminated.
-                self.broker.unregister(&self.reactor.id);
+                this.broker.unregister(&this.reactor.id);
 
                 return Poll::Ready(());
             }
 
             // close if you have no links, you should close 'auto' links yourself.
-            if self.reactor.links.is_empty() {
+            if this.reactor.links.is_empty() {
                 {
                     let mut ctx_handle = DriverHandle {
-                        broker: &mut self.broker,
-                        internal_queue: &mut self.internal_queue,
+                        broker: &mut this.broker,
+                        internal_queue: &mut this.internal_queue,
                     };
 
-                    let mut reactor_handle = self.reactor.handle(&mut ctx_handle);
+                    let mut reactor_handle = this.reactor.handle(&mut ctx_handle);
 
                     let drop = MsgBuffer::<drop::Owned>::new();
                     reactor_handle
@@ -371,21 +378,21 @@ impl<S: 'static> Future for ReactorDriver<S> {
                         .expect("Failed to send drop message");
                 }
 
-                self.should_close = true;
+                this.should_close = true;
             }
 
-            match self.message_chan.try_recv() {
+            match this.message_chan.try_recv() {
                 Err(mpsc::error::TryRecvError::Empty) => {
-                    if !self.should_close {
+                    if !this.should_close {
                         return Poll::Pending;
                     }
                 },
                 Err(mpsc::error::TryRecvError::Closed) => {
-                    self.broker.unregister(&self.reactor.id);
+                    this.broker.unregister(&this.reactor.id);
                     return Poll::Ready(());
                 }
                 Ok(item) => {
-                    self.handle_external_message(item);
+                    this.handle_external_message(item);
                 }
             }
         }
@@ -411,9 +418,9 @@ impl<'a> CtxHandle<Runtime> for DriverHandle<'a> {
         self.broker.dispatch_message(msg)
     }
 
-    fn spawn<T>(&mut self, params: CoreParams<T, Runtime>, name: &str) -> Result<ReactorId>
+    fn spawn<S>(&mut self, params: CoreParams<S, Runtime>, name: &str) -> Result<ReactorId>
     where
-        T: 'static + Send,
+        S: 'static + Send + Unpin,
     {
         let id: ReactorId = rand::thread_rng().gen();
         self.broker.spawn(id.clone(), params, name)?;

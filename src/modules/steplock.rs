@@ -280,26 +280,29 @@ use futures::task;
 impl Future for Timer {
     type Output = ();
 
-    fn poll(self:  Pin<&mut Self>, ctx: &mut task::Context) -> Poll<Self::Output> {
-        while let Ok(action) = self.rx.try_recv() {
+    fn poll(self: Pin<&mut Self>, ctx: &mut task::Context) -> Poll<Self::Output> {
+        let this = Pin::into_inner(self);
+
+        while let Ok(action) = this.rx.try_recv() {
             match action {
                 TimerAction::Reset(timeout) => {
-                    self.inner = Some(time::delay_for(Duration::from_millis(timeout)));
+                    this.inner = Some(time::delay_for(Duration::from_millis(timeout)));
                 }
                 TimerAction::Halt => {
-                    self.inner = None;
+                    this.inner = None;
                 }
             }
         }
 
-        if let Some(Poll::Ready(_)) = self
+        let id = this.id;
+        if let Some(Poll::Ready(_)) = this
             .inner
             .as_mut()
             .map(|future| Future::poll(Pin::new(future), ctx))
         {
-            self.inner = None;
-            self.broker
-                .send_message(&self.id, &self.id, timeout::Owned, |_| {})
+            this.inner = None;
+            this.broker
+                .send_message(&id, &id, timeout::Owned, |_| {})
                 .display();
         }
 

@@ -197,35 +197,38 @@ use std::pin::Pin;
 /// They reduce over an OperationStream
 impl<S, K, M> Future for Reactor<S, K, M>
 where
-    K: Hash + Eq + 'static,
+    S: Unpin,
+    K: Hash + Eq + 'static + Unpin,
 {
     type Output = ();
 
     /// Handles on message at a time, clearing the inner ops queue every time
     /// This opens/closes links and has to be up to date at all times
     fn poll(self:  Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        let this = Pin::into_inner(self);
+
         loop {
-            match ready!(Stream::poll_next(Pin::new(&mut self.channels.1), ctx)) {
+            match ready!(Stream::poll_next(Pin::new(&mut this.channels.1), ctx)) {
                 None => return Poll::Ready(()),
                 Some(item) => match item {
-                    Operation::InternalMessage(id, msg) => self.handle_internal_msg(id, msg),
+                    Operation::InternalMessage(id, msg) => this.handle_internal_msg(id, msg),
                     Operation::ExternalMessage(target, id, msg) => {
-                        self.handle_external_msg(target, id, msg)
+                        this.handle_external_msg(target, id, msg)
                     }
-                    Operation::CloseLink(id) => self.close_link(id),
-                    Operation::Close() => self.close(),
+                    Operation::CloseLink(id) => this.close_link(id),
+                    Operation::Close() => this.close(),
                     _ => unimplemented!(),
                 },
             }
 
-            while let Some(op) = self.inner_ops.pop_back() {
+            while let Some(op) = this.inner_ops.pop_back() {
                 match op {
-                    InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
+                    InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
                     InnerOp::OpenLinkLike(id, spawner, cascade, tx) => {
-                        self.open_link_like(id, spawner, cascade, tx)
+                        this.open_link_like(id, spawner, cascade, tx)
                     }
-                    InnerOp::Close() => self.close(),
-                    InnerOp::CloseLink(id) => self.close_link(id),
+                    InnerOp::Close() => this.close(),
+                    InnerOp::CloseLink(id) => this.close_link(id),
                 }
             }
         }

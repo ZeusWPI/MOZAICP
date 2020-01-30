@@ -20,7 +20,7 @@ pub fn connect_to_server(
     greeter_id: ReactorId,
     addr: &SocketAddr,
 ) -> impl Future<Output = ()> {
-    tokio::net::TcpStream::connect(addr.clone()).map(|stream| {
+    tokio::net::TcpStream::connect(addr.clone()).map(move |stream| {
         let handler = ClientHandler::new(stream.unwrap(), broker, greeter_id);
         tokio::spawn(handler.then(|_| {
             info!("handler closed");
@@ -42,7 +42,7 @@ impl TcpServer {
         greeter_id: ReactorId,
         addr: SocketAddr,
     ) -> impl Future<Output = Self> {
-        TcpListener::bind(addr).map(|listener| TcpServer {
+        TcpListener::bind(addr).map(move |listener| TcpServer {
             listener: listener.unwrap(),
             broker,
             greeter_id,
@@ -78,6 +78,7 @@ impl Future for TcpServer {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Ctx) -> Poll<Self::Output> {
-        self.handle_incoming(ctx)
+        let this = Pin::into_inner(self);
+        this.handle_incoming(ctx)
     }
 }

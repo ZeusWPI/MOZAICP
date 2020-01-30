@@ -184,16 +184,17 @@ impl Future for GraphState {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        let this = Pin::into_inner(self);
         loop {
-            match self.rx.try_recv() {
+            match this.rx.try_recv() {
                 Err(mpsc::error::TryRecvError::Empty) => return Poll::Pending,
                 Err(mpsc::error::TryRecvError::Closed) => return Poll::Ready(()),
                 Ok(event) => match event {
-                    EventWrapper::Conn(c) => self.add_conn(c),
-                    EventWrapper::AddEdge(f, t) => self.add_edge(f, t),
-                    EventWrapper::AddNode(f, t) => self.add_node(f, t),
-                    EventWrapper::RemoveEdge(f, t) => self.remove_edge(f, t),
-                    EventWrapper::RemoveNode(t) => self.remove_node(t),
+                    EventWrapper::Conn(c) => this.add_conn(c),
+                    EventWrapper::AddEdge(f, t) => this.add_edge(f, t),
+                    EventWrapper::AddNode(f, t) => this.add_node(f, t),
+                    EventWrapper::RemoveEdge(f, t) => this.remove_edge(f, t),
+                    EventWrapper::RemoveNode(t) => this.remove_node(t),
                 },
             }
         }

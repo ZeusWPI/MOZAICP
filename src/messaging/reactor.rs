@@ -33,7 +33,7 @@ pub trait CtxHandle<C> {
 
     fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> Result<ReactorId>
     where
-        S: 'static + Send,
+        S: 'static + Send + Unpin,
         C: Ctx;
 
     fn destroy(&mut self) -> Result<()>;
@@ -333,7 +333,7 @@ impl<'a, 'c, C: Ctx> ReactorHandle<'a, 'c, C> {
 
     pub fn spawn<S>(&mut self, params: CoreParams<S, C>, name: &str) -> Result<ReactorId>
     where
-        S: 'static + Send,
+        S: 'static + Send + Unpin,
     {
         self.ctx.spawn(params, name)
     }

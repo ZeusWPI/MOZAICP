@@ -1,5 +1,7 @@
 use futures::channel::mpsc;
-use futures::{Future, Stream};
+use futures::{Future};
+use futures::task::SpawnExt;
+use futures::executor::ThreadPool;
 
 use rand;
 
@@ -93,25 +95,28 @@ struct Broker<K, M> {
 ///
 pub struct BrokerHandle<K, M> {
     broker: Arc<Mutex<Broker<K, M>>>,
+    pool: ThreadPool,
 }
 
 impl<K, M> Clone for BrokerHandle<K, M> {
     fn clone(&self) -> Self {
         BrokerHandle {
             broker: self.broker.clone(),
+            pool: self.pool.clone(),
         }
     }
 }
 
 impl<K, M> BrokerHandle<K, M> {
     /// Creates a new broker
-    pub fn new() -> BrokerHandle<K, M> {
+    pub fn new(pool: ThreadPool) -> BrokerHandle<K, M> {
         let broker = Broker {
             reactors: HashMap::new(),
         };
 
         BrokerHandle {
             broker: Arc::new(Mutex::new(broker)),
+            pool,
         }
     }
 
@@ -165,11 +170,11 @@ impl<K, M> BrokerHandle<K, M> {
 
 impl<K, M> BrokerHandle<K, M>
 where
-    K: 'static + Eq + Hash + Send,
+    K: 'static + Eq + Hash + Send + Unpin,
     M: 'static + Send,
 {
     /// Spawns a perticular reactor
-    pub fn spawn<S: 'static + Send + ReactorState<K, M>>(
+    pub fn spawn<S: 'static + Send + ReactorState<K, M> + Unpin>(
         &self,
         params: CoreParams<S, K, M>,
         id: Option<ReactorID>,
@@ -185,7 +190,7 @@ where
 
         reactor.init();
 
-        tokio::spawn(reactor);
+        self.pool.spawn(reactor);
 
         id
     }
