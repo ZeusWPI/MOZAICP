@@ -1,11 +1,11 @@
-use core_capnp::initialize;
-use errors::Result;
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::core_capnp::initialize;
+use crate::errors::Result;
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
 
-use base_capnp::{from_client, host_message, to_client};
-use connection_capnp::client_kicked;
-use core_capnp::{actors_joined, terminate_stream};
+use crate::base_capnp::{from_client, host_message, to_client};
+use crate::connection_capnp::client_kicked;
+use crate::core_capnp::{actors_joined, terminate_stream};
 
 pub struct Aggregator {
     connection_manager: ReactorId,

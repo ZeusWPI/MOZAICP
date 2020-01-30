@@ -1,15 +1,15 @@
-use core_capnp::initialize;
-use errors::*;
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::core_capnp::initialize;
+use crate::errors::*;
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
 
-use cmd_capnp::{bot_input, bot_return};
+use crate::cmd_capnp::{bot_input, bot_return};
 
 use std::io::BufReader;
 use std::pin::Pin;
 use std::process::{ChildStdout, Command, Stdio};
 
-use runtime::BrokerHandle;
+use crate::runtime::BrokerHandle;
 
 use futures::task::{self, Poll, SpawnExt};
 use futures::Future;

@@ -1,12 +1,12 @@
-use base_capnp::{client_step, client_turn, from_client, host_message, to_client};
-use connection_capnp::client_kicked;
-use core_capnp::initialize;
-use errors::Result;
-use messaging::reactor::*;
-use messaging::types::*;
-use steplock_capnp::set_timeout;
+use crate::base_capnp::{client_step, client_turn, from_client, host_message, to_client};
+use crate::connection_capnp::client_kicked;
+use crate::core_capnp::initialize;
+use crate::errors::Result;
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
+use crate::steplock_capnp::set_timeout;
 
-use modules::util::PlayerId;
+use crate::modules::util::PlayerId;
 
 #[derive(Debug, Clone)]
 pub enum Turn<'a> {

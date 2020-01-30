@@ -1,4 +1,4 @@
-use messaging::types::ReactorId;
+use crate::messaging::types::ReactorId;
 use std::mem;
 use std::sync::Arc;
 

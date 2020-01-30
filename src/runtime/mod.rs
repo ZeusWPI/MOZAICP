@@ -9,11 +9,11 @@ use futures::FutureExt;
 // use futures::{Async, Future, Poll};
 use tokio::net::TcpListener;
 
-use messaging::types::*;
+use crate::messaging::types::*;
 
 pub use self::runtime::{Broker, BrokerHandle, Runtime};
 
-use net::server::{ClientHandler, ServerHandler};
+use crate::net::server::{ClientHandler, ServerHandler};
 
 pub fn connect_to_server(
     broker: BrokerHandle,

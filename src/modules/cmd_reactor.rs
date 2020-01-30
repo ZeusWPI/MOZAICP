@@ -1,14 +1,14 @@
-use core_capnp::initialize;
-use errors::{self, Consumable};
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::core_capnp::initialize;
+use crate::errors::{self, Consumable};
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
 
-use cmd_capnp::{cmd_input, cmd_return};
+use crate::cmd_capnp::{cmd_input, cmd_return};
 
 use std::io::{self, stdout, BufRead, Write};
 use std::thread;
 
-use runtime::BrokerHandle;
+use crate::runtime::BrokerHandle;
 
 use futures::channel::mpsc;
 use futures::stream::Stream;

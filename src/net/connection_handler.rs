@@ -14,10 +14,10 @@ use capnp::any_pointer;
 use capnp::message::{Builder, HeapAllocator, Reader, ReaderOptions, ReaderSegments};
 use capnp::traits::{HasTypeId, Owned};
 
-use errors;
-use messaging::types::{AnyPtrHandler, Handler, Message};
-use network_capnp::{disconnected, network_message, publish};
-use runtime::BrokerHandle;
+use crate::errors;
+use crate::messaging::types::{AnyPtrHandler, Handler, Message};
+use crate::network_capnp::{disconnected, network_message, publish};
+use crate::runtime::BrokerHandle;
 
 pub struct ConnectionHandler<S> {
     handler: StreamHandler<S>,

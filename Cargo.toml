@@ -2,6 +2,7 @@
 name = "mozaic"
 version = "0.1.0"
 authors = ["Zeus WPI"]
+edition = "2018"
 
 [lib]
 name = "mozaic"

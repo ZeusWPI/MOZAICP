@@ -1,14 +1,14 @@
-use core_capnp::initialize;
-use errors::{Consumable, Result};
-use messaging::reactor::*;
-use messaging::types::*;
-use runtime::BrokerHandle;
+use crate::core_capnp::initialize;
+use crate::errors::{Consumable, Result};
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
+use crate::runtime::BrokerHandle;
 
 use super::util::PlayerId;
-use base_capnp::{client_step, from_client, host_message, to_client};
-use connection_capnp::client_kicked;
-use core_capnp::terminate_stream;
-use steplock_capnp::{set_timeout, timeout};
+use crate::base_capnp::{client_step, from_client, host_message, to_client};
+use crate::connection_capnp::client_kicked;
+use crate::core_capnp::terminate_stream;
+use crate::steplock_capnp::{set_timeout, timeout};
 
 use std::collections::HashMap;
 use std::convert::TryInto;

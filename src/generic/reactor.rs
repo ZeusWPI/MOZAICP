@@ -5,7 +5,7 @@ use super::*;
 
 /// Gives the option for an init function on a reactor
 pub trait ReactorState<K, M> {
-    fn init<'a>(&mut self, &mut ReactorHandle<'a, K, M>) {}
+    fn init<'a>(&mut self, _: &mut ReactorHandle<'a, K, M>) {}
 }
 
 /// Blanket implementation for ()

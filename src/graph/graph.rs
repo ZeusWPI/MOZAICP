@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use messaging::types::ReactorId;
+use crate::messaging::types::ReactorId;
 
 use tokio::sync::mpsc;
 

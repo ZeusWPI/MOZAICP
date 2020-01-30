@@ -2,24 +2,24 @@ use futures::future::FutureExt;
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 
-use core_capnp::initialize;
-use errors::{Consumable, Result};
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::core_capnp::initialize;
+use crate::errors::{Consumable, Result};
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
 
-use connection_capnp::{client_connected, client_disconnected, host_connected};
-use core_capnp::{actor_joined, actors_joined, close, identify, drop};
-use network_capnp::disconnected;
+use crate::connection_capnp::{client_connected, client_disconnected, host_connected};
+use crate::core_capnp::{actor_joined, actors_joined, close, identify, drop};
+use crate::network_capnp::disconnected;
 
-use runtime::BrokerHandle;
+use crate::runtime::BrokerHandle;
 
-use runtime::TcpServer;
+use crate::runtime::TcpServer;
 use std::net::SocketAddr;
 
 use std::collections::HashMap;
 
 use super::client_controller::CCReactor;
-use modules::util::{Identifier, PlayerId};
+use crate::modules::util::{Identifier, PlayerId};
 
 type Closer = tokio::sync::oneshot::Sender<()>;
 
@@ -186,7 +186,7 @@ impl HostLink {
         handle: &mut LinkHandle<C>,
         r: actors_joined::Reader,
     ) -> Result<()> {
-        let m = ::messaging::types::MsgBuffer::<actors_joined::Owned>::from_reader(r)?;
+        let m = crate::messaging::types::MsgBuffer::<actors_joined::Owned>::from_reader(r)?;
         handle.send_message(m)?;
 
         handle.close_link()?;

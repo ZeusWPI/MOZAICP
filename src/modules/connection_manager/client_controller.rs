@@ -1,15 +1,15 @@
-use core_capnp::initialize;
-use errors::{Consumable, Result};
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::core_capnp::initialize;
+use crate::errors::{Consumable, Result};
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
 
-use base_capnp::{client_message, from_client, host_message, inner_to_client, to_client};
-use connection_capnp::{client_disconnected, client_kicked};
-use core_capnp::{actor_joined, close};
+use crate::base_capnp::{client_message, from_client, host_message, inner_to_client, to_client};
+use crate::connection_capnp::{client_disconnected, client_kicked};
+use crate::core_capnp::{actor_joined, close};
 
 use std::collections::VecDeque;
 
-use modules::util::PlayerId;
+use crate::modules::util::PlayerId;
 
 pub struct CCReactor {
     connected: bool,

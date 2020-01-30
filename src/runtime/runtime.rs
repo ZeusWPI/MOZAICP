@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use capnp::traits::{HasTypeId, Owned};
-use core_capnp::{drop, initialize, mozaic_message};
+use crate::core_capnp::{drop, initialize, mozaic_message};
 
 use tokio::sync::mpsc;
 use futures::{Future};
@@ -14,14 +14,14 @@ use tracing_futures::Instrument;
 use rand;
 use rand::Rng;
 
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::messaging::reactor::*;
+use crate::messaging::types::*;
 
-use errors::ErrorKind::{MozaicError, NoSuchReactorError};
-use errors::{self, Consumable, Result, ResultExt};
-use graph;
+use crate::errors::ErrorKind::{MozaicError, NoSuchReactorError};
+use crate::errors::{self, Consumable, Result, ResultExt};
+use crate::graph;
 
-use HasNamedTypeId;
+use crate::HasNamedTypeId;
 
 /// The main runtime
 pub struct Runtime;
