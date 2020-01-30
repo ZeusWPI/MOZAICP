@@ -190,7 +190,7 @@ where
 
         reactor.init();
 
-        self.pool.spawn(reactor);
+        self.pool.spawn(reactor).expect("Couldn't spawn reactor");
 
         id
     }

@@ -5,9 +5,8 @@ use capnp::traits::{HasTypeId, Owned};
 use core_capnp::{drop, initialize, mozaic_message};
 
 use tokio::sync::mpsc;
-use futures::{Future, Stream};
+use futures::{Future};
 use futures::task::Poll;
-use tokio;
 
 use tracing::{error, field, info, span, trace, Level};
 use tracing_futures::Instrument;
@@ -347,7 +346,7 @@ use std::marker::Unpin;
 impl<S: 'static + Unpin> Future for ReactorDriver<S> {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Ctx) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Ctx) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
 
         loop {

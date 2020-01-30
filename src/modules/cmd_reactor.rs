@@ -98,12 +98,11 @@ fn stdin() -> impl Stream<Item = String> {
     thread::spawn(move || {
         let input = io::stdin();
         for line in input.lock().lines() {
-            match line
+            if line
                 .map_err(|_| ())
-                .and_then(|line| tx.try_send(line).map_err(|_| ()))
+                .and_then(|line| tx.try_send(line).map_err(|_| ())).is_err()
             {
-                Ok(s) => {}
-                Err(_) => break,
+                break;
             }
         }
     });

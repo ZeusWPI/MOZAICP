@@ -64,7 +64,7 @@ impl BotReactor {
         cmd.stdout(Stdio::piped());
         cmd.stdin(Stdio::piped());
 
-        let mut bot = cmd.spawn().expect("Couldn't spawn bot");
+        let bot = cmd.spawn().expect("Couldn't spawn bot");
 
         let stdout = bot.stdout.expect("child did not have a handle to stdout");
 
@@ -78,7 +78,7 @@ impl BotReactor {
 
         let (fut, bot_sink) = BotSink::new(stdin);
         self.bot = Bot::Spawned(bot_sink);
-        self.broker.pool().spawn(fut);
+        self.broker.pool().spawn(fut).expect("Couldn't spawn bot driver");
 
         handle.open_link(BotLink::params(handle.id().clone()))?;
         handle.open_link(ForeignLink::params(self.foreign_id.clone()))?;
@@ -185,7 +185,7 @@ where
 {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, ctx: &mut task::Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _ctx: &mut task::Context) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
         loop {
             match this.rx.try_recv() {

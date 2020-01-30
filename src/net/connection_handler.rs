@@ -2,11 +2,11 @@ use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::pin::Pin;
 
-use tokio::net::{tcp, TcpStream};
+use tokio::net::{TcpStream};
 use tokio::sync::mpsc;
 
 use futures::task::{Context as Ctx, Poll};
-use futures::{Future, FutureExt};
+use futures::{Future};
 use futures::executor;
 
 use capnp;
@@ -171,7 +171,10 @@ impl<S> StreamHandler<S> {
 
         while let Some(builder) = self.write_queue.pop_front() {
             let (_, w) = self.stream.split();
-            serialize::write_message(&mut AWrite(w), builder);
+            if executor::block_on(serialize::write_message(&mut AWrite(w), builder)).is_err() {
+                eprintln!("Capnp failed");
+                return Poll::Ready(());
+            }
         }
 
         let (_, w) = self.stream.split();
@@ -196,12 +199,12 @@ impl<S> StreamHandler<S> {
         loop {
             let (r, _) = self.stream.split();
             if let Ok(item) = executor::block_on(serialize::read_message(ARead(r), ReaderOptions::new())) {
-            // if let Ok(item) = ready!(Future::poll(
-            //     Pin::new(&mut .boxed()),
-            //     ctx
-            // )) {
                 if let Some(reader) = item {
-                    self.handle_message(reader);
+                    if self.handle_message(reader).is_err() {
+                        eprintln!("Capnp failed");
+                        return Poll::Ready(());
+                    };
+
                     ready!(self.flush_writes(ctx));
                 } else {
                     return Poll::Pending;

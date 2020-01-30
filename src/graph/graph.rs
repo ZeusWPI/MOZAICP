@@ -183,7 +183,7 @@ use std::pin::Pin;
 impl Future for GraphState {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _ctx: &mut Context) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
         loop {
             match this.rx.try_recv() {

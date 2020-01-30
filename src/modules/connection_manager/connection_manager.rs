@@ -121,7 +121,7 @@ impl ConnectionManager {
                         addr,
                     )
                 }
-            ).map(|_| ()));
+            ).map(|_| ())).expect("Couldn't spawn connection manager");
 
         Ok(())
     }
