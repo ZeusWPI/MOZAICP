@@ -1,4 +1,4 @@
-use super::{Borrowable, Transmutable, FromMessage};
+use super::{FromMessage, IntoMessage};
 use std::any::TypeId;
 use std::sync::atomic::AtomicPtr;
 
@@ -38,8 +38,6 @@ impl Message {
             false => match TypeId::of::<T>() == self.type_id {
                 true => {
                     let ptr: *mut T = ptr.cast();
-                    // When types match
-                    // let res: Box<T> = unsafe { Box::from_raw(ptr.cast()) };
                     unsafe { ptr.as_ref() }
                 }
                 false => None, // When types do not match return None
@@ -48,17 +46,15 @@ impl Message {
     }
 }
 
-impl Borrowable<Message> for Message {
-    fn borrow<'a, T: 'static+ FromMessage<Msg = Message>>(&'a mut self) -> Option<&'a T> {
-        self.borrow()
+impl<T: 'static> FromMessage<Message> for T {
+    fn from_msg<'a>(msg: &'a mut Message) -> Option<&'a T> {
+        msg.borrow()
     }
 }
 
-// impl FromMessage<Message> for Message {}
-
-impl Transmutable<TypeId> for Message {
-    fn transmute<T: 'static>(value: T) -> Option<(TypeId, Self)> {
-        let boxed = Box::new(value);
+impl<T: 'static> IntoMessage<TypeId, Message> for T {
+    fn into_msg(self) -> Option<(TypeId, Message)> {
+        let boxed = Box::new(self);
         let type_id = TypeId::of::<T>();
 
         Some((
@@ -83,29 +79,63 @@ impl Drop for Message {
     }
 }
 
-pub use JSON::JSONMessage;
-mod JSON {
+pub use json::JSONMessage;
+mod json {
     use super::super::*;
-    
-    use serde::de::Deserialize;
+
+    use serde::{Deserialize, Serialize};
     use serde_json::Value;
+    use std::{any, ops};
 
     pub struct JSONMessage {
         value: Value,
-        id: String,
+        id: any::TypeId,
+        item: Option<Message>,
     }
 
-    impl Borrowable<JSONMessage> for JSONMessage {
-        fn borrow<'a, T: 'static + FromMessage<Msg = JSONMessage>>(&'a mut self) -> Option<&'a T> {
-            serde_json::from_value(self.value).ok()
+    impl ops::Deref for JSONMessage {
+        type Target = Value;
+
+        fn deref(&self) -> &Self::Target {
+            &self.value
+        }
+    }
+
+    // Please don't puke
+    impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<JSONMessage> for T {
+        fn from_msg<'a>(msg: &'a mut JSONMessage) -> Option<&'a T> {
+            if let Ok(item) = serde_json::from_value(msg.value.clone()) {
+                msg.item = <T as IntoMessage<any::TypeId, Message>>::into_msg(item).map(|(_, i)| i);
+            }
+
+            if let Some(item) = &mut msg.item {
+                item.borrow()
+            } else {
+                None
+            }
+        }
+    }
+
+    impl<T: 'static + Serialize> IntoMessage<any::TypeId, JSONMessage> for T {
+        fn into_msg(self) -> Option<(any::TypeId, JSONMessage)> {
+            let id = any::TypeId::of::<T>();
+            serde_json::to_value(&self).ok().map(|value| {
+                (
+                    id,
+                    JSONMessage {
+                        value,
+                        id,
+                        item: None,
+                    },
+                )
+            })
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Message;
-    use crate::generic::Transmutable;
+    use crate::generic::IntoMessage;
 
     struct Val {
         value: i32,
@@ -113,7 +143,7 @@ mod tests {
 
     #[test]
     fn exploration() {
-        let (_, mut maybe) = Message::transmute(Val { value: 333 }).unwrap();
+        let (_, mut maybe) = Val::into_msg(Val { value: 333 }).unwrap();
         let result = maybe.take::<Val>().map(|x| x.value);
         assert_eq!(result, Some(333));
 

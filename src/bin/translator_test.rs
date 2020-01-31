@@ -3,7 +3,6 @@ extern crate futures;
 extern crate mozaic;
 extern crate tokio;
 
-use std::marker::PhantomData;
 use std::{any, env, mem, time};
 
 use mozaic::generic;
@@ -12,61 +11,36 @@ use mozaic::generic::*;
 use futures::executor::{self, ThreadPool};
 
 struct M1(Message);
-
-impl Borrowable<M1> for M1 {
-    fn borrow<'a, T: 'static + FromMessage<Msg = M1>>(&'a mut self) -> Option<&'a T> {
-        self.0.borrow()
+impl FromMessage<M1> for E {
+    fn from_msg(msg: &mut M1) -> Option<&E> {
+        msg.0.borrow()
     }
 }
-
-impl Transmutable<any::TypeId> for M1 {
-    fn transmute<T: 'static>(value: T) -> Option<(any::TypeId, Self)> {
-        if let Some((t, m)) = Message::transmute(value) {
-            Some((t, M1(m)))
-        } else {
-            None
-        }
+impl IntoMessage<any::TypeId, M1> for E {
+    fn into_msg(self) -> Option<(any::TypeId, M1)> {
+        <E as IntoMessage<any::TypeId, Message>>::into_msg(self).map(|(k, m)| (k, M1(m)))
     }
 }
 
 struct M2(Message);
-
-impl Borrowable<M2> for M2 {
-    fn borrow<'a, T: 'static + FromMessage<Msg = M2>>(&'a mut self) -> Option<&'a T> {
-        self.0.borrow()
+impl FromMessage<M2> for E {
+    fn from_msg(msg: &mut M2) -> Option<&E> {
+        msg.0.borrow()
     }
 }
-
-impl Transmutable<any::TypeId> for M2 {
-    fn transmute<T: 'static>(value: T) -> Option<(any::TypeId, Self)> {
-        if let Some((t, m)) = Message::transmute(value) {
-            Some((t, M2(m)))
-        } else {
-            None
-        }
+impl IntoMessage<any::TypeId, M2> for E {
+    fn into_msg(self) -> Option<(any::TypeId, M2)> {
+        <E as IntoMessage<any::TypeId, Message>>::into_msg(self).map(|(k, m)| (k, M2(m)))
     }
 }
 
 #[derive(Clone)]
-struct E1;
-impl FromMessage for E1 {
-    type Msg = M1;
-}
+struct E;
 
-#[derive(Clone)]
-struct E2;
-impl FromMessage for E2 {
-    type Msg = M2;
-}
-
-struct FooLink<M: Send, E>(PhantomData<(M, E)>);
-impl<
-        M: 'static + Send + Transmutable<any::TypeId> + Borrowable<M>,
-        E: 'static + Send + FromMessage<Msg = M> + Clone,
-    > FooLink<M, E>
-{
-    fn params() -> LinkParams<FooLink<M, E>, any::TypeId, M> {
-        let mut params = LinkParams::new(FooLink::<M, E>(PhantomData));
+struct M1FooLink();
+impl M1FooLink {
+    fn params() -> LinkParams<M1FooLink, any::TypeId, M1> {
+        let mut params = LinkParams::new(M1FooLink());
 
         params.internal_handler(FunctionHandler::from(Self::forword_message));
         params.external_handler(FunctionHandler::from(Self::backwards));
@@ -74,17 +48,36 @@ impl<
         return params;
     }
 
-    fn forword_message(&mut self, handle: &mut LinkHandle<any::TypeId, M>, e: &E) {
+    fn forword_message(&mut self, handle: &mut LinkHandle<any::TypeId, M1>, e: &E) {
         handle.send_message(e.clone());
     }
 
-    fn backwards(&mut self, handle: &mut LinkHandle<any::TypeId, M>, e: &E) {
+    fn backwards(&mut self, handle: &mut LinkHandle<any::TypeId, M1>, e: &E) {
+        handle.send_internal(e.clone());
+    }
+}
+
+struct M2FooLink();
+impl M2FooLink {
+    fn params() -> LinkParams<M2FooLink, any::TypeId, M2> {
+        let mut params = LinkParams::new(M2FooLink());
+
+        params.internal_handler(FunctionHandler::from(Self::forword_message));
+        params.external_handler(FunctionHandler::from(Self::backwards));
+
+        return params;
+    }
+
+    fn forword_message(&mut self, handle: &mut LinkHandle<any::TypeId, M2>, e: &E) {
+        handle.send_message(e.clone());
+    }
+
+    fn backwards(&mut self, handle: &mut LinkHandle<any::TypeId, M2>, e: &E) {
         handle.send_internal(e.clone());
     }
 }
 
 struct M1Reactor(u64, ThreadPool);
-
 impl M1Reactor {
     fn params(amount: u64, pool: ThreadPool) -> CoreParams<Self, any::TypeId, M1> {
         let mut params = generic::CoreParams::new(Self(amount, pool));
@@ -92,13 +85,13 @@ impl M1Reactor {
         params
     }
 
-    fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M1>, _: &E1) {
+    fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M1>, _: &E) {
         self.0 -= 1;
 
         if self.0 <= 0 {
             handle.close();
         } else {
-            handle.send_internal(E1);
+            handle.send_internal(E);
         }
     }
 }
@@ -107,14 +100,8 @@ impl ReactorState<any::TypeId, M1> for M1Reactor {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, M1>) {
         // Setup translator
         let mut trans = Translator::<any::TypeId, any::TypeId, M1, M2>::new();
-        trans.add_from(
-            any::TypeId::of::<E2>(),
-            Box::new(|_t, _m| M1::transmute(E1)),
-        );
-        trans.add_to(
-            any::TypeId::of::<E1>(),
-            Box::new(|_t, _m| M2::transmute(E2)),
-        );
+        trans.add_from(any::TypeId::of::<E>(), Box::new(|_t, _m| E::into_msg(E)));
+        trans.add_to(any::TypeId::of::<E>(), Box::new(|_t, _m| E::into_msg(E)));
 
         let fn_to = trans.attach_to(11.into(), self.1.clone());
         let fn_from = trans.attach_from(*handle.id(), self.1.clone());
@@ -122,10 +109,10 @@ impl ReactorState<any::TypeId, M1> for M1Reactor {
         let broker = BrokerHandle::new(self.1.clone());
         broker.spawn(M2Reactor::params(fn_from), Some(11.into()));
 
-        handle.open_link(11.into(), FooLink::<M1, E1>::params(), true);
+        handle.open_link(11.into(), M1FooLink::params(), true);
         handle.open_reactor_like(11.into(), fn_to(handle.chan()));
 
-        handle.send_internal(E1);
+        handle.send_internal(E);
     }
 }
 
@@ -143,8 +130,8 @@ impl M2Reactor {
         params
     }
 
-    fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M2>, _: &E2) {
-        handle.send_internal(E2);
+    fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M2>, _: &E) {
+        handle.send_internal(E);
     }
 }
 
@@ -152,7 +139,7 @@ impl ReactorState<any::TypeId, M2> for M2Reactor {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, M2>) {
         let old = mem::replace(self, M2Reactor::Inited());
         if let M2Reactor::Init(spawn) = old {
-            handle.open_link(10.into(), FooLink::<M2, E2>::params(), true);
+            handle.open_link(10.into(), M2FooLink::params(), true);
             handle.open_reactor_like(10.into(), spawn(handle.chan()));
         }
     }

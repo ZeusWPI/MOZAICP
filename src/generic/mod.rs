@@ -1,8 +1,8 @@
 use futures::channel::mpsc;
-use futures::{Future};
-use futures::task::SpawnExt;
 use futures::executor::ThreadPool;
 use futures::future::RemoteHandle;
+use futures::task::SpawnExt;
+use futures::Future;
 
 use rand;
 
@@ -171,7 +171,9 @@ impl<K, M> BrokerHandle<K, M> {
     fn set(&self, id: ReactorID, sender: Sender<K, M>) {
         let mut broker = self.broker.lock().unwrap();
 
-        broker.reactors.insert(id, ReactorChannel::Connected(sender));
+        broker
+            .reactors
+            .insert(id, ReactorChannel::Connected(sender));
     }
 
     pub fn spawn_reactorlike(&self, id: ReactorID, sender: Sender<K, M>) {
@@ -211,25 +213,24 @@ where
 
         reactor.init();
 
-        let fut = self.pool.spawn_with_handle(reactor).expect("Couldn't spawn reactor");
+        let fut = self
+            .pool
+            .spawn_with_handle(reactor)
+            .expect("Couldn't spawn reactor");
 
         (fut, id)
     }
 }
 
-pub trait Borrowable<M> {
-    fn borrow<'a, T: 'static + FromMessage<Msg = M>>(&'a mut self) -> Option<&'a T>;
-}
-
-pub trait FromMessage {
-    type Msg;
-}
-
-pub trait Transmutable<K>
+pub trait FromMessage<M>
 where
     Self: Sized,
 {
-    fn transmute<T: 'static>(_value: T) -> Option<(K, Self)> { None }
+    fn from_msg<'a>(msg: &'a mut M) -> Option<&'a Self>;
+}
+
+pub trait IntoMessage<K, M> {
+    fn into_msg(self) -> Option<(K, M)>;
 }
 
 ///
@@ -241,7 +242,7 @@ where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send + FromMessage<Msg = M>,
+    T: 'static + Send,
 {
     phantom: PhantomData<(S, R, T, M)>,
     function: F,
@@ -252,8 +253,8 @@ where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send + FromMessage<Msg = M>,
-    M: 'static + Send + Borrowable<M>,
+    T: 'static + Send,
+    M: 'static + Send,
 {
     pub fn from(function: F) -> Self {
         Self {
@@ -268,8 +269,8 @@ where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send + FromMessage<Msg = M>,
-    M: 'static + Send + Borrowable<M>,
+    T: 'static + Send,
+    M: 'static + Send,
 {
     fn into(self) -> (any::TypeId, Self) {
         (any::TypeId::of::<T>(), self)
@@ -292,14 +293,13 @@ impl<'a, K, F, S, T, M> Handler<S, ReactorHandle<'a, K, M>, M>
 where
     F: 'static + Send + for<'b> Fn(&mut S, &mut ReactorHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
-    T: 'static + Send + FromMessage<Msg = M>,
+    T: 'static + Send + FromMessage<M>,
     K: 'static + Send,
-    M: 'static + Send + Borrowable<M>,
+    M: 'static + Send,
 {
     fn handle<'b>(&mut self, state: &mut S, handle: &mut ReactorHandle<'b, K, M>, message: &mut M) {
-        message
-            .borrow()
-            .map(|item| (self.function)(state, handle, item))
+        T::from_msg(message)
+            .map(|item| (self.function)(state, handle, &item))
             .expect("No message found at pointer location");
     }
 }
@@ -309,14 +309,13 @@ impl<'a, K, F, S, T, M> Handler<S, LinkHandle<'a, K, M>, M>
 where
     F: 'static + Send + for<'b> Fn(&mut S, &mut LinkHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
-    T: 'static + Send + FromMessage<Msg = M>,
+    T: 'static + Send + FromMessage<M>,
     K: 'static + Send,
-    M: 'static + Send + Borrowable<M>,
+    M: 'static + Send,
 {
     fn handle<'b>(&mut self, state: &mut S, handle: &mut LinkHandle<'b, K, M>, message: &mut M) {
-        message
-            .borrow()
-            .map(|item| (self.function)(state, handle, item))
+        T::from_msg(message)
+            .map(|item| (self.function)(state, handle, &item))
             .expect("No message found at pointer location");
     }
 }

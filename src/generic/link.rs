@@ -51,10 +51,9 @@ pub struct LinkHandle<'a, K, M> {
 
 impl<'a, K, M> LinkHandle<'a, K, M>
 where
-    M: Transmutable<K>,
 {
-    pub fn send_message<T: 'static>(&mut self, msg: T) {
-        if let Some((id, msg)) = M::transmute(msg) {
+    pub fn send_message<T: 'static + IntoMessage<K, M>>(&mut self, msg: T) {
+        if let Some((id, msg)) = T::into_msg(msg) {
             self.state
                 .target
                 .unbounded_send(Operation::ExternalMessage(
@@ -66,8 +65,8 @@ where
         }
     }
 
-    pub fn send_internal<T: 'static>(&mut self, msg: T) {
-        if let Some((id, msg)) = M::transmute(msg) {
+    pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T) {
+        if let Some((id, msg)) = T::into_msg(msg) {
             self.state
                 .source
                 .unbounded_send(Operation::InternalMessage(id, msg, false))
