@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 mod message;
-pub use self::message::Message;
+pub use self::message::{Message, JSONMessage};
 mod link;
 mod reactor;
 mod translator;

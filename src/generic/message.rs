@@ -90,7 +90,7 @@ mod json {
     pub struct JSONMessage {
         value: Value,
         id: any::TypeId,
-        item: Option<Message>,
+        item: Option<Option<Message>>,
     }
 
     impl ops::Deref for JSONMessage {
@@ -104,11 +104,23 @@ mod json {
     // Please don't puke
     impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<JSONMessage> for T {
         fn from_msg<'a>(msg: &'a mut JSONMessage) -> Option<&'a T> {
-            if let Ok(item) = serde_json::from_value(msg.value.clone()) {
-                msg.item = <T as IntoMessage<any::TypeId, Message>>::into_msg(item).map(|(_, i)| i);
+            let id = any::TypeId::of::<T>();
+
+            if id != msg.id {
+                return None;
             }
 
-            if let Some(item) = &mut msg.item {
+            if msg.item.is_none() {
+                msg.item = Some(
+                    serde_json::from_value(msg.value.clone())
+                        .ok()
+                        .and_then(|item| {
+                            <T as IntoMessage<any::TypeId, Message>>::into_msg(item).map(|(_, i)| i)
+                        }),
+                );
+            }
+
+            if let Some(Some(item)) = &mut msg.item {
                 item.borrow()
             } else {
                 None

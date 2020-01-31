@@ -3,6 +3,7 @@ extern crate futures;
 extern crate mozaic;
 extern crate mozaic_derive;
 extern crate tokio;
+#[macro_use] extern crate serde;
 
 use std::{any, env, time};
 
@@ -11,17 +12,18 @@ use mozaic::generic::*;
 
 use futures::executor::{self, ThreadPool};
 
+#[derive(Serialize, Deserialize)]
 struct E(u64);
 
 struct FooReactor(u64);
 impl FooReactor {
-    fn params(amount: u64) -> CoreParams<Self, any::TypeId, Message> {
+    fn params(amount: u64) -> CoreParams<Self, any::TypeId, JSONMessage> {
         generic::CoreParams::new(FooReactor(amount))
     }
 }
 
-impl ReactorState<any::TypeId, Message> for FooReactor {
-    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
+impl ReactorState<any::TypeId, JSONMessage> for FooReactor {
+    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, JSONMessage>) {
         println!("Here");
 
         let id: u64 = **handle.id();
@@ -37,7 +39,7 @@ impl ReactorState<any::TypeId, Message> for FooReactor {
 
 struct FooLink();
 impl FooLink {
-    fn params() -> LinkParams<FooLink, any::TypeId, Message> {
+    fn params() -> LinkParams<FooLink, any::TypeId, JSONMessage> {
         let mut params = LinkParams::new(FooLink());
 
         params.internal_handler(FunctionHandler::from(Self::handle_message));
@@ -46,7 +48,7 @@ impl FooLink {
         return params;
     }
 
-    fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &E) {
+    fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, JSONMessage>, e: &E) {
         let e = e.0 - 1;
 
         if e > 0 {
