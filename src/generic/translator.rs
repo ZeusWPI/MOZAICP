@@ -112,23 +112,22 @@ where
             LinkOperation::ExternalMessage(key, message) => {
                 if let Some(translator) = self.map.get(&key) {
                     let (k, m) = translator(key, message);
-                    println!("Sending");
                     self.sender
-                        .unbounded_send(Operation::ExternalMessage(0.into(), k, m))
+                        .unbounded_send(Operation::ExternalMessage(self.id, k, m))
                         .expect("Soemthing happend");
                 }
             }
             LinkOperation::InternalMessage(key, message) => {
                 if let Some(translator) = self.map.get(&key) {
                     let (k, m) = translator(key, message);
-                    println!("Sending");
                     self.sender
-                        .unbounded_send(Operation::ExternalMessage(0.into(), k, m))
+                        .unbounded_send(Operation::InternalMessage(k, m, false))
                         .expect("Soemthing happend");
                 }
             }
             LinkOperation::Close() => {
                 self.sender.unbounded_send(Operation::CloseLink(self.id)).expect("Bla bla here");
+                self.sender.disconnect();
             }
         }
     }
@@ -151,9 +150,9 @@ impl<K, M> Future for OtherHelper<K, M> {
             match ready!(Stream::poll_next(Pin::new(&mut this.receiver), ctx)) {
                 None => return Poll::Ready(()),
                 Some(item) => {
-                    println!("Copying something");
                     if this.sender.unbounded_send(item).is_err() {
                         println!("Couldn't close translator channel");
+                        return Poll::Ready(());
                     }
                 }
             }

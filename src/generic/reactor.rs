@@ -86,18 +86,20 @@ where
     ///
     /// First looking up his own internal message handler for that message
     /// Then letting all links handle that message
-    fn handle_internal_msg(&mut self, id: K, mut msg: M) {
+    fn handle_internal_msg(&mut self, id: K, mut msg: M, from_self: bool) {
         let mut handle = reactorHandle!(self);
 
-        if let Some(h) = self.msg_handlers.get_mut(&id) {
-            h.handle(&mut self.state, &mut handle, &mut msg);
-        }
+        if from_self {
+            let mut m = LinkOperation::InternalMessage(&id, &mut msg);
+            let mut state = ();
 
-        let mut m = LinkOperation::InternalMessage(&id, &mut msg);
-        let mut state = ();
-
-        for (_, link) in self.links.iter_mut() {
-            link.0.handle(&mut state, &mut handle, &mut m);
+            for (_, link) in self.links.iter_mut() {
+                link.0.handle(&mut state, &mut handle, &mut m);
+            }
+        } else {
+            if let Some(h) = self.msg_handlers.get_mut(&id) {
+                h.handle(&mut self.state, &mut handle, &mut msg);
+            }
         }
     }
 
@@ -204,14 +206,14 @@ where
 
     /// Handles on message at a time, clearing the inner ops queue every time
     /// This opens/closes links and has to be up to date at all times
-    fn poll(self:  Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
 
         loop {
             match ready!(Stream::poll_next(Pin::new(&mut this.channels.1), ctx)) {
                 None => return Poll::Ready(()),
                 Some(item) => match item {
-                    Operation::InternalMessage(id, msg) => this.handle_internal_msg(id, msg),
+                    Operation::InternalMessage(id, msg, from_self) => this.handle_internal_msg(id, msg, from_self),
                     Operation::ExternalMessage(target, id, msg) => {
                         this.handle_external_msg(target, id, msg)
                     }
@@ -313,7 +315,7 @@ where
     pub fn send_internal<T: 'static>(&mut self, msg: T) {
         if let Some((id, msg)) = M::transmute(msg) {
             self.chan
-                .unbounded_send(Operation::InternalMessage(id, msg))
+                .unbounded_send(Operation::InternalMessage(id, msg, true))
                 .expect("crashed");
         }
     }

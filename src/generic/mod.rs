@@ -65,7 +65,7 @@ pub enum LinkOperation<'a, K, M> {
 /// These get consumed by the reactors
 ///
 pub enum Operation<K, M> {
-    InternalMessage(K, M),
+    InternalMessage(K, M, bool),
     ExternalMessage(ReactorID, K, M),
     Close(),
     OpenLink(ReactorID, LinkSpawner<K, M>),
@@ -203,7 +203,6 @@ where
 
         let fut = self.pool.spawn_with_handle(reactor).expect("Couldn't spawn reactor");
 
-        println!("Spawned");
         (fut, id)
     }
 }

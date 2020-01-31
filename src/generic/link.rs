@@ -70,7 +70,7 @@ where
         if let Some((id, msg)) = M::transmute(msg) {
             self.state
                 .source
-                .unbounded_send(Operation::InternalMessage(id, msg))
+                .unbounded_send(Operation::InternalMessage(id, msg, false))
                 .expect("Link handle crashed");
         }
     }
