@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate futures;
 extern crate mozaic;
+#[macro_use] extern crate mozaic_derive;
 extern crate tokio;
 
 use std::{any, env, time};
@@ -10,7 +11,11 @@ use mozaic::generic::*;
 
 use futures::executor::{self, ThreadPool};
 
+#[derive(FromMessage)]
 struct E(u64);
+// impl FromMessage for E {
+//     type Msg = Message;
+// }
 
 struct FooReactor(u64);
 

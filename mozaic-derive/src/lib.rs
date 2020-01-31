@@ -3,6 +3,24 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+#[proc_macro_derive(FromMessage)]
+pub fn hello_world(input: TokenStream) -> TokenStream {
+    // Parse the string representation
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+
+    // Build the impl
+    let gen = quote! {
+        impl ::generic::FromMessage for #name {
+            type Msg = ::generic::Message;
+        }
+    };
+ 
+    // Return the generated impl
+    gen.into()
+}
+
 use proc_macro::TokenStream;
 use std::collections::HashMap;
 

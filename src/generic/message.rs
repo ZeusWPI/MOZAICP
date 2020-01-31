@@ -1,4 +1,4 @@
-use super::{Borrowable, Transmutable};
+use super::{Borrowable, Transmutable, FromMessage};
 use std::any::TypeId;
 use std::sync::atomic::AtomicPtr;
 
@@ -30,17 +30,16 @@ impl Message {
             },
         }
     }
-}
 
-impl Borrowable for Message {
-    fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T> {
+    pub fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T> {
         let ptr = self.ptr.get_mut();
         match ptr.is_null() {
             true => None, // When ptr is null return None
             false => match TypeId::of::<T>() == self.type_id {
                 true => {
+                    let ptr: *mut T = ptr.cast();
                     // When types match
-                    let ptr: *const T = ptr.cast();
+                    // let res: Box<T> = unsafe { Box::from_raw(ptr.cast()) };
                     unsafe { ptr.as_ref() }
                 }
                 false => None, // When types do not match return None
@@ -48,6 +47,14 @@ impl Borrowable for Message {
         }
     }
 }
+
+impl Borrowable<Message> for Message {
+    fn borrow<'a, T: 'static+ FromMessage<Msg = Message>>(&'a mut self) -> Option<&'a T> {
+        self.borrow()
+    }
+}
+
+// impl FromMessage<Message> for Message {}
 
 impl Transmutable<TypeId> for Message {
     fn transmute<T: 'static>(value: T) -> Option<(TypeId, Self)> {
@@ -75,6 +82,26 @@ impl Drop for Message {
         (self.destroy)(self.ptr.get_mut());
     }
 }
+
+// pub use JSON::JSONMessage;
+// mod JSON {
+//     use super::super::*;
+    
+//     use serde::de::Deserialize;
+//     use serde_json::Value;
+
+//     pub struct JSONMessage {
+//         value: Value,
+//         id: String,
+//     }
+
+//     impl Borrowable for JSONMessage {
+//         fn borrow<'a, T: 'static + for <'de> Deserialize<'de>>(&'a mut self) -> Option<&'a T> {
+//             serde_json::from_value(self.value).ok()
+//         }
+//     }
+// }
+
 
 #[cfg(test)]
 mod tests {

@@ -217,38 +217,43 @@ where
     }
 }
 
-pub trait Borrowable {
-    fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T>;
+pub trait Borrowable<M> {
+    fn borrow<'a, T: 'static + FromMessage<Msg = M>>(&'a mut self) -> Option<&'a T>;
+}
+
+pub trait FromMessage {
+    type Msg;
 }
 
 pub trait Transmutable<K>
 where
     Self: Sized,
 {
-    fn transmute<T: 'static>(value: T) -> Option<(K, Self)>;
+    fn transmute<T: 'static>(_value: T) -> Option<(K, Self)> { None }
 }
 
 ///
 /// FunctionHandler<S, T, F, R> makes a Handler from a function
 /// For Messages that is
 ///
-pub struct FunctionHandler<F, S, R, T>
+pub struct FunctionHandler<F, S, R, T, M>
 where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send,
+    T: 'static + Send + FromMessage<Msg = M>,
 {
-    phantom: PhantomData<(S, R, T)>,
+    phantom: PhantomData<(S, R, T, M)>,
     function: F,
 }
 
-impl<F, S, R, T> FunctionHandler<F, S, R, T>
+impl<F, S, R, T, M> FunctionHandler<F, S, R, T, M>
 where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send,
+    T: 'static + Send + FromMessage<Msg = M>,
+    M: 'static + Send + Borrowable<M>,
 {
     pub fn from(function: F) -> Self {
         Self {
@@ -258,12 +263,13 @@ where
     }
 }
 
-impl<F, S, R, T> Into<(any::TypeId, Self)> for FunctionHandler<F, S, R, T>
+impl<F, S, R, T, M> Into<(any::TypeId, Self)> for FunctionHandler<F, S, R, T, M>
 where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send,
+    T: 'static + Send + FromMessage<Msg = M>,
+    M: 'static + Send + Borrowable<M>,
 {
     fn into(self) -> (any::TypeId, Self) {
         (any::TypeId::of::<T>(), self)
@@ -282,13 +288,13 @@ where
 /// to a specific T that is expected for F
 ///
 impl<'a, K, F, S, T, M> Handler<S, ReactorHandle<'a, K, M>, M>
-    for FunctionHandler<F, S, ReactorHandle<'_, K, M>, T>
+    for FunctionHandler<F, S, ReactorHandle<'_, K, M>, T, M>
 where
     F: 'static + Send + for<'b> Fn(&mut S, &mut ReactorHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
-    T: 'static + Send,
+    T: 'static + Send + FromMessage<Msg = M>,
     K: 'static + Send,
-    M: 'static + Send + Borrowable,
+    M: 'static + Send + Borrowable<M>,
 {
     fn handle<'b>(&mut self, state: &mut S, handle: &mut ReactorHandle<'b, K, M>, message: &mut M) {
         message
@@ -299,13 +305,13 @@ where
 }
 
 impl<'a, K, F, S, T, M> Handler<S, LinkHandle<'a, K, M>, M>
-    for FunctionHandler<F, S, LinkHandle<'_, K, M>, T>
+    for FunctionHandler<F, S, LinkHandle<'_, K, M>, T, M>
 where
     F: 'static + Send + for<'b> Fn(&mut S, &mut LinkHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
-    T: 'static + Send,
+    T: 'static + Send + FromMessage<Msg = M>,
     K: 'static + Send,
-    M: 'static + Send + Borrowable,
+    M: 'static + Send + Borrowable<M>,
 {
     fn handle<'b>(&mut self, state: &mut S, handle: &mut LinkHandle<'b, K, M>, message: &mut M) {
         message
