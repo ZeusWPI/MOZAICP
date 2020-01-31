@@ -83,25 +83,24 @@ impl Drop for Message {
     }
 }
 
-// pub use JSON::JSONMessage;
-// mod JSON {
-//     use super::super::*;
+pub use JSON::JSONMessage;
+mod JSON {
+    use super::super::*;
     
-//     use serde::de::Deserialize;
-//     use serde_json::Value;
+    use serde::de::Deserialize;
+    use serde_json::Value;
 
-//     pub struct JSONMessage {
-//         value: Value,
-//         id: String,
-//     }
+    pub struct JSONMessage {
+        value: Value,
+        id: String,
+    }
 
-//     impl Borrowable for JSONMessage {
-//         fn borrow<'a, T: 'static + for <'de> Deserialize<'de>>(&'a mut self) -> Option<&'a T> {
-//             serde_json::from_value(self.value).ok()
-//         }
-//     }
-// }
-
+    impl Borrowable<JSONMessage> for JSONMessage {
+        fn borrow<'a, T: 'static + FromMessage<Msg = JSONMessage>>(&'a mut self) -> Option<&'a T> {
+            serde_json::from_value(self.value).ok()
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
