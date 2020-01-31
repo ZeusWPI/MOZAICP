@@ -19,6 +19,7 @@ macro_rules! reactorHandle {
             chan: &$e.channels.0,
             id: &$e.id,
             inner_ops: &mut $e.inner_ops,
+            broker: &mut $e.broker,
         };
     };
 }
@@ -126,19 +127,6 @@ where
         self.links.insert(target, (spawner(handles), cascade));
     }
 
-    /// Opens a link like
-    /// This is useful for creative reactors, like timeout generators
-    fn open_link_like(
-        &mut self,
-        target: ReactorID,
-        spawner: LinkSpawner<K, M>,
-        cascade: bool,
-        tx: Sender<K, M>,
-    ) {
-        let handles = (self.channels.0.clone(), tx, self.id, target);
-        self.links.insert(target, (spawner(handles), cascade));
-    }
-
     /// Closes a link to the target reactor
     fn close_link(&mut self, target: ReactorID) {
         let mut handle = reactorHandle!(self);
@@ -181,9 +169,6 @@ where
         while let Some(op) = self.inner_ops.pop_back() {
             match op {
                 InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
-                InnerOp::OpenLinkLike(id, spawner, cascade, tx) => {
-                    self.open_link_like(id, spawner, cascade, tx)
-                }
                 InnerOp::Close() => self.close(),
                 InnerOp::CloseLink(id) => self.close_link(id),
             }
@@ -213,7 +198,9 @@ where
             match ready!(Stream::poll_next(Pin::new(&mut this.channels.1), ctx)) {
                 None => return Poll::Ready(()),
                 Some(item) => match item {
-                    Operation::InternalMessage(id, msg, from_self) => this.handle_internal_msg(id, msg, from_self),
+                    Operation::InternalMessage(id, msg, from_self) => {
+                        this.handle_internal_msg(id, msg, from_self)
+                    }
                     Operation::ExternalMessage(target, id, msg) => {
                         this.handle_external_msg(target, id, msg)
                     }
@@ -226,9 +213,6 @@ where
             while let Some(op) = this.inner_ops.pop_back() {
                 match op {
                     InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
-                    InnerOp::OpenLinkLike(id, spawner, cascade, tx) => {
-                        this.open_link_like(id, spawner, cascade, tx)
-                    }
                     InnerOp::Close() => this.close(),
                     InnerOp::CloseLink(id) => this.close_link(id),
                 }
@@ -249,7 +233,6 @@ where
 /// Inner op for reactors
 pub enum InnerOp<K, M> {
     OpenLink(ReactorID, LinkSpawner<K, M>, bool),
-    OpenLinkLike(ReactorID, LinkSpawner<K, M>, bool, Sender<K, M>),
     CloseLink(ReactorID),
     Close(),
 }
@@ -259,11 +242,12 @@ pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,
     id: &'a ReactorID,
     inner_ops: &'a mut VecDeque<InnerOp<K, M>>,
+    broker: &'a mut BrokerHandle<K, M>,
 }
 
 impl<'a, K, M> ReactorHandle<'a, K, M>
 where
-    K: 'static + Eq + Hash + Send,
+    K: 'static + Send + Eq + Hash + Unpin,
     M: 'static + Send,
 {
     pub fn open_link<L>(&mut self, target: ReactorID, spawner: L, cascade: bool)
@@ -274,31 +258,28 @@ where
             .push_back(InnerOp::OpenLink(target, spawner.into(), cascade));
     }
 
-    // This cascade might be useless
-    pub fn open_link_like<L>(
-        &mut self,
-        target: ReactorID,
-        spawner: L,
-        cascade: bool,
-        tx: Sender<K, M>,
-    ) where
-        L: Into<LinkSpawner<K, M>>,
-    {
-        self.inner_ops
-            .push_back(InnerOp::OpenLinkLike(target, spawner.into(), cascade, tx));
+    pub fn open_reactor_like(&mut self, target: ReactorID, tx: Sender<K, M>) {
+        self.broker.spawn_reactorlike(target, tx);
     }
 
     pub fn close(&mut self) {
         self.inner_ops.push_back(InnerOp::Close());
     }
 
-    pub fn spawn<S: 'static + Send>(&mut self, _params: CoreParams<S, K, M>) -> ReactorID {
-        unimplemented!();
-        // self.broker.spawn(params)
+    pub fn spawn<S: 'static + Send + ReactorState<K, M> + Unpin>(
+        &mut self,
+        params: CoreParams<S, K, M>,
+        id: Option<ReactorID>,
+    ) -> ReactorID {
+        self.broker.spawn(params, id)
     }
 
     pub fn id(&mut self) -> &'a ReactorID {
         &self.id
+    }
+
+    pub fn chan(&self) -> Sender<K, M> {
+        self.chan.clone()
     }
 }
 

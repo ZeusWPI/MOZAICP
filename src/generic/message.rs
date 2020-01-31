@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicPtr;
 pub struct Message {
     ptr: AtomicPtr<u8>,
     type_id: TypeId,
-    destroy: Box<dyn Fn(&mut *mut u8) -> () + 'static + Send>,
+    destroy: Box<dyn Fn(&mut *mut u8) -> () + 'static + Send + Sync>,
 }
 
 impl Message {

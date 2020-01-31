@@ -152,7 +152,7 @@ impl<K, M> BrokerHandle<K, M> {
 
         let (channel, receiver) = if let Some(item) = broker.reactors.remove(&id) {
             match item {
-                ReactorChannel::Connected(sender) => (ReactorChannel::Connected(sender), None),
+                ReactorChannel::Connected(_sender) => return None,
                 ReactorChannel::ToConnect(sender, receiver) => (
                     ReactorChannel::Connected(sender.clone()),
                     Some((sender, receiver)),
@@ -166,6 +166,16 @@ impl<K, M> BrokerHandle<K, M> {
         broker.reactors.insert(id, channel);
 
         receiver
+    }
+
+    fn set(&self, id: ReactorID, sender: Sender<K, M>) {
+        let mut broker = self.broker.lock().unwrap();
+
+        broker.reactors.insert(id, ReactorChannel::Connected(sender));
+    }
+
+    pub fn spawn_reactorlike(&self, id: ReactorID, sender: Sender<K, M>) {
+        self.set(id, sender);
     }
 }
 

@@ -1,161 +1,129 @@
 use futures::channel::mpsc;
 use futures::executor::ThreadPool;
-use futures::{Future, Stream};
+use futures::stream::StreamExt;
+use futures::{future, FutureExt};
 
 use super::*;
 use std::collections::HashMap;
 use std::hash::Hash;
 
-enum Combined<K1, K2, M1, M2> {
-    To(K1, M1),
-    From(K2, M2),
+enum InnerMsg<K, M> {
+    Close(),
+    Msg(K, M),
 }
 
 pub struct Translator<K1, K2, M1, M2> {
     to: Option<(
-        Receiver<K1, M1>,
-        HashMap<K1, Box<dyn Fn(&K1, &M1) -> (K2, M2) + Send>>,
+        mpsc::UnboundedReceiver<InnerMsg<K1, M1>>,
+        HashMap<K1, Box<dyn Fn(&K1, &M1) -> Option<(K2, M2)> + Send + Sync>>,
     )>,
     from: Option<(
-        Receiver<K2, M2>,
-        HashMap<K2, Box<dyn Fn(&K2, &M2) -> (K1, M1) + Send>>,
+        mpsc::UnboundedReceiver<InnerMsg<K2, M2>>,
+        HashMap<K2, Box<dyn Fn(&K2, &M2) -> Option<(K1, M1)> + Send + Sync>>,
     )>,
 
-    s1: Sender<K1, M1>,
-    s2: Sender<K2, M2>,
-    id1: ReactorID,
-    id2: ReactorID,
+    s1: mpsc::UnboundedSender<InnerMsg<K1, M1>>,
+    s2: mpsc::UnboundedSender<InnerMsg<K2, M2>>,
 }
 
 impl<K1, K2, M1, M2> Translator<K1, K2, M1, M2>
 where
-    K1: Hash + Eq + Send + 'static,
-    K2: Hash + Eq + Send + 'static,
-    M1: Send + 'static,
-    M2: Send + 'static,
+    K1: Hash + Eq + Send + Sync + 'static,
+    K2: Hash + Eq + Send + Sync + 'static,
+    M1: Send + Sync + 'static,
+    M2: Send + Sync + 'static,
 {
-    pub fn new(id1: ReactorID, id2: ReactorID) -> Self {
+    pub fn new() -> Self {
         let (s1, r1) = mpsc::unbounded();
         let (s2, r2) = mpsc::unbounded();
+
         Self {
             s1: s1,
             s2: s2,
             to: Some((r1, HashMap::new())),
             from: Some((r2, HashMap::new())),
-            id1, id2,
         }
     }
 
-    pub fn add_to(&mut self, key: K1, to_f: Box<dyn Fn(&K1, &M1) -> (K2, M2) + Send>) {
+    pub fn add_to(
+        &mut self,
+        key: K1,
+        to_f: Box<dyn Fn(&K1, &M1) -> Option<(K2, M2)> + Send + Sync>,
+    ) {
         self.to.as_mut().map(|to| to.1.insert(key, to_f));
     }
 
-    pub fn add_from(&mut self, key: K2, from_f: Box<dyn Fn(&K2, &M2) -> (K1, M1) + Send>) {
+    pub fn add_from(
+        &mut self,
+        key: K2,
+        from_f: Box<dyn Fn(&K2, &M2) -> Option<(K1, M1)> + Send + Sync>,
+    ) {
         self.from.as_mut().map(|from| from.1.insert(key, from_f));
     }
 
-    pub fn attach_to(&mut self, pool: ThreadPool) -> (Sender<K1, M1>, LinkSpawner<K1, M1>) {
-        let (rec, map) = std::mem::replace(&mut self.to, None).unwrap();
+    fn attach(
+        origin: ReactorID,
+        pool: ThreadPool,
+        rec: mpsc::UnboundedReceiver<InnerMsg<K1, M1>>,
+        s2: mpsc::UnboundedSender<InnerMsg<K2, M2>>,
+        map: HashMap<K1, Box<dyn Fn(&K1, &M1) -> Option<(K2, M2)> + Send + Sync>>,
+    ) -> Box<dyn FnOnce(Sender<K1, M1>) -> Sender<K1, M1> + Send> {
+        Box::new(move |sender| {
+            let (tx, rx) = mpsc::unbounded();
 
-        let sender = self.s2.clone();
-        let id = self.id2.clone();
-        (
-            self.s1.clone(), // This shouldn't be used
-            Box::new(move |(target, _, _, _)| {
-                pool.spawn_ok(OtherHelper {
-                    sender: target,
-                    receiver: rec,
-                });
+            // translate msg from rx to something and send it to s2
+            pool.spawn_ok(
+                rx.filter_map(move |item| {
+                    future::ready(match item {
+                        Operation::ExternalMessage(_, k, m) => {
+                            map.get(&k).unwrap()(&k, &m).map(|(k, m)| InnerMsg::Msg(k, m))
+                        }
+                        Operation::CloseLink(_) => Some(InnerMsg::Close()),
+                        _ => unimplemented!(),
+                    })
+                })
+                .for_each(move |item| {
+                    s2.unbounded_send(item).expect("Send failed");
+                    future::ready(())
+                })
+                .boxed(),
+            );
 
-                Box::new(Helper::<K1, M1, K2, M2> { sender, map, id })
-            }),
-        )
-    }
-
-    pub fn attach_from(&mut self, pool: ThreadPool) -> (Sender<K2, M2>, LinkSpawner<K2, M2>) {
-        let (rec, map) = std::mem::replace(&mut self.from, None).unwrap();
-
-        let sender = self.s1.clone();
-        let id = self.id1.clone();
-        (
-            self.s2.clone(),
-            Box::new(move |(target, _, _, _)| {
-                pool.spawn_ok(OtherHelper {
-                    sender: target,
-                    receiver: rec,
-                });
-
-                Box::new(Helper::<K2, M2, K1, M1> { sender, map, id })
-            }),
-        )
-    }
-}
-
-struct Helper<K1, M1, K2, M2> {
-    sender: Sender<K2, M2>,
-    id: ReactorID,
-    map: HashMap<K1, Box<dyn Fn(&K1, &M1) -> (K2, M2) + Send>>,
-}
-
-impl<'a, 'b, K1, M1, K2, M2> Handler<(), ReactorHandle<'b, K1, M1>, LinkOperation<'a, K1, M1>>
-    for Helper<K1, M1, K2, M2>
-where
-    K1: Hash + Eq,
-{
-    fn handle(
-        &mut self,
-        _: &mut (),
-        _handle: &mut ReactorHandle<'b, K1, M1>,
-        m: &mut LinkOperation<K1, M1>,
-    ) {
-        match m {
-            LinkOperation::ExternalMessage(key, message) => {
-                if let Some(translator) = self.map.get(&key) {
-                    let (k, m) = translator(key, message);
-                    self.sender
-                        .unbounded_send(Operation::ExternalMessage(self.id, k, m))
-                        .expect("Soemthing happend");
-                }
-            }
-            LinkOperation::InternalMessage(key, message) => {
-                if let Some(translator) = self.map.get(&key) {
-                    let (k, m) = translator(key, message);
-                    self.sender
-                        .unbounded_send(Operation::InternalMessage(k, m, false))
-                        .expect("Soemthing happend");
-                }
-            }
-            LinkOperation::Close() => {
-                self.sender.unbounded_send(Operation::CloseLink(self.id)).expect("Bla bla here");
-                self.sender.disconnect();
-            }
-        }
-    }
-}
-
-struct OtherHelper<K, M> {
-    sender: Sender<K, M>,
-    receiver: Receiver<K, M>,
-}
-
-use futures::task::{Context, Poll};
-use std::pin::Pin;
-
-impl<K, M> Future for OtherHelper<K, M> {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let this = Pin::into_inner(self);
-        loop {
-            match ready!(Stream::poll_next(Pin::new(&mut this.receiver), ctx)) {
-                None => return Poll::Ready(()),
-                Some(item) => {
-                    if this.sender.unbounded_send(item).is_err() {
-                        println!("Couldn't close translator channel");
-                        return Poll::Ready(());
+            // pass msg through from rec to sender
+            pool.spawn_ok(
+                rec.map(move |item| match item {
+                    InnerMsg::Close() => Operation::CloseLink(origin),
+                    InnerMsg::Msg(k, m) => Operation::ExternalMessage(origin, k, m),
+                })
+                .for_each(move |item| {
+                    if sender.unbounded_send(item).is_err() {
+                        println!("Translator channel closed");
                     }
-                }
-            }
-        }
+                    future::ready(())
+                })
+                .boxed(),
+            );
+
+            tx
+        })
+    }
+
+    pub fn attach_to(
+        &mut self,
+        origin: ReactorID,
+        pool: ThreadPool,
+    ) -> Box<dyn FnOnce(Sender<K1, M1>) -> Sender<K1, M1> + Send> {
+        let (rec, map) = std::mem::replace(&mut self.to, None).unwrap();
+        let s2 = self.s2.clone();
+
+        Translator::attach(origin, pool, rec, s2, map)
+    }
+
+    pub fn attach_from(&mut self, origin: ReactorID, pool: ThreadPool
+    ) -> Box<dyn FnOnce(Sender<K2, M2>) -> Sender<K2, M2> + Send> {
+        let (rec, map) = std::mem::replace(&mut self.from, None).unwrap();
+        let s1 = self.s1.clone();
+
+        Translator::attach(origin, pool, rec, s1, map)
     }
 }
