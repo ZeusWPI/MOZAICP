@@ -79,7 +79,7 @@ impl Drop for Message {
     }
 }
 
-pub use json::JSONMessage;
+pub use json::{JSONMessage, Typed};
 mod json {
     use super::super::*;
 
@@ -88,6 +88,38 @@ mod json {
     use std::{any, ops};
 
     pub static ID_FIELD: &str = "type_id";
+
+    #[derive(Deserialize, Serialize)]
+    pub struct Typed<T> {
+        type_id: String,
+
+        #[serde(flatten)]
+        value: T,
+    }
+
+    impl<T: Serialize + for<'de> Deserialize<'de> + Key<String>> From<T> for Typed<T> {
+        fn from(value: T) -> Typed<T> {
+            Self {
+                type_id: T::key(),
+                value,
+            }
+        }
+    }
+
+    impl<T> ops::Deref for Typed<T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            &self.value
+        }
+    }
+
+    impl<T: Key<String>> Key<String> for Typed<T> {
+        fn key() -> String {
+            T::key()
+        }
+    }
+
 
     pub struct JSONMessage {
         value: Value,

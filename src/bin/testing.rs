@@ -4,6 +4,7 @@ extern crate mozaic;
 #[macro_use]
 extern crate mozaic_derive;
 extern crate tokio;
+extern crate serde_json;
 #[macro_use] extern crate serde;
 
 use std::{any, env, time};
@@ -15,19 +16,7 @@ use mozaic::modules::net;
 use futures::executor::{self, ThreadPool};
 
 #[derive(Serialize, Deserialize, Key)]
-struct E {
-    value: u64,
-    type_id: String,
-}
-
-impl E {
-    fn new(value: u64) -> Self {
-        Self {
-            value,
-            type_id: Self::key(),
-        }
-    }
-}
+struct E{v: u64}
 
 struct FooReactor(u64);
 impl FooReactor {
@@ -38,11 +27,15 @@ impl FooReactor {
 
 impl ReactorState<String, JSONMessage> for FooReactor {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, String, JSONMessage>) {
+        println!("INIT");
+
+        println!("{}", serde_json::to_string(&Typed::from(E{v: self.0})).unwrap());
+
         let id: u64 = **handle.id();
 
         if id == 0 {
             handle.open_link(1.into(), FooLink::params(), true);
-            handle.send_internal(E::new(self.0));
+            handle.send_internal(Typed::from(E{v: self.0}));
         } else {
             handle.open_link(0.into(), FooLink::params(), true);
         }
@@ -60,11 +53,11 @@ impl FooLink {
         return params;
     }
 
-    fn handle_message(&mut self, handle: &mut LinkHandle<String, JSONMessage>, e: &E) {
-        let e = e.value - 1;
+    fn handle_message(&mut self, handle: &mut LinkHandle<String, JSONMessage>, e: &Typed<E>) {
+        let e = e.v - 1;
 
         if e > 0 {
-            handle.send_message(E::new(e));
+            handle.send_message(Typed::from(E{v: e}));
         } else {
             println!("Done {:?} -> {:?}", handle.source_id(), handle.target_id());
             handle.close_link();
