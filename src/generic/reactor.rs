@@ -37,13 +37,13 @@ where
 
     broker: BrokerHandle<K, M>,
     state: S,
-    msg_handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>>,
+    msg_handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 
     links: HashMap<
         ReactorID,
         (
             Box<
-                dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
+                dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, &'a mut LinkOperation<'a, K, M>>
                     + Send,
             >,
             bool,
@@ -91,15 +91,14 @@ where
         let mut handle = reactorHandle!(self);
 
         if from_self {
-            let mut m = LinkOperation::InternalMessage(&id, &mut msg);
             let mut state = ();
 
             for (_, link) in self.links.iter_mut() {
-                link.0.handle(&mut state, &mut handle, &mut m);
+                link.0.handle(&mut state, &mut handle, &mut LinkOperation::InternalMessage(&id, &mut msg));
             }
         } else {
             if let Some(h) = self.msg_handlers.get_mut(&id) {
-                h.handle(&mut self.state, &mut handle, &mut msg);
+                h.handle(&mut self.state, &mut handle, (&id, &mut msg));
             }
         }
     }
@@ -143,11 +142,10 @@ where
         let mut handle = reactorHandle!(self);
 
         // Send close message to all links
-        let mut m = LinkOperation::Close();
         let mut state = ();
 
         for (_, link) in self.links.iter_mut() {
-            link.0.handle(&mut state, &mut handle, &mut m);
+            link.0.handle(&mut state, &mut handle, &mut LinkOperation::Close());
         }
 
         // Stop Future
@@ -304,7 +302,7 @@ impl<'a, K, M> ReactorHandle<'a, K, M>
 /// Builder pattern for constructing reactors
 pub struct CoreParams<S, K, M> {
     state: S,
-    handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send>>,
+    handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 }
 
 impl<S, K, M> CoreParams<S, K, M>
@@ -322,7 +320,7 @@ where
     pub fn handler<H, J>(&mut self, handler: H)
     where
         H: Into<(K, J)>,
-        J: for<'a> Handler<S, ReactorHandle<'a, K, M>, M> + Send + 'static,
+        J: for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
         self.handlers.insert(id, Box::new(handler));

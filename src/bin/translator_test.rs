@@ -13,8 +13,8 @@ use mozaic::modules::Translator;
 use futures::executor::{self, ThreadPool};
 
 struct M1(Message);
-impl FromMessage<M1> for E {
-    fn from_msg(msg: &mut M1) -> Option<&E> {
+impl FromMessage<any::TypeId, M1> for E {
+    fn from_msg<'a>(_: &any::TypeId, msg: &'a mut M1) -> Option<&'a E> {
         msg.0.borrow()
     }
 }
@@ -25,8 +25,8 @@ impl IntoMessage<any::TypeId, M1> for E {
 }
 
 struct M2(Message);
-impl FromMessage<M2> for E {
-    fn from_msg(msg: &mut M2) -> Option<&E> {
+impl FromMessage<any::TypeId, M2> for E {
+    fn from_msg<'a>(_: &any::TypeId, msg: &'a mut M2) -> Option<&'a E> {
         msg.0.borrow()
     }
 }

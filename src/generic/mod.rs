@@ -37,7 +37,7 @@ pub type Receiver<K, M> = mpsc::UnboundedReceiver<Operation<K, M>>;
 /// And use handle specific functions
 ///
 pub trait Handler<S, H, M> {
-    fn handle(&mut self, s: &mut S, h: &mut H, m: &mut M);
+    fn handle(&mut self, s: &mut S, h: &mut H, m: M);
 }
 
 /// (SourceHandle, TargetHandle, SourceId, TargetID)
@@ -48,7 +48,7 @@ pub type LinkSpawner<K, M> = Box<
     dyn FnOnce(
             Handles<K, M>,
         ) -> Box<
-            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>> + Send,
+            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, &'a mut LinkOperation<'a, K, M>> + Send,
         > + Send,
 >;
 
@@ -220,11 +220,11 @@ where
     }
 }
 
-pub trait FromMessage<M>
+pub trait FromMessage<K, M>
 where
     Self: Sized,
 {
-    fn from_msg<'a>(msg: &'a mut M) -> Option<&'a Self>;
+    fn from_msg<'a>(key: &K, msg: &'a mut M) -> Option<&'a Self>;
 }
 
 pub trait IntoMessage<K, M> {
@@ -286,33 +286,35 @@ where
 /// For clarification, this implementation goes from a generic Message
 /// to a specific T that is expected for F
 ///
-impl<'a, K, F, S, T, M> Handler<S, ReactorHandle<'a, K, M>, M>
+impl<'a, K, F, S, T, M> Handler<S, ReactorHandle<'a, K, M>, (&K, &mut M)>
     for FunctionHandler<F, S, ReactorHandle<'_, K, M>, T, M>
 where
     F: 'static + Send + for<'b> Fn(&mut S, &mut ReactorHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
-    T: 'static + Send + FromMessage<M>,
+    T: 'static + Send + FromMessage<K, M>,
     K: 'static + Send,
     M: 'static + Send,
 {
-    fn handle<'b>(&mut self, state: &mut S, handle: &mut ReactorHandle<'b, K, M>, message: &mut M) {
-        T::from_msg(message)
+    fn handle<'b>(&mut self, state: &mut S, handle: &mut ReactorHandle<'b, K, M>, msg: (&K, &mut M)) {
+        let (key, message) = msg;
+        T::from_msg(key, message)
             .map(|item| (self.function)(state, handle, &item))
             .expect("No message found at pointer location");
     }
 }
 
-impl<'a, K, F, S, T, M> Handler<S, LinkHandle<'a, K, M>, M>
+impl<'a, K, F, S, T, M> Handler<S, LinkHandle<'a, K, M>, (&K, &mut M)>
     for FunctionHandler<F, S, LinkHandle<'_, K, M>, T, M>
 where
     F: 'static + Send + for<'b> Fn(&mut S, &mut LinkHandle<'b, K, M>, &T) -> (),
     S: 'static + Send,
-    T: 'static + Send + FromMessage<M>,
+    T: 'static + Send + FromMessage<K, M>,
     K: 'static + Send,
     M: 'static + Send,
 {
-    fn handle<'b>(&mut self, state: &mut S, handle: &mut LinkHandle<'b, K, M>, message: &mut M) {
-        T::from_msg(message)
+    fn handle<'b>(&mut self, state: &mut S, handle: &mut LinkHandle<'b, K, M>, msg: (&K, &mut M)) {
+        let (key, message) = msg;
+        T::from_msg(key, message)
             .map(|item| (self.function)(state, handle, &item))
             .expect("No message found at pointer location");
     }

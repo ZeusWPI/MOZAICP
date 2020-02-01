@@ -25,8 +25,8 @@ struct LinkState<K, M> {
 pub struct Link<S, K, M> {
     state: S,
 
-    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
-    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
+    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 
     link_state: LinkState<K, M>,
 }
@@ -92,7 +92,7 @@ where
 
 /// A link is a handler without a real state that handles LinkOperations
 /// These link operations are incomming messages
-impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, LinkOperation<'a, K, M>>
+impl<'a, 'b, S, K, M> Handler<(), ReactorHandle<'b, K, M>, &'a mut LinkOperation<'a, K, M>>
     for Link<S, K, M>
 where
     K: Hash + Eq,
@@ -106,12 +106,12 @@ where
         match m {
             LinkOperation::InternalMessage(id, message) => {
                 if let Some(h) = self.internal_handlers.get_mut(id) {
-                    h.handle(&mut self.state, &mut linkHandle!(self), message);
+                    h.handle(&mut self.state, &mut linkHandle!(self), (id, message));
                 }
             }
             LinkOperation::ExternalMessage(id, message) => {
                 if let Some(h) = self.external_handlers.get_mut(id) {
-                    h.handle(&mut self.state, &mut linkHandle!(self), message);
+                    h.handle(&mut self.state, &mut linkHandle!(self), (id, message));
                 }
             }
             LinkOperation::Close() => {
@@ -132,8 +132,8 @@ where
 /// Builder pattern for constructing links
 pub struct LinkParams<S, K, M> {
     state: S,
-    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
-    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send>>,
+    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 }
 
 impl<S, K, M> LinkParams<S, K, M>
@@ -151,7 +151,7 @@ where
     pub fn internal_handler<H, J>(&mut self, handler: H)
     where
         H: Into<(K, J)>,
-        J: for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send + 'static,
+        J: for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
         self.internal_handlers.insert(id, Box::new(handler));
@@ -160,7 +160,7 @@ where
     pub fn external_handler<H, J>(&mut self, handler: H)
     where
         H: Into<(K, J)>,
-        J: for<'a> Handler<S, LinkHandle<'a, K, M>, M> + Send + 'static,
+        J: for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
         self.external_handlers.insert(id, Box::new(handler));

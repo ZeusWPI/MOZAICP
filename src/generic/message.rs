@@ -46,8 +46,8 @@ impl Message {
     }
 }
 
-impl<T: 'static> FromMessage<Message> for T {
-    fn from_msg<'a>(msg: &'a mut Message) -> Option<&'a T> {
+impl<T: 'static> FromMessage<TypeId, Message> for T {
+    fn from_msg<'a>(_: &TypeId, msg: &'a mut Message) -> Option<&'a T> {
         msg.borrow()
     }
 }
@@ -102,11 +102,9 @@ mod json {
     }
 
     // Please don't puke
-    impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<JSONMessage> for T {
-        fn from_msg<'a>(msg: &'a mut JSONMessage) -> Option<&'a T> {
-            let id = any::TypeId::of::<T>();
-
-            if id != msg.id {
+    impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<any::TypeId, JSONMessage> for T {
+        fn from_msg<'a>(key: &any::TypeId, msg: &'a mut JSONMessage) -> Option<&'a T> {
+            if *key != msg.id {
                 return None;
             }
 
