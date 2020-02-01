@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::messaging::types::ReactorId;
+use crate::generic::ReactorID;
 
 use tokio::sync::mpsc;
 
@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use ws::Sender;
 
 enum EventWrapper {
-    AddNode(u32, String),
-    AddEdge(u32, u32),
-    RemoveNode(u32),
-    RemoveEdge(u32, u32),
+    AddNode(u64, String),
+    AddEdge(u64, u64),
+    RemoveNode(u64),
+    RemoveEdge(u64, u64),
 
     Conn(Sender),
 }
@@ -40,27 +40,27 @@ enum Add {
 #[derive(Serialize, Deserialize, Clone)]
 struct Remove {
     data_type: String,
-    id: u32,
+    id: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Node {
-    id: u32,
+    id: u64,
     label: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Edge {
-    id: u32,
-    from: u32,
-    to: u32,
+    id: u64,
+    from: u64,
+    to: u64,
 }
 
 struct GraphState {
     conns: Vec<Sender>,
     nodes: Vec<Node>,
     edges: Vec<Edge>,
-    created_edges: u32,
+    created_edges: u64,
     rx: mpsc::Receiver<EventWrapper>,
 }
 
@@ -109,7 +109,7 @@ impl GraphState {
         self.conns.push(conn);
     }
 
-    fn add_node(&mut self, id: u32, name: String) {
+    fn add_node(&mut self, id: u64, name: String) {
         let node = Node {
             id: id,
             label: name,
@@ -121,7 +121,7 @@ impl GraphState {
         self.emit_event(event);
     }
 
-    fn add_edge(&mut self, from: u32, to: u32) {
+    fn add_edge(&mut self, from: u64, to: u64) {
         let edge = Edge {
             id: self.get_new_edge_id(),
             from: from,
@@ -134,7 +134,7 @@ impl GraphState {
         self.emit_event(event);
     }
 
-    fn remove_node(&mut self, id: u32) {
+    fn remove_node(&mut self, id: u64) {
         first_index(&self.nodes, |n| n.id == id).map(|idx| self.nodes.remove(idx));
 
         let event = Event::Remove(Remove {
@@ -145,7 +145,7 @@ impl GraphState {
         self.emit_event(event);
     }
 
-    fn remove_edge(&mut self, from: u32, to: u32) {
+    fn remove_edge(&mut self, from: u64, to: u64) {
         if let Some(id) = first_index(&self.edges, |n| n.from == from && n.to == to)
             .map(|idx| self.edges.remove(idx).id)
         {
@@ -170,7 +170,7 @@ impl GraphState {
         }
     }
 
-    fn get_new_edge_id(&mut self) -> u32 {
+    fn get_new_edge_id(&mut self) -> u64 {
         self.created_edges += 1;
         self.created_edges
     }
@@ -237,41 +237,41 @@ impl Graph {
 
 use super::GraphLike;
 impl GraphLike for Graph {
-    fn add_node(&self, id: &ReactorId, name: &str) {
+    fn add_node(&self, id: &ReactorID, name: &str) {
         if let Err(_) = self
             .tx
             .clone()
-            .try_send(EventWrapper::AddNode(id.as_u32(), String::from(name)))
+            .try_send(EventWrapper::AddNode(**id, String::from(name)))
         {
             error!("Couldnt send message to graph");
         }
     }
 
-    fn add_edge(&self, from: &ReactorId, to: &ReactorId) {
+    fn add_edge(&self, from: &ReactorID, to: &ReactorID) {
         if let Err(_) = self
             .tx
             .clone()
-            .try_send(EventWrapper::AddEdge(from.as_u32(), to.as_u32()))
+            .try_send(EventWrapper::AddEdge(**from, **to))
         {
             error!("Couldn't send message to graph");
         }
     }
 
-    fn remove_node(&self, id: &ReactorId) {
+    fn remove_node(&self, id: &ReactorID) {
         if let Err(_) = self
             .tx
             .clone()
-            .try_send(EventWrapper::RemoveNode(id.as_u32()))
+            .try_send(EventWrapper::RemoveNode(**id))
         {
             error!("Couldn't send message to graph");
         }
     }
 
-    fn remove_edge(&self, from: &ReactorId, to: &ReactorId) {
+    fn remove_edge(&self, from: &ReactorID, to: &ReactorID) {
         if let Err(_) = self
             .tx
             .clone()
-            .try_send(EventWrapper::RemoveEdge(from.as_u32(), to.as_u32()))
+            .try_send(EventWrapper::RemoveEdge(**from, **to))
         {
             error!("Couldn't send message to graph");
         }

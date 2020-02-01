@@ -16,12 +16,10 @@ mod message;
 pub use self::message::{Message, JSONMessage};
 mod link;
 mod reactor;
-mod translator;
 mod types;
 
 pub use self::link::{Link, LinkHandle, LinkParams};
 pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState};
-pub use self::translator::Translator;
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;

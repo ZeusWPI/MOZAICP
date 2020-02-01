@@ -8,6 +8,8 @@ use std::{any, env, mem, time};
 use mozaic::generic;
 use mozaic::generic::*;
 
+use mozaic::modules::Translator;
+
 use futures::executor::{self, ThreadPool};
 
 struct M1(Message);

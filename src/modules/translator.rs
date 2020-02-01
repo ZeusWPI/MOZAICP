@@ -3,9 +3,10 @@ use futures::executor::ThreadPool;
 use futures::stream::StreamExt;
 use futures::{future, FutureExt};
 
-use super::*;
 use std::collections::HashMap;
 use std::hash::Hash;
+
+use crate::generic::*;
 
 enum InnerMsg<K, M> {
     Close(),
