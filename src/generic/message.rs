@@ -87,9 +87,11 @@ mod json {
     use serde_json::Value;
     use std::{any, ops};
 
+    pub static ID_FIELD: &str = "type_id";
+
     pub struct JSONMessage {
         value: Value,
-        id: any::TypeId,
+        id: String,
         item: Option<Option<Message>>,
     }
 
@@ -101,16 +103,11 @@ mod json {
         }
     }
 
-    // Please don't puke
-    impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<any::TypeId, JSONMessage> for T {
-        fn from_msg<'a>(key: &any::TypeId, msg: &'a mut JSONMessage) -> Option<&'a T> {
-            if *key != msg.id {
-                return None;
-            }
-
-            if msg.item.is_none() {
-                msg.item = Some(
-                    serde_json::from_value(msg.value.clone())
+    impl JSONMessage {
+        fn borrow<'a, T: 'static + for<'de> Deserialize<'de>>(&'a mut self) -> Option<&'a T> {
+            if self.item.is_none() {
+                self.item = Some(
+                    serde_json::from_value(self.value.clone())
                         .ok()
                         .and_then(|item| {
                             <T as IntoMessage<any::TypeId, Message>>::into_msg(item).map(|(_, i)| i)
@@ -118,7 +115,7 @@ mod json {
                 );
             }
 
-            if let Some(Some(item)) = &mut msg.item {
+            if let Some(Some(item)) = &mut self.item {
                 item.borrow()
             } else {
                 None
@@ -126,19 +123,31 @@ mod json {
         }
     }
 
-    impl<T: 'static + Serialize> IntoMessage<any::TypeId, JSONMessage> for T {
-        fn into_msg(self) -> Option<(any::TypeId, JSONMessage)> {
-            let id = any::TypeId::of::<T>();
-            serde_json::to_value(&self).ok().map(|value| {
-                (
-                    id,
-                    JSONMessage {
+    // Please don't puke
+    impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<String, JSONMessage> for T {
+        fn from_msg<'a>(key: &String, msg: &'a mut JSONMessage) -> Option<&'a T> {
+            if *key != msg.id {
+                return None;
+            }
+
+            msg.borrow()
+        }
+    }
+
+    impl<T: 'static + Serialize> IntoMessage<String, JSONMessage> for T {
+        fn into_msg(self) -> Option<(String, JSONMessage)> {
+
+            if let Ok(value) = serde_json::to_value(&self) {
+                if let Some(id) = value.get(ID_FIELD).and_then(|v| v.as_str()).map(String::from) {
+                    return Some((id.clone(), JSONMessage {
                         value,
                         id,
                         item: None,
-                    },
-                )
-            })
+                    }))
+                }
+            }
+
+            None
         }
     }
 }

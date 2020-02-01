@@ -163,7 +163,7 @@ where
         J: for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
-        self.external_handlers.insert(id, Box::new(handler));
+        self.external_handlers.insert(id.into(), Box::new(handler));
     }
 }
 

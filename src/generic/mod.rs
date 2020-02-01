@@ -195,6 +195,10 @@ where
         id
     }
 
+    pub fn rand_id() -> ReactorID {
+        rand::random::<u64>().into()
+    }
+
     pub fn spawn_with_handle<S: 'static + Send + ReactorState<K, M> + Unpin>(
         &self,
         params: CoreParams<S, K, M>,
@@ -231,6 +235,16 @@ pub trait IntoMessage<K, M> {
     fn into_msg(self) -> Option<(K, M)>;
 }
 
+pub trait Key<K> {
+    fn key() -> K;
+}
+
+impl<T: 'static> Key<any::TypeId> for T {
+    fn key() -> any::TypeId {
+        any::TypeId::of::<T>()
+    }
+}
+
 ///
 /// FunctionHandler<S, T, F, R> makes a Handler from a function
 /// For Messages that is
@@ -262,16 +276,17 @@ where
     }
 }
 
-impl<F, S, R, T, M> Into<(any::TypeId, Self)> for FunctionHandler<F, S, R, T, M>
+impl<F, S, R, T, M, K> Into<(K, Self)> for FunctionHandler<F, S, R, T, M>
 where
     F: 'static + Send + Fn(&mut S, &mut R, &T) -> (),
     S: 'static + Send,
     R: 'static + Send,
-    T: 'static + Send,
+    T: 'static + Send + Key<K>,
     M: 'static + Send,
+    K: 'static + Send,
 {
-    fn into(self) -> (any::TypeId, Self) {
-        (any::TypeId::of::<T>(), self)
+    fn into(self) -> (K, Self) {
+        (T::key(), self)
     }
 }
 

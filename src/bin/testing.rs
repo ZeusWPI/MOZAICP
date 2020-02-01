@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate futures;
 extern crate mozaic;
+#[macro_use]
 extern crate mozaic_derive;
 extern crate tokio;
 #[macro_use] extern crate serde;
@@ -9,28 +10,39 @@ use std::{any, env, time};
 
 use mozaic::generic;
 use mozaic::generic::*;
+use mozaic::modules::net;
 
 use futures::executor::{self, ThreadPool};
 
-#[derive(Serialize, Deserialize)]
-struct E(u64);
+#[derive(Serialize, Deserialize, Key)]
+struct E {
+    value: u64,
+    type_id: String,
+}
+
+impl E {
+    fn new(value: u64) -> Self {
+        Self {
+            value,
+            type_id: Self::key(),
+        }
+    }
+}
 
 struct FooReactor(u64);
 impl FooReactor {
-    fn params(amount: u64) -> CoreParams<Self, any::TypeId, JSONMessage> {
+    fn params(amount: u64) -> CoreParams<Self, String, JSONMessage> {
         generic::CoreParams::new(FooReactor(amount))
     }
 }
 
-impl ReactorState<any::TypeId, JSONMessage> for FooReactor {
-    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, JSONMessage>) {
-        println!("Here");
-
+impl ReactorState<String, JSONMessage> for FooReactor {
+    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, String, JSONMessage>) {
         let id: u64 = **handle.id();
 
         if id == 0 {
             handle.open_link(1.into(), FooLink::params(), true);
-            handle.send_internal(E(self.0));
+            handle.send_internal(E::new(self.0));
         } else {
             handle.open_link(0.into(), FooLink::params(), true);
         }
@@ -39,7 +51,7 @@ impl ReactorState<any::TypeId, JSONMessage> for FooReactor {
 
 struct FooLink();
 impl FooLink {
-    fn params() -> LinkParams<FooLink, any::TypeId, JSONMessage> {
+    fn params() -> LinkParams<FooLink, String, JSONMessage> {
         let mut params = LinkParams::new(FooLink());
 
         params.internal_handler(FunctionHandler::from(Self::handle_message));
@@ -48,11 +60,11 @@ impl FooLink {
         return params;
     }
 
-    fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, JSONMessage>, e: &E) {
-        let e = e.0 - 1;
+    fn handle_message(&mut self, handle: &mut LinkHandle<String, JSONMessage>, e: &E) {
+        let e = e.value - 1;
 
         if e > 0 {
-            handle.send_message(E(e));
+            handle.send_message(E::new(e));
         } else {
             println!("Done {:?} -> {:?}", handle.source_id(), handle.target_id());
             handle.close_link();

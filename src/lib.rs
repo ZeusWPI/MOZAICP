@@ -22,6 +22,7 @@ extern crate capnp_futures;
 
 extern crate ws;
 
+#[macro_use]
 extern crate mozaic_derive;
 
 // pub mod messaging;
