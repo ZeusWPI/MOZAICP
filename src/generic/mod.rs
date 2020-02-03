@@ -4,8 +4,6 @@ use futures::future::RemoteHandle;
 use futures::task::SpawnExt;
 use futures::Future;
 
-use rand;
-
 use std::any;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -196,16 +194,12 @@ where
         id
     }
 
-    pub fn rand_id() -> ReactorID {
-        rand::random::<u64>().into()
-    }
-
     pub fn spawn_with_handle<S: 'static + Send + ReactorState<K, M> + Unpin>(
         &self,
         params: CoreParams<S, K, M>,
         id: Option<ReactorID>,
     ) -> (RemoteHandle<()>, ReactorID) {
-        let id = id.unwrap_or_else(|| rand::random::<u64>().into());
+        let id = id.unwrap_or_else(|| ReactorID::rand());
 
         let mut reactor = Reactor::new(
             id,
@@ -271,6 +265,27 @@ where
 
         Some(())
     }
+}
+
+impl<K, M> Clone for SenderHandle<K, M> {
+    fn clone(&self) -> Self {
+        SenderHandle {
+            sender: self.sender.clone()
+        }
+    }
+}
+
+use futures::stream::{StreamExt, Stream};
+pub fn receiver_handle<K, M>(inner: Receiver<K, M>) -> impl Stream<Item = Option<(ReactorID, K, M)>> {
+    inner.filter_map(
+        move |item| async {
+            match item {
+                Operation::ExternalMessage(id, k, m) => Some(Some((id, k, m))),
+                Operation::CloseLink(_id) => Some(None),
+                _ => None
+            }
+        }
+    )
 }
 
 ///

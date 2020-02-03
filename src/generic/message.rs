@@ -153,6 +153,10 @@ mod json {
                 None
             }
         }
+
+        pub fn bytes(&self) -> Option<Vec<u8>> {
+            serde_json::to_vec(&self.value).ok()
+        }
     }
 
     // Please don't puke

@@ -1,33 +1,64 @@
 use std::any;
 use std::pin::Pin;
+use std::collections::VecDeque;
 
 use futures::prelude::*;
 use futures::task::{Context, Poll};
+use futures::channel::mpsc;
 
 use serde_json::Value;
 
-use super::types::{Data, PlayerId, PlayerMsg, Accepted};
-use crate::generic::*;
+use super::types::{Accepted, Data, PlayerId, PlayerMsg};
 use crate::generic::FromMessage;
+use crate::generic::*;
 
 pub struct ClientController {
     id: ReactorID,
     broker: BrokerHandle<String, JSONMessage>,
 
-    target: (ReactorID, SenderHandle<any::TypeId, Message>),
+    host: (ReactorID, SenderHandle<any::TypeId, Message>),
     conn_man: ReactorID,
     client: Option<(ReactorID, SenderHandle<String, JSONMessage>)>,
 
     client_id: PlayerId,
 
-    target_rx: Receiver<any::TypeId, Message>,
+    host_rx: Receiver<any::TypeId, Message>,
     client_rx: Receiver<String, JSONMessage>,
 
     closed: bool,
-    buffer: Vec<Value>, // this might be Value
+    buffer: VecDeque<Value>, // this might be Value
 }
 
 impl ClientController {
+    pub fn spawn(
+        id: ReactorID,
+        json_broker: BrokerHandle<String, JSONMessage>,
+        t_broker: BrokerHandle<any::TypeId, Message>,
+        host: ReactorID,
+        connection_manager: ReactorID,
+        client_id: PlayerId,
+    ) -> Self {
+        let host_sender = t_broker.get_sender(&host);
+
+        let (host_tx, host_rx) = mpsc::unbounded();
+        let (client_tx, client_rx) = mpsc::unbounded();
+
+        json_broker.spawn_reactorlike(id, client_tx);
+        t_broker.spawn_reactorlike(id, host_tx);
+
+        ClientController {
+            id,
+            broker: json_broker,
+            host: (host, host_sender),
+            conn_man: connection_manager,
+            client: None,
+            client_id,
+            host_rx, client_rx,
+            closed: false,
+            buffer: VecDeque::new(),
+        }
+    }
+
     fn handle_client_disconencted(&mut self) {
         self.client = None;
     }
@@ -56,15 +87,18 @@ impl ClientController {
     }
 
     fn handle_client_msg(&mut self, _: String, msg: JSONMessage) {
-        let msg = PlayerMsg { id: self.client_id, value: msg.clone() };
+        let msg = PlayerMsg {
+            id: self.client_id,
+            value: msg.clone(),
+        };
 
-        self.target.1.send(self.id, msg).unwrap();
+        self.host.1.send(self.id, msg).unwrap();
     }
 
-    fn handle_target_msg(&mut self, key: any::TypeId, mut msg: Message) {
+    fn handle_host_msg(&mut self, key: any::TypeId, mut msg: Message) {
         if key == any::TypeId::of::<Value>() {
             if let Some(value) = Value::from_msg(&key, &mut msg) {
-                self.buffer.push(value.clone());
+                self.buffer.push_back(value.clone());
             }
         }
     }
@@ -76,33 +110,43 @@ impl Future for ClientController {
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
 
-        // Do target things
+        // Do host things
         loop {
             match Stream::poll_next(Pin::new(&mut this.client_rx), ctx) {
                 Poll::Pending => break,
                 Poll::Ready(None) => this.closed = true,
-                Poll::Ready(Some(Operation::ExternalMessage(reactor, key, msg))) if reactor == this.conn_man => this.handle_conn_msg(key, msg),
-                Poll::Ready(Some(Operation::ExternalMessage(_, key, msg))) => this.handle_client_msg(key, msg),
-                Poll::Ready(Some(Operation::CloseLink(reactor))) if reactor == this.conn_man => this.closed = true,
+                Poll::Ready(Some(Operation::ExternalMessage(reactor, key, msg)))
+                    if reactor == this.conn_man =>
+                {
+                    this.handle_conn_msg(key, msg)
+                }
+                Poll::Ready(Some(Operation::ExternalMessage(_, key, msg))) => {
+                    this.handle_client_msg(key, msg)
+                }
+                Poll::Ready(Some(Operation::CloseLink(reactor))) if reactor == this.conn_man => {
+                    this.closed = true
+                }
                 Poll::Ready(Some(Operation::CloseLink(_))) => this.handle_client_disconencted(),
-                _ => { unreachable!() }
+                _ => unreachable!(),
             }
         }
 
         loop {
-            match Stream::poll_next(Pin::new(&mut this.target_rx), ctx) {
+            match Stream::poll_next(Pin::new(&mut this.host_rx), ctx) {
                 Poll::Pending => break,
                 Poll::Ready(None) => this.closed = true,
-                Poll::Ready(Some(Operation::ExternalMessage(_, key, msg))) => this.handle_target_msg(key, msg),
+                Poll::Ready(Some(Operation::ExternalMessage(_, key, msg))) => {
+                    this.handle_host_msg(key, msg)
+                }
                 Poll::Ready(Some(Operation::CloseLink(_))) => this.closed = true,
-                _ => { unreachable!() }
+                _ => unreachable!(),
             }
         }
 
         this.flush_client();
 
         if this.closed {
-            if this.target.1.close(this.id).is_none() {
+            if this.host.1.close(this.id).is_none() {
                 println!("ClientController: Target link closed")
             }
 
@@ -111,7 +155,7 @@ impl Future for ClientController {
                     println!("ClientController: Client link closed")
                 }
             }
-            return Poll::Ready(())
+            return Poll::Ready(());
         }
 
         Poll::Pending
