@@ -7,11 +7,10 @@ extern crate tokio;
 extern crate serde_json;
 #[macro_use] extern crate serde;
 
-use std::{any, env, time};
+use std::{env, time};
 
 use mozaic::generic;
 use mozaic::generic::*;
-use mozaic::modules::net;
 
 use futures::executor::{self, ThreadPool};
 
@@ -53,7 +52,7 @@ impl FooLink {
         return params;
     }
 
-    fn handle_message(&mut self, handle: &mut LinkHandle<String, JSONMessage>, e: &Typed<E>) {
+    fn handle_message(&mut self, handle: &mut LinkHandle<String, JSONMessage>, e: &E) {
         let e = e.v - 1;
 
         if e > 0 {

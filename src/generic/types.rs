@@ -1,15 +1,9 @@
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct TypeID(u64);
+use std::ops::Deref;
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactorID(u64);
-
-impl From<u64> for TypeID {
-    fn from(id: u64) -> Self {
-        TypeID(id)
-    }
-}
 
 impl From<u64> for ReactorID {
     fn from(id: u64) -> Self {
@@ -17,24 +11,10 @@ impl From<u64> for ReactorID {
     }
 }
 
-impl Into<u64> for TypeID {
-    fn into(self) -> u64 {
-        self.0
-    }
-}
 
 impl Into<u64> for ReactorID {
     fn into(self) -> u64 {
         self.0
-    }
-}
-
-use std::ops::Deref;
-impl Deref for TypeID {
-    type Target = u64;
-
-    fn deref(&self) -> &u64 {
-        &self.0
     }
 }
 

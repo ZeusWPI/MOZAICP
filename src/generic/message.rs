@@ -136,7 +136,7 @@ mod json {
     }
 
     impl JSONMessage {
-        fn borrow<'a, T: 'static + for<'de> Deserialize<'de>>(&'a mut self) -> Option<&'a T> {
+        pub fn borrow<'a, T: 'static + for<'de> Deserialize<'de>>(&'a mut self) -> Option<&'a T> {
             if self.item.is_none() {
                 self.item = Some(
                     serde_json::from_value(self.value.clone())

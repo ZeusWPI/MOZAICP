@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 mod message;
-pub use self::message::{Message, JSONMessage, Typed};
+pub use self::message::{JSONMessage, Message, Typed};
 mod link;
 mod reactor;
 mod types;
@@ -48,7 +48,8 @@ pub type LinkSpawner<K, M> = Box<
     dyn FnOnce(
             Handles<K, M>,
         ) -> Box<
-            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, &'a mut LinkOperation<'a, K, M>> + Send,
+            dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, &'a mut LinkOperation<'a, K, M>>
+                + Send,
         > + Send,
 >;
 
@@ -222,6 +223,10 @@ where
 
         (fut, id)
     }
+
+    pub fn get_sender(&self, target: &ReactorID) -> SenderHandle<K, M> {
+        SenderHandle { sender: self.get(target) }
+    }
 }
 
 pub trait FromMessage<K, M>
@@ -242,6 +247,29 @@ pub trait Key<K> {
 impl<T: 'static> Key<any::TypeId> for T {
     fn key() -> any::TypeId {
         any::TypeId::of::<T>()
+    }
+}
+
+pub struct SenderHandle<K, M> {
+    sender: Sender<K, M>,
+}
+
+impl<K, M> SenderHandle<K, M>
+where
+    K: 'static + Eq + Hash + Send + Unpin,
+    M: 'static + Send,
+{
+    pub fn send<T: IntoMessage<K, M>>(&self, from: ReactorID, msg: T) -> Option<()> {
+        let (k, m) = msg.into_msg()?;
+        self.sender.unbounded_send(Operation::ExternalMessage(from, k, m)).ok()?;
+
+        Some(())
+    }
+
+    pub fn close(&self, from: ReactorID) -> Option<()> {
+        self.sender.unbounded_send(Operation::CloseLink(from)).ok()?;
+
+        Some(())
     }
 }
 
@@ -310,7 +338,12 @@ where
     K: 'static + Send,
     M: 'static + Send,
 {
-    fn handle<'b>(&mut self, state: &mut S, handle: &mut ReactorHandle<'b, K, M>, msg: (&K, &mut M)) {
+    fn handle<'b>(
+        &mut self,
+        state: &mut S,
+        handle: &mut ReactorHandle<'b, K, M>,
+        msg: (&K, &mut M),
+    ) {
         let (key, message) = msg;
         T::from_msg(key, message)
             .map(|item| (self.function)(state, handle, &item))
