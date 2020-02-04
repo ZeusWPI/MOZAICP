@@ -3,6 +3,7 @@ extern crate futures;
 extern crate mozaic;
 #[macro_use]
 extern crate mozaic_derive;
+#[macro_use]
 extern crate tokio;
 extern crate serde_json;
 #[macro_use] extern crate serde;
@@ -11,6 +12,8 @@ use std::{env, time};
 
 use mozaic::generic;
 use mozaic::generic::*;
+
+use mozaic::modules::ConnectionManager;
 
 use futures::executor::{self, ThreadPool};
 
@@ -65,17 +68,23 @@ impl FooLink {
 }
 
 async fn run(amount: u64, pool: ThreadPool) {
-    let broker = BrokerHandle::new(pool);
+    let broker = BrokerHandle::new(pool.clone());
     let p1 = FooReactor::params(amount);
     let p2 = FooReactor::params(amount);
+
+    let json_broker = BrokerHandle::new(pool.clone());
+
+    let cm = ConnectionManager::params(pool.clone(), "127.0.0.1:6666".parse().unwrap(), 0.into(), json_broker.clone(), vec![(0, 1.into())].drain(..).collect());
 
     join!(
         broker.spawn_with_handle(p2, Some(0.into())).0,
         broker.spawn_with_handle(p1, Some(1.into())).0,
+        json_broker.spawn_with_handle(cm, None).0,
     );
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     let amount = args
         .get(1)
@@ -89,7 +98,7 @@ fn main() {
             .create()
             .unwrap();
 
-        executor::block_on(run(amount, pool));
+        run(amount, pool).await;
     }
 
     std::thread::sleep(time::Duration::from_millis(100));

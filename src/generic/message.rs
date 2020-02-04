@@ -157,6 +157,10 @@ mod json {
         pub fn bytes(&self) -> Option<Vec<u8>> {
             serde_json::to_vec(&self.value).ok()
         }
+
+        pub fn into_t<'a, T: FromMessage<String, JSONMessage> + Key<String>>(&'a mut self) -> Option<&'a T> {
+            T::from_msg(&T::key(), self)
+        }
     }
 
     // Please don't puke
