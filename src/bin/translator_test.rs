@@ -42,12 +42,9 @@ struct E;
 struct M1FooLink();
 impl M1FooLink {
     fn params() -> LinkParams<M1FooLink, any::TypeId, M1> {
-        let mut params = LinkParams::new(M1FooLink());
-
-        params.internal_handler(FunctionHandler::from(Self::forword_message));
-        params.external_handler(FunctionHandler::from(Self::backwards));
-
-        return params;
+        LinkParams::new(M1FooLink())
+            .internal_handler(FunctionHandler::from(Self::forword_message))
+            .external_handler(FunctionHandler::from(Self::backwards))
     }
 
     fn forword_message(&mut self, handle: &mut LinkHandle<any::TypeId, M1>, e: &E) {
@@ -62,12 +59,9 @@ impl M1FooLink {
 struct M2FooLink();
 impl M2FooLink {
     fn params() -> LinkParams<M2FooLink, any::TypeId, M2> {
-        let mut params = LinkParams::new(M2FooLink());
-
-        params.internal_handler(FunctionHandler::from(Self::forword_message));
-        params.external_handler(FunctionHandler::from(Self::backwards));
-
-        return params;
+        LinkParams::new(M2FooLink())
+            .internal_handler(FunctionHandler::from(Self::forword_message))
+            .external_handler(FunctionHandler::from(Self::backwards))
     }
 
     fn forword_message(&mut self, handle: &mut LinkHandle<any::TypeId, M2>, e: &E) {
@@ -82,9 +76,7 @@ impl M2FooLink {
 struct M1Reactor(u64, ThreadPool);
 impl M1Reactor {
     fn params(amount: u64, pool: ThreadPool) -> CoreParams<Self, any::TypeId, M1> {
-        let mut params = generic::CoreParams::new(Self(amount, pool));
-        params.handler(FunctionHandler::from(Self::thing));
-        params
+        generic::CoreParams::new(Self(amount, pool)).handler(FunctionHandler::from(Self::thing))
     }
 
     fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M1>, _: &E) {
@@ -127,9 +119,7 @@ impl M2Reactor {
     fn params(
         s: Box<dyn FnOnce(Sender<any::TypeId, M2>) -> Sender<any::TypeId, M2> + Send>,
     ) -> CoreParams<Self, any::TypeId, M2> {
-        let mut params = generic::CoreParams::new(M2Reactor::Init(s));
-        params.handler(FunctionHandler::from(Self::thing));
-        params
+        generic::CoreParams::new(M2Reactor::Init(s)).handler(FunctionHandler::from(Self::thing))
     }
 
     fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M2>, _: &E) {

@@ -12,3 +12,7 @@ pub struct PlayerMsg {
 pub struct Data {
     pub value: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub struct Close {}
+

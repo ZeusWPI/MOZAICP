@@ -8,7 +8,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde;
 
-use std::{env, time, any};
+use std::{any, env, time};
 
 use mozaic::generic;
 use mozaic::generic::*;
@@ -52,12 +52,9 @@ impl ReactorState<any::TypeId, Message> for FooReactor {
 struct FooLink();
 impl FooLink {
     fn params() -> LinkParams<FooLink, any::TypeId, Message> {
-        let mut params = LinkParams::new(FooLink());
-
-        params.internal_handler(FunctionHandler::from(Self::handle_message));
-        params.external_handler(FunctionHandler::from(Self::handle_message));
-
-        return params;
+        LinkParams::new(FooLink())
+            .internal_handler(FunctionHandler::from(Self::handle_message))
+            .external_handler(FunctionHandler::from(Self::handle_message))
     }
 
     fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &E) {

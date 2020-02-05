@@ -14,6 +14,3 @@ pub struct Accepted {
     pub client_id: ReactorID,
     pub contr_id: ReactorID,
 }
-
-#[derive(Serialize, Deserialize, Clone, Key, Debug)]
-pub struct Close {}

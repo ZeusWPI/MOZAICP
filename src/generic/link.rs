@@ -29,6 +29,7 @@ pub struct Link<S, K, M> {
     external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 
     link_state: LinkState<K, M>,
+    closer: Closer<S, K, M>,
 }
 
 impl<S, K, M> Link<S, K, M> {
@@ -38,6 +39,7 @@ impl<S, K, M> Link<S, K, M> {
             state: params.state,
             internal_handlers: params.internal_handlers,
             external_handlers: params.external_handlers,
+            closer: params.closer,
         }
     }
 }
@@ -115,6 +117,7 @@ where
                 }
             }
             LinkOperation::Close() => {
+                (self.closer)(&mut self.state, &mut linkHandle!(self));
                 if let Result::Err(_) = self
                     .link_state
                     .target
@@ -134,6 +137,7 @@ pub struct LinkParams<S, K, M> {
     state: S,
     internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
     external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    closer: Closer<S, K, M>,
 }
 
 impl<S, K, M> LinkParams<S, K, M>
@@ -145,27 +149,38 @@ where
             state,
             internal_handlers: HashMap::new(),
             external_handlers: HashMap::new(),
+            closer: Box::new(|_, _| {}),
         }
     }
 
-    pub fn internal_handler<H, J>(&mut self, handler: H)
+    pub fn closer<F>(mut self, close_f: F) -> Self
+        where F: 'static + Send + for<'a> Fn(&mut S, &mut LinkHandle<'a, K, M>) -> () {
+        self.closer = Box::new(close_f);
+        self
+    }
+
+    pub fn internal_handler<H, J>(mut self, handler: H) -> Self
     where
         H: Into<(K, J)>,
         J: for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
         self.internal_handlers.insert(id, Box::new(handler));
+        self
     }
 
-    pub fn external_handler<H, J>(&mut self, handler: H)
+    pub fn external_handler<H, J>(mut self, handler: H) -> Self
     where
         H: Into<(K, J)>,
         J: for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
         self.external_handlers.insert(id.into(), Box::new(handler));
+        self
     }
 }
+
+pub type Closer<S, K, M> = Box<dyn for<'a> Fn(&mut S, &mut LinkHandle<'a, K, M>) -> () + Send>;
 
 /// It is useful to be able to spawn a link when you have the bundled channels and ids
 impl<S, K, M> Into<LinkSpawner<K, M>> for LinkParams<S, K, M>

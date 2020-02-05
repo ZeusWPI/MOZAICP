@@ -360,12 +360,13 @@ where
         }
     }
 
-    pub fn handler<H, J>(&mut self, handler: H)
+    pub fn handler<H, J>(mut self, handler: H) -> Self
     where
         H: Into<(K, J)>,
         J: for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send + 'static,
     {
         let (id, handler) = handler.into();
         self.handlers.insert(id, Box::new(handler));
+        self
     }
 }

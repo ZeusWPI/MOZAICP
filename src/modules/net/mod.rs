@@ -10,8 +10,8 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use crate::generic::*;
 use super::types::*;
+use crate::generic::*;
 mod types;
 use types::*;
 
@@ -31,6 +31,7 @@ pub struct ConnectionManager {
     broker: BrokerHandle<String, JSONMessage>,
     player_map: PlayerMap,
     addr: SocketAddr,
+    connected: usize,
 }
 
 impl ConnectionManager {
@@ -40,24 +41,27 @@ impl ConnectionManager {
         broker: BrokerHandle<String, JSONMessage>,
         player_map: PlayerMap,
     ) -> CoreParams<Self, String, JSONMessage> {
-        let mut params = CoreParams::new(Self {
+        let connected = player_map.len();
+        CoreParams::new(Self {
             pool,
             broker,
             player_map,
             addr,
-        });
-
-        params.handler(FunctionHandler::from(Self::handle_accept));
-
-        params
+            connected,
+        })
+        .handler(FunctionHandler::from(Self::handle_accept))
+        .handler(FunctionHandler::from(Self::cc_closed))
     }
 
-    fn handle_accept(
-        &mut self,
-        handle: &mut ReactorHandle<String, JSONMessage>,
-        acc: &Accepted,
-    ) {
+    fn handle_accept(&mut self, handle: &mut ReactorHandle<String, JSONMessage>, acc: &Accepted) {
         handle.send_internal(Typed::from(acc.clone()), TargetReactor::Link(acc.contr_id));
+    }
+
+    fn cc_closed(&mut self, handle: &mut ReactorHandle<String, JSONMessage>, _: &Close) {
+        self.connected -= 1;
+        if self.connected == 0 {
+            handle.close();
+        }
     }
 }
 
@@ -65,7 +69,7 @@ impl ReactorState<String, JSONMessage> for ConnectionManager {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, String, JSONMessage>) {
         // Open links to cc's
         for cc_id in self.player_map.values() {
-            handle.open_link(*cc_id, CCLink::params(), true);
+            handle.open_link(*cc_id, CCLink::params(), false);
         }
 
         // spawn reactor like with the actually accepting
@@ -131,14 +135,16 @@ async fn accepting<A: ToSocketAddrs>(
                 let cc_f = inner.broker.get_sender(&cc_id);
 
                 let client_id = ReactorID::rand();
-                let accept = Accepted { player, client_id, contr_id: cc_id };
+                let accept = Accepted {
+                    player,
+                    client_id,
+                    contr_id: cc_id,
+                };
 
                 let (tx, rx) = mpsc::unbounded();
                 inner.broker.spawn_reactorlike(client_id, tx);
 
-                inner.send_f.send(
-                    id, Typed::from(accept),
-                )?;
+                inner.send_f.send(id, Typed::from(accept))?;
 
                 let mut rx = receiver_handle(rx).boxed().fuse();
                 loop {
@@ -174,18 +180,10 @@ async fn accepting<A: ToSocketAddrs>(
 struct ConnectorLink {}
 impl ConnectorLink {
     fn params() -> LinkParams<Self, String, JSONMessage> {
-        let mut params = LinkParams::new(Self {});
-
-        params.external_handler(FunctionHandler::from(Self::handle_accept));
-
-        return params;
+        LinkParams::new(Self {}).external_handler(FunctionHandler::from(Self::handle_accept))
     }
 
-    fn handle_accept(
-        &mut self,
-        handle: &mut LinkHandle<String, JSONMessage>,
-        accept: &Accepted,
-    ) {
+    fn handle_accept(&mut self, handle: &mut LinkHandle<String, JSONMessage>, accept: &Accepted) {
         handle.send_internal(Typed::from(accept.clone()), TargetReactor::Reactor);
     }
 }
@@ -193,18 +191,14 @@ impl ConnectorLink {
 struct CCLink {}
 impl CCLink {
     fn params() -> LinkParams<Self, String, JSONMessage> {
-        let mut params = LinkParams::new(Self {});
-
-        params.internal_handler(FunctionHandler::from(Self::handle_accept));
-
-        return params;
+        LinkParams::new(Self {})
+            .internal_handler(FunctionHandler::from(Self::handle_accept))
+            .closer(|_, handle| {
+                handle.send_internal(Typed::from(Close{}), TargetReactor::Reactor);
+            })
     }
 
-    fn handle_accept(
-        &mut self,
-        handle: &mut LinkHandle<String, JSONMessage>,
-        accept: &Accepted,
-    ) {
+    fn handle_accept(&mut self, handle: &mut LinkHandle<String, JSONMessage>, accept: &Accepted) {
         handle.send_message(Typed::from(accept.clone()));
     }
 }

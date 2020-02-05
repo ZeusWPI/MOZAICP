@@ -3,8 +3,8 @@ extern crate mozaic;
 extern crate mozaic_derive;
 #[macro_use]
 extern crate tokio;
-extern crate serde_json;
 extern crate serde;
+extern crate serde_json;
 
 use std::{any, time};
 
@@ -19,22 +19,24 @@ use futures::executor::ThreadPool;
 struct EchoReactor(Vec<ReactorID>);
 impl EchoReactor {
     fn params(amount: Vec<ReactorID>) -> CoreParams<Self, any::TypeId, Message> {
-        let mut params = generic::CoreParams::new(EchoReactor(amount));
-        params.handler(FunctionHandler::from(Self::handle_msg));
-        params
+        generic::CoreParams::new(EchoReactor(amount))
+            .handler(FunctionHandler::from(Self::handle_msg))
     }
 
     fn handle_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, e: &PlayerMsg) {
         println!("Echo ing");
         let value = format!("{}: {}\n", e.id, e.value);
 
-        handle.send_internal(Data {
-            value,
-        }, TargetReactor::All);
+        handle.send_internal(Data { value }, TargetReactor::All);
 
         if "stop".eq_ignore_ascii_case(&e.value) {
             handle.close();
         }
+
+        // ?: Add way of player to quit the game, echo server whatever
+        // if "quit".eq_ignore_ascii_case(&e.value) {
+        //     handle.send_internal(Typed::from(Close{}, TargetReactor::Link(e.))
+        // }
     }
 }
 
@@ -49,12 +51,9 @@ impl ReactorState<any::TypeId, Message> for EchoReactor {
 struct EchoLink();
 impl EchoLink {
     fn params() -> LinkParams<Self, any::TypeId, Message> {
-        let mut params = LinkParams::new(Self());
-
-        params.internal_handler(FunctionHandler::from(Self::handle_inc));
-        params.external_handler(FunctionHandler::from(Self::handle_out));
-
-        return params;
+        LinkParams::new(Self())
+            .internal_handler(FunctionHandler::from(Self::handle_inc))
+            .external_handler(FunctionHandler::from(Self::handle_out))
     }
 
     fn handle_inc(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &Data) {
@@ -79,19 +78,21 @@ async fn run(pool: ThreadPool) {
         pool.clone(),
         "127.0.0.1:6666".parse().unwrap(),
         json_broker.clone(),
-        ccs.iter().map(|&x| (x+1, x.into())).collect(),
+        ccs.iter().map(|&x| (x + 1, x.into())).collect(),
     );
 
-    ccs.iter().map(
-        |&id| ClientController::new(
-            id.into(),
-            json_broker.clone(),
-            broker.clone(),
-            echo_id,
-            cm_id,
-            id + 1
-        )
-    ).for_each(|cc| pool.spawn_ok(cc));
+    ccs.iter()
+        .map(|&id| {
+            ClientController::new(
+                id.into(),
+                json_broker.clone(),
+                broker.clone(),
+                echo_id,
+                cm_id,
+                id + 1,
+            )
+        })
+        .for_each(|cc| pool.spawn_ok(cc));
 
     join!(
         broker.spawn_with_handle(p1, Some(echo_id)).0,
