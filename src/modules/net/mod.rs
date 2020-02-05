@@ -4,9 +4,8 @@ use futures::stream::StreamExt;
 use futures::*;
 
 use tokio;
-use tokio::io::{AsyncBufReadExt, BufReader, BufWriter, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, ToSocketAddrs};
-// use tokio::stream::{StreamExt};
 
 use serde_json::Value;
 
@@ -21,9 +20,10 @@ pub use controller::ClientController;
 
 pub type PlayerMap = HashMap<types::PlayerId, ReactorID>;
 
+pub type CheckPlayer = Box<dyn Fn(types::PlayerId) -> Option<ReactorID>>;
+
 pub struct ConnectionManager {
     pool: ThreadPool,
-    target: ReactorID,
     broker: BrokerHandle<String, JSONMessage>,
     player_map: PlayerMap,
     addr: SocketAddr,
@@ -33,25 +33,37 @@ impl ConnectionManager {
     pub fn params(
         pool: ThreadPool,
         addr: SocketAddr,
-        target: ReactorID,
         broker: BrokerHandle<String, JSONMessage>,
         player_map: PlayerMap,
     ) -> CoreParams<Self, String, JSONMessage> {
-        //
-        let params = CoreParams::new(Self {
+        let mut params = CoreParams::new(Self {
             pool,
-            target,
             broker,
             player_map,
             addr,
         });
 
+        params.handler(FunctionHandler::from(Self::handle_accept));
+
         params
+    }
+
+    fn handle_accept(
+        &mut self,
+        handle: &mut ReactorHandle<String, JSONMessage>,
+        acc: &types::Accepted,
+    ) {
+        handle.send_internal(Typed::from(acc.clone()), TargetReactor::Link(acc.contr_id));
     }
 }
 
 impl ReactorState<String, JSONMessage> for ConnectionManager {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, String, JSONMessage>) {
+        // Open links to cc's
+        for cc_id in self.player_map.values() {
+            handle.open_link(*cc_id, CCLink::params(), false);
+        }
+
         // spawn reactor like with the actually accepting
         let a_id = ReactorID::rand();
         tokio::spawn(
@@ -62,11 +74,11 @@ impl ReactorState<String, JSONMessage> for ConnectionManager {
                 self.pool.clone(),
                 self.player_map.clone(),
                 self.broker.clone(),
-            ).map(|_| ())
+            )
+            .map(|_| ()),
         );
 
         // Open ConnectorLink to that reactor like
-
         handle.open_link(a_id, ConnectorLink::params(), true);
     }
 }
@@ -89,7 +101,11 @@ async fn accepting<A: ToSocketAddrs>(
     let mut tcp = TcpListener::bind(addr).await.ok()?;
     let mut listener = tcp.incoming();
 
-    let inner = Inner { send_f: broker.get_sender(&conn_man), broker, map };
+    let inner = Inner {
+        send_f: broker.get_sender(&conn_man),
+        broker,
+        map,
+    };
 
     loop {
         let mut socket = listener.next().await?.ok()?;
@@ -104,40 +120,31 @@ async fn accepting<A: ToSocketAddrs>(
                 let player = serde_json::from_str::<types::Register>(&first_line)
                     .ok()
                     .map(|x| x.player)?;
-                println!("Got Player {}", player);
 
                 writer.write_all(b"Hello Player\n").await.unwrap();
 
-                let target = *inner.map.get(&player)?;
+                let cc_id = *inner.map.get(&player)?;
+                let cc_f = inner.broker.get_sender(&cc_id);
 
-                let accept = types::Accepted { player, target };
+                let client_id = ReactorID::rand();
+                let accept = types::Accepted { player, client_id, contr_id: cc_id };
 
                 let (tx, rx) = mpsc::unbounded();
-                inner.broker.spawn_reactorlike(target, tx);
-
-                println!("Loop");
-
-
-                let client_f = inner.broker.get_sender(&accept.target);
-                println!("Loop");
+                inner.broker.spawn_reactorlike(client_id, tx);
 
                 inner.send_f.send(
-                    id, accept
+                    id, Typed::from(accept),
                 )?;
 
-                println!("Loop");
-
                 let mut rx = receiver_handle(rx).boxed().fuse();
-
                 loop {
-                    println!("Loop");
                     select! {
                         v = rx.next() => {
                             match v? {
-                                None => break,
+                                None => { println!("Closing"); break; },
                                 Some((_, _, mut v)) => {
                                     let data: &types::Data = v.into_t()?;
-                                    writer.write_all(&serde_json::to_vec(&data).ok()?).await.ok()?;
+                                    writer.write_all(&serde_json::to_vec(&data.value).ok()?).await.ok()?;
                                     writer.flush();
                                 }
                             }
@@ -145,10 +152,15 @@ async fn accepting<A: ToSocketAddrs>(
                         v = lines.next() => {
                             let v = v?.ok()?;
                             if let Some(value) = serde_json::from_str::<Value>(&v).ok() {
-                                client_f.send(id, types::PlayerMsg { value, id: player})?;
+                                cc_f.send(id, Typed::from(types::Data { value })).unwrap();
+                            } else {
+                                println!("Shit failed");
                             }
                         },
-                        complete => break,
+                        complete => {
+                            println!("Done");
+                            break;
+                        },
                     };
                 }
 
@@ -158,7 +170,6 @@ async fn accepting<A: ToSocketAddrs>(
         );
     }
 }
-
 
 struct ConnectorLink {}
 impl ConnectorLink {
@@ -175,6 +186,25 @@ impl ConnectorLink {
         handle: &mut LinkHandle<String, JSONMessage>,
         accept: &types::Accepted,
     ) {
-        handle.send_internal(Typed::from(*accept));
+        handle.send_internal(Typed::from(accept.clone()), TargetReactor::Reactor);
+    }
+}
+
+struct CCLink {}
+impl CCLink {
+    fn params() -> LinkParams<Self, String, JSONMessage> {
+        let mut params = LinkParams::new(Self {});
+
+        params.internal_handler(FunctionHandler::from(Self::handle_accept));
+
+        return params;
+    }
+
+    fn handle_accept(
+        &mut self,
+        handle: &mut LinkHandle<String, JSONMessage>,
+        accept: &types::Accepted,
+    ) {
+        handle.send_message(Typed::from(accept.clone()));
     }
 }

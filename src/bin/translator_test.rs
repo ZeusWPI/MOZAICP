@@ -93,7 +93,7 @@ impl M1Reactor {
         if self.0 <= 0 {
             handle.close();
         } else {
-            handle.send_internal(E);
+            handle.send_internal(E, TargetReactor::Links);
         }
     }
 }
@@ -114,7 +114,7 @@ impl ReactorState<any::TypeId, M1> for M1Reactor {
         handle.open_link(11.into(), M1FooLink::params(), true);
         handle.open_reactor_like(11.into(), fn_to(handle.chan()));
 
-        handle.send_internal(E);
+        handle.send_internal(E, TargetReactor::Links);
     }
 }
 
@@ -133,7 +133,7 @@ impl M2Reactor {
     }
 
     fn thing(&mut self, handle: &mut ReactorHandle<any::TypeId, M2>, _: &E) {
-        handle.send_internal(E);
+        handle.send_internal(E, TargetReactor::Links);
     }
 }
 

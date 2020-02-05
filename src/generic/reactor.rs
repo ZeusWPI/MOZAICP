@@ -37,14 +37,18 @@ where
 
     broker: BrokerHandle<K, M>,
     state: S,
-    msg_handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    msg_handlers:
+        HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 
     links: HashMap<
         ReactorID,
         (
             Box<
-                dyn for<'a, 'b> Handler<(), ReactorHandle<'b, K, M>, &'a mut LinkOperation<'a, K, M>>
-                    + Send,
+                dyn for<'a, 'b> Handler<
+                        (),
+                        ReactorHandle<'b, K, M>,
+                        &'a mut LinkOperation<'a, K, M>,
+                    > + Send,
             >,
             bool,
         ),
@@ -87,18 +91,49 @@ where
     ///
     /// First looking up his own internal message handler for that message
     /// Then letting all links handle that message
-    fn handle_internal_msg(&mut self, id: K, mut msg: M, from_self: bool) {
+    fn handle_internal_msg(&mut self, id: K, mut msg: M, target: TargetReactor) {
         let mut handle = reactorHandle!(self);
 
-        if from_self {
-            let mut state = ();
+        match target {
+            TargetReactor::All => {
+                let mut state = ();
 
-            for (_, link) in self.links.iter_mut() {
-                link.0.handle(&mut state, &mut handle, &mut LinkOperation::InternalMessage(&id, &mut msg));
+                for (_, link) in self.links.iter_mut() {
+                    link.0.handle(
+                        &mut state,
+                        &mut handle,
+                        &mut LinkOperation::InternalMessage(&id, &mut msg),
+                    );
+                }
+                if let Some(h) = self.msg_handlers.get_mut(&id) {
+                    h.handle(&mut self.state, &mut handle, (&id, &mut msg));
+                }
             }
-        } else {
-            if let Some(h) = self.msg_handlers.get_mut(&id) {
-                h.handle(&mut self.state, &mut handle, (&id, &mut msg));
+            TargetReactor::Links => {
+                let mut state = ();
+
+                for (_, link) in self.links.iter_mut() {
+                    link.0.handle(
+                        &mut state,
+                        &mut handle,
+                        &mut LinkOperation::InternalMessage(&id, &mut msg),
+                    );
+                }
+            }
+            TargetReactor::Reactor => {
+                if let Some(h) = self.msg_handlers.get_mut(&id) {
+                    h.handle(&mut self.state, &mut handle, (&id, &mut msg));
+                }
+            }
+            TargetReactor::Link(target) => {
+                if let Some(link) = self.links.get_mut(&target) {
+                    println!("Sending to {:?}", target);
+                    link.0.handle(
+                        &mut (),
+                        &mut handle,
+                        &mut LinkOperation::InternalMessage(&id, &mut msg),
+                    );
+                }
             }
         }
     }
@@ -145,7 +180,8 @@ where
         let mut state = ();
 
         for (_, link) in self.links.iter_mut() {
-            link.0.handle(&mut state, &mut handle, &mut LinkOperation::Close());
+            link.0
+                .handle(&mut state, &mut handle, &mut LinkOperation::Close());
         }
 
         // Stop Future
@@ -196,8 +232,8 @@ where
             match ready!(Stream::poll_next(Pin::new(&mut this.channels.1), ctx)) {
                 None => return Poll::Ready(()),
                 Some(item) => match item {
-                    Operation::InternalMessage(id, msg, from_self) => {
-                        this.handle_internal_msg(id, msg, from_self)
+                    Operation::InternalMessage(id, msg, target) => {
+                        this.handle_internal_msg(id, msg, target)
                     }
                     Operation::ExternalMessage(target, id, msg) => {
                         this.handle_external_msg(target, id, msg)
@@ -281,18 +317,24 @@ where
     }
 }
 
+#[derive(Eq, PartialEq, Debug)]
+pub enum TargetReactor {
+    All,
+    Reactor,
+    Links,
+    Link(ReactorID),
+}
 // ANCHOR Implementation with any::TypeId
 /// Generic implementation of reactor handle, this one is able to handle every T
 /// Making it generic by forming a Message and sending it through
 ///
 /// You would want to implement this again with Capnproto messages
 /// to be able to send them over the internet
-impl<'a, K, M> ReactorHandle<'a, K, M>
-{
-    pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T) {
+impl<'a, K, M> ReactorHandle<'a, K, M> {
+    pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T, to: TargetReactor) {
         if let Some((id, msg)) = T::into_msg(msg) {
             self.chan
-                .unbounded_send(Operation::InternalMessage(id, msg, true))
+                .unbounded_send(Operation::InternalMessage(id, msg, to))
                 .expect("crashed");
         }
     }
@@ -302,7 +344,8 @@ impl<'a, K, M> ReactorHandle<'a, K, M>
 /// Builder pattern for constructing reactors
 pub struct CoreParams<S, K, M> {
     state: S,
-    handlers: HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    handlers:
+        HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 }
 
 impl<S, K, M> CoreParams<S, K, M>

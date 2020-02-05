@@ -17,7 +17,7 @@ mod reactor;
 mod types;
 
 pub use self::link::{Link, LinkHandle, LinkParams};
-pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState};
+pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState, TargetReactor};
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
@@ -62,7 +62,7 @@ pub enum LinkOperation<'a, K, M> {
 /// These get consumed by the reactors
 ///
 pub enum Operation<K, M> {
-    InternalMessage(K, M, bool),
+    InternalMessage(K, M, TargetReactor),
     ExternalMessage(ReactorID, K, M),
     Close(),
     OpenLink(ReactorID, LinkSpawner<K, M>),
@@ -254,8 +254,8 @@ where
     M: 'static + Send,
 {
     pub fn send<T: IntoMessage<K, M>>(&self, from: ReactorID, msg: T) -> Option<()> {
-        let (k, m) = msg.into_msg()?;
-        self.sender.unbounded_send(Operation::ExternalMessage(from, k, m)).ok()?;
+        let (k, m) = msg.into_msg().unwrap();
+        self.sender.unbounded_send(Operation::ExternalMessage(from, k, m)).unwrap();
 
         Some(())
     }

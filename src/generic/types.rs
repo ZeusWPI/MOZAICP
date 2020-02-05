@@ -9,6 +9,10 @@ impl ReactorID {
     pub fn rand() -> Self {
         rand::random::<u64>().into()
     }
+
+    pub fn u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl From<u64> for ReactorID {

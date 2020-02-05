@@ -154,6 +154,10 @@ mod json {
             }
         }
 
+        pub fn value<'a>(&'a self) -> &'a Value {
+            &self.value
+        }
+
         pub fn bytes(&self) -> Option<Vec<u8>> {
             serde_json::to_vec(&self.value).ok()
         }
@@ -177,14 +181,19 @@ mod json {
     impl<T: 'static + Serialize> IntoMessage<String, JSONMessage> for T {
         fn into_msg(self) -> Option<(String, JSONMessage)> {
 
-            if let Ok(value) = serde_json::to_value(&self) {
-                if let Some(id) = value.get(ID_FIELD).and_then(|v| v.as_str()).map(String::from) {
-                    return Some((id.clone(), JSONMessage {
-                        value,
-                        id,
-                        item: None,
-                    }))
-                }
+            match serde_json::to_value(&self) {
+                Ok(value) => {
+                    if let Some(id) = value.get(ID_FIELD).and_then(|v| v.as_str()).map(String::from) {
+                        return Some((id.clone(), JSONMessage {
+                            value,
+                            id,
+                            item: None,
+                        }))
+                    } else {
+                        println!("No id field found");
+                    }
+                },
+                Err(e) => println!("To value failed {:?}", e),
             }
 
             None

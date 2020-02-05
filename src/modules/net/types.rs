@@ -5,26 +5,27 @@ use crate::generic::ReactorID;
 
 pub type PlayerId = u64;
 
-#[derive(Serialize, Deserialize, Clone, Copy, Key)]
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Register {
     pub player: PlayerId,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Key)]
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Accepted {
     pub player: PlayerId,
-    pub target: ReactorID,
+    pub client_id: ReactorID,
+    pub contr_id: ReactorID,
 }
 
-#[derive(Serialize, Deserialize, Key)]
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Data {
     pub value: Value,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Close {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct PlayerMsg {
     pub value: Value,
     pub id: PlayerId,

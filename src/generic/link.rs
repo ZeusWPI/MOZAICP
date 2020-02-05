@@ -65,11 +65,11 @@ where
         }
     }
 
-    pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T) {
+    pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T, target: TargetReactor) {
         if let Some((id, msg)) = T::into_msg(msg) {
             self.state
                 .source
-                .unbounded_send(Operation::InternalMessage(id, msg, false))
+                .unbounded_send(Operation::InternalMessage(id, msg, target))
                 .expect("Link handle crashed");
         }
     }

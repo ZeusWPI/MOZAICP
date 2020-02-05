@@ -6,8 +6,6 @@ use futures::prelude::*;
 use futures::task::{Context, Poll};
 use futures::channel::mpsc;
 
-use serde_json::Value;
-
 use super::types::{Accepted, Data, PlayerId, PlayerMsg};
 use crate::generic::FromMessage;
 use crate::generic::*;
@@ -26,11 +24,11 @@ pub struct ClientController {
     client_rx: Receiver<String, JSONMessage>,
 
     closed: bool,
-    buffer: VecDeque<Value>, // this might be Value
+    buffer: VecDeque<Data>, // this might be Value
 }
 
 impl ClientController {
-    pub fn spawn(
+    pub fn new(
         id: ReactorID,
         json_broker: BrokerHandle<String, JSONMessage>,
         t_broker: BrokerHandle<any::TypeId, Message>,
@@ -38,6 +36,7 @@ impl ClientController {
         connection_manager: ReactorID,
         client_id: PlayerId,
     ) -> Self {
+        println!("Creating cc: {:?}, with client {:?} and host {:?}", id, client_id, host);
         let host_sender = t_broker.get_sender(&host);
 
         let (host_tx, host_rx) = mpsc::unbounded();
@@ -65,8 +64,8 @@ impl ClientController {
 
     fn flush_client(&mut self) {
         if let Some((_, sender)) = &self.client {
-            for value in self.buffer.drain(..) {
-                if sender.send(self.id, Data { value }).is_none() {
+            for data in self.buffer.drain(..) {
+                if sender.send(self.id, Typed::from(data)).is_none() {
                     // STOP IT
                     break;
                 }
@@ -80,24 +79,26 @@ impl ClientController {
 
     fn handle_conn_msg(&mut self, key: String, mut msg: JSONMessage) {
         if key == <Accepted as Key<String>>::key() {
-            if let Some(Accepted { player: _, target }) = Accepted::from_msg(&key, &mut msg) {
-                self.client = Some((*target, self.broker.get_sender(&target)));
+            if let Some(Accepted { player: _, client_id, contr_id: _}) = Accepted::from_msg(&key, &mut msg) {
+                self.client = Some((*client_id, self.broker.get_sender(&client_id)));
             }
         }
     }
 
-    fn handle_client_msg(&mut self, _: String, msg: JSONMessage) {
-        let msg = PlayerMsg {
-            id: self.client_id,
-            value: msg.clone(),
-        };
-
-        self.host.1.send(self.id, msg).unwrap();
+    fn handle_client_msg(&mut self, _: String, mut msg: JSONMessage) {
+        if let Some(data) = msg.into_t::<Data>() {
+            println!("Data: {:?}", data);
+            let msg = PlayerMsg {
+                id: self.client_id,
+                value: data.value.clone(),
+            };
+            self.host.1.send(self.id, msg).unwrap();
+        }
     }
 
     fn handle_host_msg(&mut self, key: any::TypeId, mut msg: Message) {
-        if key == any::TypeId::of::<Value>() {
-            if let Some(value) = Value::from_msg(&key, &mut msg) {
+        if key == any::TypeId::of::<Data>() {
+            if let Some(value) = Data::from_msg(&key, &mut msg) {
                 self.buffer.push_back(value.clone());
             }
         }
