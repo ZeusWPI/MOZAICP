@@ -55,7 +55,7 @@ impl M1FooLink {
     }
 
     fn backwards(&mut self, handle: &mut LinkHandle<any::TypeId, M1>, e: &E) {
-        handle.send_internal(e.clone());
+        handle.send_internal(e.clone(), TargetReactor::All);
     }
 }
 
@@ -75,7 +75,7 @@ impl M2FooLink {
     }
 
     fn backwards(&mut self, handle: &mut LinkHandle<any::TypeId, M2>, e: &E) {
-        handle.send_internal(e.clone());
+        handle.send_internal(e.clone(), TargetReactor::All);
     }
 }
 

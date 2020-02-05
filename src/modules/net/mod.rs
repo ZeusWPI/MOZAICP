@@ -13,14 +13,20 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use crate::generic::*;
-pub mod types;
+use super::types::*;
+mod types;
+use types::*;
 
 mod controller;
 pub use controller::ClientController;
 
-pub type PlayerMap = HashMap<types::PlayerId, ReactorID>;
+// TODO: add error_chain
+// TODO: add tracing
+// TODO: add refactor?
 
-pub type CheckPlayer = Box<dyn Fn(types::PlayerId) -> Option<ReactorID>>;
+pub type PlayerMap = HashMap<PlayerId, ReactorID>;
+
+pub type CheckPlayer = Box<dyn Fn(PlayerId) -> Option<ReactorID>>;
 
 pub struct ConnectionManager {
     pool: ThreadPool,
@@ -51,7 +57,7 @@ impl ConnectionManager {
     fn handle_accept(
         &mut self,
         handle: &mut ReactorHandle<String, JSONMessage>,
-        acc: &types::Accepted,
+        acc: &Accepted,
     ) {
         handle.send_internal(Typed::from(acc.clone()), TargetReactor::Link(acc.contr_id));
     }
@@ -117,7 +123,7 @@ async fn accepting<A: ToSocketAddrs>(
                 let mut lines = BufReader::new(rh).lines().fuse();
 
                 let first_line = lines.next().await?.ok()?;
-                let player = serde_json::from_str::<types::Register>(&first_line)
+                let player = serde_json::from_str::<Register>(&first_line)
                     .ok()
                     .map(|x| x.player)?;
 
@@ -127,7 +133,7 @@ async fn accepting<A: ToSocketAddrs>(
                 let cc_f = inner.broker.get_sender(&cc_id);
 
                 let client_id = ReactorID::rand();
-                let accept = types::Accepted { player, client_id, contr_id: cc_id };
+                let accept = Accepted { player, client_id, contr_id: cc_id };
 
                 let (tx, rx) = mpsc::unbounded();
                 inner.broker.spawn_reactorlike(client_id, tx);
@@ -143,7 +149,7 @@ async fn accepting<A: ToSocketAddrs>(
                             match v? {
                                 None => { println!("Closing"); break; },
                                 Some((_, _, mut v)) => {
-                                    let data: &types::Data = v.into_t()?;
+                                    let data: &Data = v.into_t()?;
                                     writer.write_all(&serde_json::to_vec(&data.value).ok()?).await.ok()?;
                                     writer.flush();
                                 }
@@ -152,7 +158,7 @@ async fn accepting<A: ToSocketAddrs>(
                         v = lines.next() => {
                             let v = v?.ok()?;
                             if let Some(value) = serde_json::from_str::<Value>(&v).ok() {
-                                cc_f.send(id, Typed::from(types::Data { value })).unwrap();
+                                cc_f.send(id, Typed::from(Data { value })).unwrap();
                             } else {
                                 println!("Shit failed");
                             }
@@ -184,7 +190,7 @@ impl ConnectorLink {
     fn handle_accept(
         &mut self,
         handle: &mut LinkHandle<String, JSONMessage>,
-        accept: &types::Accepted,
+        accept: &Accepted,
     ) {
         handle.send_internal(Typed::from(accept.clone()), TargetReactor::Reactor);
     }
@@ -203,7 +209,7 @@ impl CCLink {
     fn handle_accept(
         &mut self,
         handle: &mut LinkHandle<String, JSONMessage>,
-        accept: &types::Accepted,
+        accept: &Accepted,
     ) {
         handle.send_message(Typed::from(accept.clone()));
     }

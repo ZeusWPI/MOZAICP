@@ -6,12 +6,12 @@ extern crate tokio;
 extern crate serde_json;
 extern crate serde;
 
-use std::{any, env, time};
+use std::{any, time};
 
 use mozaic::generic;
 use mozaic::generic::*;
 
-use mozaic::modules::net::types::*;
+use mozaic::modules::types::*;
 use mozaic::modules::{ClientController, ConnectionManager};
 
 use futures::executor::ThreadPool;
@@ -97,12 +97,6 @@ async fn run(pool: ThreadPool) {
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-    let amount = args
-        .get(1)
-        .and_then(|x| x.parse::<u64>().ok())
-        .unwrap_or(10);
-
     {
         let pool = ThreadPool::builder()
             // .after_start(|i| println!("Starting thread {}", i))

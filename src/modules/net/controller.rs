@@ -6,7 +6,8 @@ use futures::prelude::*;
 use futures::task::{Context, Poll};
 use futures::channel::mpsc;
 
-use super::types::{Accepted, Data, PlayerId, PlayerMsg};
+use super::types::{Accepted};
+use crate::modules::types::{PlayerMsg, Data, PlayerId};
 use crate::generic::FromMessage;
 use crate::generic::*;
 
