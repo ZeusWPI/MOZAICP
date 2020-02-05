@@ -26,11 +26,15 @@ impl EchoReactor {
 
     fn handle_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, e: &PlayerMsg) {
         println!("Echo ing");
-        let msg = format!("{}: {}", e.id, serde_json::to_string(&e.value).unwrap());
+        let value = format!("{}: {}\n", e.id, e.value);
 
         handle.send_internal(Data {
-            value: serde_json::to_value(msg).unwrap(),
+            value,
         }, TargetReactor::All);
+
+        if "stop".eq_ignore_ascii_case(&e.value) {
+            handle.close();
+        }
     }
 }
 

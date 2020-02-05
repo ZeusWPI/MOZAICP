@@ -7,8 +7,6 @@ use tokio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, ToSocketAddrs};
 
-use serde_json::Value;
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -67,7 +65,7 @@ impl ReactorState<String, JSONMessage> for ConnectionManager {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, String, JSONMessage>) {
         // Open links to cc's
         for cc_id in self.player_map.values() {
-            handle.open_link(*cc_id, CCLink::params(), false);
+            handle.open_link(*cc_id, CCLink::params(), true);
         }
 
         // spawn reactor like with the actually accepting
@@ -150,18 +148,14 @@ async fn accepting<A: ToSocketAddrs>(
                                 None => { println!("Closing"); break; },
                                 Some((_, _, mut v)) => {
                                     let data: &Data = v.into_t()?;
-                                    writer.write_all(&serde_json::to_vec(&data.value).ok()?).await.ok()?;
+                                    writer.write_all(data.value.as_bytes()).await.ok()?;
                                     writer.flush();
                                 }
                             }
                         },
                         v = lines.next() => {
-                            let v = v?.ok()?;
-                            if let Some(value) = serde_json::from_str::<Value>(&v).ok() {
-                                cc_f.send(id, Typed::from(Data { value })).unwrap();
-                            } else {
-                                println!("Shit failed");
-                            }
+                            let value = v?.ok()?;
+                            cc_f.send(id, Typed::from(Data { value })).unwrap();
                         },
                         complete => {
                             println!("Done");

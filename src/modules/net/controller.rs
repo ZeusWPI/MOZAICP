@@ -149,14 +149,19 @@ impl Future for ClientController {
 
         if this.closed {
             if this.host.1.close(this.id).is_none() {
-                println!("ClientController: Target link closed")
+                println!("ClientController: Target link already closed")
             }
 
+            if this.broker.get_sender(&this.conn_man).close(this.id).is_none() {
+                println!("ClientController: Connection manager already closed");
+            }
+            
             if let Some((_, sender)) = &this.client {
                 if sender.close(this.id).is_none() {
                     println!("ClientController: Client link closed")
                 }
             }
+
             return Poll::Ready(());
         }
 
