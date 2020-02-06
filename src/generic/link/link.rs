@@ -62,11 +62,15 @@ where
             LinkOperation::InternalMessage(id, message) => {
                 if let Some(h) = self.internal_handlers.get_mut(id) {
                     h.handle(&mut self.state, &mut linkHandle!(self), (id, message));
+                } else {
+                    trace!("No handler found");
                 }
             }
             LinkOperation::ExternalMessage(id, message) => {
                 if let Some(h) = self.external_handlers.get_mut(id) {
                     h.handle(&mut self.state, &mut linkHandle!(self), (id, message));
+                } else {
+                    trace!("No handler found");
                 }
             }
             LinkOperation::Close() => {
@@ -77,7 +81,7 @@ where
                     .unbounded_send(Operation::CloseLink(self.link_state.source_id))
                 {
                     // The problem is this doesn't happen always
-                    println!("Cannot send close message, channel closed");
+                    trace!("Cannot send close message, channel closed");
                 }
             }
         };

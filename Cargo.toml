@@ -22,13 +22,12 @@ tokio = { version = "0.2.11", features = ["macros", "tcp", "sync", "process", "r
 
 tracing = "0.1.12"
 tracing-futures = "0.2.1"
+tracing-subscriber = "0.2.0"
 
 mozaic-derive = { path = "./mozaic-derive" }
 
 capnp = "0.12.1"
 capnp-futures = "0.12.0"
-
-tracing-subscriber = "0.1.6"
 
 ws = "0.9.1"
 

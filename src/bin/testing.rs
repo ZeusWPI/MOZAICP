@@ -30,6 +30,8 @@ impl FooReactor {
 }
 
 impl ReactorState<any::TypeId, Message> for FooReactor {
+    const NAME: &'static str = "FooReactor";
+
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         println!("INIT");
 

@@ -95,8 +95,8 @@ where
     M: 'static + Send,
 {
     pub fn send<T: IntoMessage<K, M>>(&self, from: ReactorID, msg: T) -> Option<()> {
-        let (k, m) = msg.into_msg().unwrap();
-        self.sender.unbounded_send(Operation::ExternalMessage(from, k, m)).unwrap();
+        let (k, m) = msg.into_msg()?;
+        self.sender.unbounded_send(Operation::ExternalMessage(from, k, m)).ok()?;
 
         Some(())
     }

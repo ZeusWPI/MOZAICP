@@ -89,6 +89,7 @@ impl JSONMessage {
 impl<T: 'static + for<'de> Deserialize<'de>> FromMessage<String, JSONMessage> for T {
     fn from_msg<'a>(key: &String, msg: &'a mut JSONMessage) -> Option<&'a T> {
         if *key != msg.id {
+            trace!("Trying to deref message with wrong type");
             return None;
         }
 
@@ -114,10 +115,10 @@ impl<T: 'static + Serialize> IntoMessage<String, JSONMessage> for T {
                         },
                     ));
                 } else {
-                    println!("No id field found");
+                    error!("No id field found");
                 }
             }
-            Err(e) => println!("To value failed {:?}", e),
+            Err(e) => error!("To value failed {:?}", e),
         }
 
         None

@@ -26,7 +26,11 @@ impl Message {
 
                     Some(*result) // Unbox and return Some
                 }
-                false => None, // When types do not match return None
+                false => {
+                    // When types do not match return None
+                    trace!("Trying to deref message with wrong type");
+                    None
+                }
             },
         }
     }
@@ -40,7 +44,10 @@ impl Message {
                     let ptr: *mut T = ptr.cast();
                     unsafe { ptr.as_ref() }
                 }
-                false => None, // When types do not match return None
+                false => {
+                    trace!("Trying to deref message with wrong type");
+                    None
+                } // When types do not match return None
             },
         }
     }

@@ -37,7 +37,7 @@ impl ClientController {
         connection_manager: ReactorID,
         client_id: PlayerId,
     ) -> Self {
-        println!("Creating cc: {:?}, with client {:?} and host {:?}", id, client_id, host);
+        trace!("Creating cc: {:?}, with client {:?} and host {:?}", id, client_id, host);
         let host_sender = t_broker.get_sender(&host);
 
         let (host_tx, host_rx) = mpsc::unbounded();
@@ -88,7 +88,6 @@ impl ClientController {
 
     fn handle_client_msg(&mut self, _: String, mut msg: JSONMessage) {
         if let Some(data) = msg.into_t::<Data>() {
-            println!("Data: {:?}", data);
             let msg = PlayerMsg {
                 id: self.client_id,
                 value: data.value.clone(),
@@ -149,16 +148,16 @@ impl Future for ClientController {
 
         if this.closed {
             if this.host.1.close(this.id).is_none() {
-                println!("ClientController: Target link already closed")
+                trace!("Target link already closed")
             }
 
             if this.broker.get_sender(&this.conn_man).close(this.id).is_none() {
-                println!("ClientController: Connection manager already closed");
+                trace!("Connection manager already closed");
             }
-            
+
             if let Some((_, sender)) = &this.client {
                 if sender.close(this.id).is_none() {
-                    println!("ClientController: Client link closed")
+                    trace!("Client link closed")
                 }
             }
 

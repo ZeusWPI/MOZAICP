@@ -91,6 +91,8 @@ impl M1Reactor {
 }
 
 impl ReactorState<any::TypeId, M1> for M1Reactor {
+    const NAME: &'static str = "M1Reactor";
+
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, M1>) {
         // Setup translator
         let mut trans = Translator::<any::TypeId, any::TypeId, M1, M2>::new();
@@ -128,6 +130,8 @@ impl M2Reactor {
 }
 
 impl ReactorState<any::TypeId, M2> for M2Reactor {
+    const NAME: &'static str = "M2Reactor";
+
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, M2>) {
         let old = mem::replace(self, M2Reactor::Inited());
         if let M2Reactor::Init(spawn) = old {

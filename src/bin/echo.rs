@@ -6,6 +6,11 @@ extern crate tokio;
 extern crate serde;
 extern crate serde_json;
 
+extern crate tracing;
+extern crate tracing_subscriber;
+
+use tracing_subscriber::{FmtSubscriber, EnvFilter};
+
 use std::{any, time};
 
 use mozaic::generic;
@@ -41,6 +46,7 @@ impl EchoReactor {
 }
 
 impl ReactorState<any::TypeId, Message> for EchoReactor {
+    const NAME: &'static str = "EchoReactor";
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         for cc in self.0.iter() {
             handle.open_link(*cc, EchoLink::params(), true);
@@ -102,6 +108,10 @@ async fn run(pool: ThreadPool) {
 
 #[tokio::main]
 async fn main() {
+    let sub = FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .finish();
+    tracing::subscriber::set_global_default(sub).unwrap();
     {
         let pool = ThreadPool::builder()
             // .after_start(|i| println!("Starting thread {}", i))

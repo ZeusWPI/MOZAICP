@@ -1,13 +1,15 @@
-use super::{Sender, Receiver, ReactorID, CoreParams, ReactorState, SenderHandle, Reactor};
+use super::{CoreParams, Reactor, ReactorID, ReactorState, Receiver, Sender, SenderHandle};
 
-use futures::future::RemoteHandle;
-use futures::executor::ThreadPool;
 use futures::channel::mpsc;
+use futures::executor::ThreadPool;
+use futures::future::RemoteHandle;
 use futures::task::SpawnExt;
+
+use tracing_futures::Instrument;
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 ///
 /// Reactor channel is an enum that represents a reactor,
@@ -151,13 +153,17 @@ where
 
         let fut = self
             .pool
-            .spawn_with_handle(reactor)
+            .spawn_with_handle(reactor.instrument(trace_span!("Reactor", name = S::NAME, %id)))
             .expect("Couldn't spawn reactor");
+
+        info!(name = S::NAME, %id, "Reactor spawned");
 
         (fut, id)
     }
 
     pub fn get_sender(&self, target: &ReactorID) -> SenderHandle<K, M> {
-        SenderHandle { sender: self.get(target) }
+        SenderHandle {
+            sender: self.get(target),
+        }
     }
 }
