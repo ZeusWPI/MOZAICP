@@ -9,10 +9,15 @@ pub struct PlayerMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub struct HostMsg {
+    pub value: String,
+    pub target: Option<PlayerId>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Data {
     pub value: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Close {}
-

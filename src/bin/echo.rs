@@ -17,14 +17,14 @@ use mozaic::generic;
 use mozaic::generic::*;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{ClientController, ConnectionManager};
+use mozaic::modules::{ClientController, ConnectionManager, Aggregator};
 
 use futures::executor::ThreadPool;
 
-struct EchoReactor(Vec<ReactorID>);
+struct EchoReactor(ReactorID);
 impl EchoReactor {
-    fn params(amount: Vec<ReactorID>) -> CoreParams<Self, any::TypeId, Message> {
-        generic::CoreParams::new(EchoReactor(amount))
+    fn params(clients: ReactorID) -> CoreParams<Self, any::TypeId, Message> {
+        generic::CoreParams::new(EchoReactor(clients))
             .handler(FunctionHandler::from(Self::handle_msg))
     }
 
@@ -32,7 +32,7 @@ impl EchoReactor {
         println!("Echo ing");
         let value = format!("{}: {}\n", e.id, e.value);
 
-        handle.send_internal(Data { value }, TargetReactor::All);
+        handle.send_internal(HostMsg { value, target: None }, TargetReactor::All);
 
         if "stop".eq_ignore_ascii_case(&e.value) {
             handle.close();
@@ -48,9 +48,7 @@ impl EchoReactor {
 impl ReactorState<any::TypeId, Message> for EchoReactor {
     const NAME: &'static str = "EchoReactor";
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
-        for cc in self.0.iter() {
-            handle.open_link(*cc, EchoLink::params(), true);
-        }
+        handle.open_link(self.0, EchoLink::params(), true);
     }
 }
 
@@ -62,29 +60,35 @@ impl EchoLink {
             .external_handler(FunctionHandler::from(Self::handle_out))
     }
 
-    fn handle_inc(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &Data) {
+    fn handle_inc(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {
         handle.send_message(e.clone());
     }
 
     fn handle_out(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &PlayerMsg) {
-        handle.send_internal(e.clone(), TargetReactor::All);
+        handle.send_internal(e.clone(), TargetReactor::Reactor);
     }
 }
 
 async fn run(pool: ThreadPool) {
+    use std::collections::HashMap;
+
     let broker = BrokerHandle::new(pool.clone());
     let json_broker = BrokerHandle::new(pool.clone());
 
     let echo_id = 0.into();
+    let agg_id = 1.into();
     let cm_id = 100.into();
     let ccs = vec![10, 11, 12];
-    let p1 = EchoReactor::params(ccs.iter().map(|&x| x.into()).collect());
+    let player_ids: HashMap<PlayerId, ReactorID> = ccs.iter().map(|&x| (x + 1, x.into())).collect();
+
+    let p1 = EchoReactor::params(agg_id);
+    let agg = Aggregator::params(echo_id, player_ids.clone());
 
     let cm = ConnectionManager::params(
         pool.clone(),
         "127.0.0.1:6666".parse().unwrap(),
         json_broker.clone(),
-        ccs.iter().map(|&x| (x + 1, x.into())).collect(),
+        player_ids,
     );
 
     ccs.iter()
@@ -93,7 +97,7 @@ async fn run(pool: ThreadPool) {
                 id.into(),
                 json_broker.clone(),
                 broker.clone(),
-                echo_id,
+                agg_id,
                 cm_id,
                 id + 1,
             )
@@ -102,6 +106,7 @@ async fn run(pool: ThreadPool) {
 
     join!(
         broker.spawn_with_handle(p1, Some(echo_id)).0,
+        broker.spawn_with_handle(agg, Some(agg_id)).0,
         json_broker.spawn_with_handle(cm, Some(cm_id)).0,
     );
 }

@@ -7,7 +7,7 @@ use futures::task::{Context, Poll};
 use futures::channel::mpsc;
 
 use super::types::{Accepted};
-use crate::modules::types::{PlayerMsg, Data, PlayerId};
+use crate::modules::types::{PlayerMsg, HostMsg, PlayerId, Data};
 use crate::generic::FromMessage;
 use crate::generic::*;
 
@@ -25,7 +25,7 @@ pub struct ClientController {
     client_rx: Receiver<String, JSONMessage>,
 
     closed: bool,
-    buffer: VecDeque<Data>, // this might be Value
+    buffer: VecDeque<HostMsg>, // this might be Value
 }
 
 impl ClientController {
@@ -97,8 +97,8 @@ impl ClientController {
     }
 
     fn handle_host_msg(&mut self, key: any::TypeId, mut msg: Message) {
-        if key == any::TypeId::of::<Data>() {
-            if let Some(value) = Data::from_msg(&key, &mut msg) {
+        if key == any::TypeId::of::<HostMsg>() {
+            if let Some(value) = HostMsg::from_msg(&key, &mut msg) {
                 self.buffer.push_back(value.clone());
             }
         }
