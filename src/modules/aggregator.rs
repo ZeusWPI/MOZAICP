@@ -10,8 +10,11 @@ pub struct Aggregator {
 }
 
 impl Aggregator {
-    pub fn params(host_id: ReactorID, clients: HashMap<PlayerId, ReactorID>,) -> CoreParams<Self, any::TypeId, Message> {
-        CoreParams::new(Aggregator{ host_id, clients })
+    pub fn params(
+        host_id: ReactorID,
+        clients: HashMap<PlayerId, ReactorID>,
+    ) -> CoreParams<Self, any::TypeId, Message> {
+        CoreParams::new(Aggregator { host_id, clients })
     }
 }
 
@@ -26,22 +29,14 @@ impl ReactorState<any::TypeId, Message> for Aggregator {
     }
 }
 
-struct ClientLink {
-    host_id: ReactorID,
-}
+struct ClientLink;
 impl ClientLink {
-    fn params(host_id: ReactorID,) -> LinkParams<Self, any::TypeId, Message> {
-        LinkParams::new(Self{ host_id })
-            .internal_handler(FunctionHandler::from(Self::handle_inc))
-            .external_handler(FunctionHandler::from(Self::handle_from_player))
-    }
-
-    fn handle_inc(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {
-        handle.send_message(e.clone());
-    }
-
-    fn handle_from_player(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &PlayerMsg) {
-        handle.send_internal(e.clone(), TargetReactor::Link(self.host_id));
+    fn params(host_id: ReactorID) -> LinkParams<Self, any::TypeId, Message> {
+        LinkParams::new(Self)
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, HostMsg>()))
+            .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerMsg>(
+                TargetReactor::Link(host_id),
+            )))
     }
 }
 
@@ -50,14 +45,10 @@ struct HostLink {
 }
 
 impl HostLink {
-    fn params(clients: HashMap<PlayerId, ReactorID>,) -> LinkParams<Self, any::TypeId, Message> {
-        LinkParams::new(Self{ clients })
-            .internal_handler(FunctionHandler::from(Self::handle_inc))
+    fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
+        LinkParams::new(Self { clients })
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
             .external_handler(FunctionHandler::from(Self::handle_from_host))
-    }
-
-    fn handle_inc(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &PlayerMsg) {
-        handle.send_message(e.clone());
     }
 
     fn handle_from_host(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {

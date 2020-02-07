@@ -6,17 +6,34 @@ use std::marker::PhantomData;
 
 mod message;
 pub use self::message::{JSONMessage, Message, Typed};
+mod broker;
 mod link;
 mod reactor;
 mod types;
-mod broker;
-pub use broker::{BrokerHandle};
+pub use broker::BrokerHandle;
 
 pub use self::link::{Link, LinkHandle, LinkParams};
 pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState, TargetReactor};
 
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
+
+// pub struct FunctionHandler<F, S, R, T, M>
+
+pub fn i_to_e<S, T: Clone + 'static + IntoMessage<any::TypeId, Message>>(
+) -> impl 'static + Fn(&mut S, &mut LinkHandle<any::TypeId, Message>, &T) -> () {
+    |_, handle, t| {
+        handle.send_message(t.clone());
+    }
+}
+
+pub fn e_to_i<S, T: Clone + 'static + IntoMessage<any::TypeId, Message>>(
+    target: TargetReactor,
+) -> impl 'static + Fn(&mut S, &mut LinkHandle<any::TypeId, Message>, &T) -> () {
+    move |_, handle, t| {
+        handle.send_internal(t.clone(), target);
+    }
+}
 
 pub struct Initialize();
 
@@ -96,13 +113,17 @@ where
 {
     pub fn send<T: IntoMessage<K, M>>(&self, from: ReactorID, msg: T) -> Option<()> {
         let (k, m) = msg.into_msg()?;
-        self.sender.unbounded_send(Operation::ExternalMessage(from, k, m)).ok()?;
+        self.sender
+            .unbounded_send(Operation::ExternalMessage(from, k, m))
+            .ok()?;
 
         Some(())
     }
 
     pub fn close(&self, from: ReactorID) -> Option<()> {
-        self.sender.unbounded_send(Operation::CloseLink(from)).ok()?;
+        self.sender
+            .unbounded_send(Operation::CloseLink(from))
+            .ok()?;
 
         Some(())
     }
@@ -111,22 +132,22 @@ where
 impl<K, M> Clone for SenderHandle<K, M> {
     fn clone(&self) -> Self {
         SenderHandle {
-            sender: self.sender.clone()
+            sender: self.sender.clone(),
         }
     }
 }
 
-use futures::stream::{StreamExt, Stream};
-pub fn receiver_handle<K, M>(inner: Receiver<K, M>) -> impl Stream<Item = Option<(ReactorID, K, M)>> {
-    inner.filter_map(
-        move |item| async {
-            match item {
-                Operation::ExternalMessage(id, k, m) => Some(Some((id, k, m))),
-                Operation::CloseLink(_id) => Some(None),
-                _ => None
-            }
+use futures::stream::{Stream, StreamExt};
+pub fn receiver_handle<K, M>(
+    inner: Receiver<K, M>,
+) -> impl Stream<Item = Option<(ReactorID, K, M)>> {
+    inner.filter_map(move |item| async {
+        match item {
+            Operation::ExternalMessage(id, k, m) => Some(Some((id, k, m))),
+            Operation::CloseLink(_id) => Some(None),
+            _ => None,
         }
-    )
+    })
 }
 
 ///
