@@ -1,7 +1,7 @@
 use super::InnerOp;
 use crate::generic::{
     BrokerHandle, CoreParams, IntoMessage, LinkSpawner, Operation, ReactorID, ReactorState, Sender,
-    TargetReactor,
+    TargetReactor, SenderHandle,
 };
 
 use std::collections::VecDeque;
@@ -64,8 +64,8 @@ where
         &self.id
     }
 
-    pub fn chan(&self) -> Sender<K, M> {
-        self.chan.clone()
+    pub fn chan(&self) -> SenderHandle<K, M> {
+        SenderHandle { sender: self.chan.clone() }
     }
 }
 

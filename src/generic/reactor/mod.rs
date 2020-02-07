@@ -9,7 +9,7 @@ pub use params::CoreParams;
 
 use super::{ReactorID, LinkSpawner};
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub enum TargetReactor {
     All,
     Reactor,
