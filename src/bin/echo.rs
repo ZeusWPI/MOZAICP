@@ -17,7 +17,7 @@ use mozaic::generic;
 use mozaic::generic::*;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{ClientController, ConnectionManager, Aggregator};
+use mozaic::modules::{ClientController, ConnectionManager, Aggregator, StepLock};
 
 use futures::executor::ThreadPool;
 
@@ -75,38 +75,44 @@ async fn run(pool: ThreadPool) {
     let broker = BrokerHandle::new(pool.clone());
     let json_broker = BrokerHandle::new(pool.clone());
 
+    let player_ids = vec![10, 11];
+    let cc_ids = vec![11.into(), 12.into()];
+
+    let player_map: HashMap<PlayerId, ReactorID> = player_ids.iter().cloned().zip(cc_ids.iter().cloned()).collect();
+
     let echo_id = 0.into();
+    let step_id = 2.into();
     let agg_id = 1.into();
     let cm_id = 100.into();
-    let ccs = vec![10, 11, 12];
-    let player_ids: HashMap<PlayerId, ReactorID> = ccs.iter().map(|&x| (x + 1, x.into())).collect();
 
-    let p1 = EchoReactor::params(agg_id);
-    let agg = Aggregator::params(echo_id, player_ids.clone());
+    let echo = EchoReactor::params(step_id);
+    let agg = Aggregator::params(step_id, player_map.clone());
+    let step = StepLock::params(echo_id, agg_id, player_ids, Some(3000));
 
     let cm = ConnectionManager::params(
         pool.clone(),
         "127.0.0.1:6666".parse().unwrap(),
         json_broker.clone(),
-        player_ids,
+        player_map.clone(),
     );
 
-    ccs.iter()
-        .map(|&id| {
+    player_map.iter()
+        .map(|(&id, &r_id)| {
             ClientController::new(
-                id.into(),
+                r_id,
                 json_broker.clone(),
                 broker.clone(),
                 agg_id,
                 cm_id,
-                id + 1,
+                id,
             )
         })
         .for_each(|cc| pool.spawn_ok(cc));
 
     join!(
-        broker.spawn_with_handle(p1, Some(echo_id)).0,
+        broker.spawn_with_handle(echo, Some(echo_id)).0,
         broker.spawn_with_handle(agg, Some(agg_id)).0,
+        broker.spawn_with_handle(step, Some(step_id)).0,
         json_broker.spawn_with_handle(cm, Some(cm_id)).0,
     );
 }
