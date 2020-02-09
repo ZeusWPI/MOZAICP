@@ -69,7 +69,7 @@ impl M2FooLink {
     }
 
     fn backwards(&mut self, handle: &mut LinkHandle<any::TypeId, M2>, e: &E) {
-        handle.send_internal(e.clone(), TargetReactor::All);
+        handle.send_internal(e.clone(), TargetReactor::Reactor);
     }
 }
 
@@ -96,8 +96,8 @@ impl ReactorState<any::TypeId, M1> for M1Reactor {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, M1>) {
         // Setup translator
         let mut trans = Translator::<any::TypeId, any::TypeId, M1, M2>::new();
-        trans.add_from(any::TypeId::of::<E>(), Box::new(|_t, _m| E::into_msg(E)));
-        trans.add_to(any::TypeId::of::<E>(), Box::new(|_t, _m| E::into_msg(E)));
+        trans.add_from(any::TypeId::of::<E>(), |_t, _m| Some(E));
+        trans.add_to(any::TypeId::of::<E>(), |_t, _m| Some(E));
 
         let fn_to = trans.attach_to(11.into(), self.1.clone());
         let fn_from = trans.attach_from(*handle.id(), self.1.clone());
@@ -113,13 +113,13 @@ impl ReactorState<any::TypeId, M1> for M1Reactor {
 }
 
 enum M2Reactor {
-    Init(Box<dyn FnOnce(Sender<any::TypeId, M2>) -> Sender<any::TypeId, M2> + Send>),
+    Init(Box<dyn FnOnce(SenderHandle<any::TypeId, M2>) -> Sender<any::TypeId, M2> + Send>),
     Inited(),
 }
 
 impl M2Reactor {
     fn params(
-        s: Box<dyn FnOnce(Sender<any::TypeId, M2>) -> Sender<any::TypeId, M2> + Send>,
+        s: Box<dyn FnOnce(SenderHandle<any::TypeId, M2>) -> Sender<any::TypeId, M2> + Send>,
     ) -> CoreParams<Self, any::TypeId, M2> {
         generic::CoreParams::new(M2Reactor::Init(s)).handler(FunctionHandler::from(Self::thing))
     }

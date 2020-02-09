@@ -181,13 +181,17 @@ where
 
         let mut m = LinkOperation::ExternalMessage(&id, &mut msg);
 
-        self.links
+        if self
+            .links
             .get_mut(&origin)
             .map(|(handler, span, _)| {
                 let _enter = span.enter();
                 handler.handle(&mut (), &mut handle, &mut m)
             })
-            .expect("No link found to that reactor");
+            .is_none()
+        {
+            error!("No link found to reactor {}", origin);
+        }
     }
 
     /// Opens a link to the target reactor
