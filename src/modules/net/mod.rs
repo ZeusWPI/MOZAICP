@@ -189,7 +189,7 @@ async fn accepting<A: ToSocketAddrs + std::fmt::Debug>(
                             match v? {
                                 None => { trace!("Closing"); break; },
                                 Some((_, _, mut v)) => {
-                                    let data: &HostData = v.into_t()?;
+                                    let data: &Data = v.into_t()?;
                                     writer.write_all(data.value.as_bytes()).await
                                         .map_err(|error| { info!(?error, "Write to player failed")})
                                         .ok()?;
@@ -201,6 +201,7 @@ async fn accepting<A: ToSocketAddrs + std::fmt::Debug>(
                             let value = v?
                                 .map_err(|error| { info!(?error, "Player stream error")})
                                 .ok()?;
+                            println!("Got value {}", value);
                             cc_f.send(id, Typed::from(Data { value })).unwrap();
                         },
                         complete => {

@@ -23,7 +23,7 @@ impl ReactorState<any::TypeId, Message> for Aggregator {
 
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         for client_id in self.clients.values() {
-            handle.open_link(*client_id, ClientLink::params(self.host_id), true);
+            handle.open_link(*client_id, ClientLink::params(self.host_id), false);
         }
         handle.open_link(self.host_id, HostLink::params(self.clients.clone()), true);
     }
@@ -34,7 +34,7 @@ impl ClientLink {
     fn params(host_id: ReactorID) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self)
             .internal_handler(FunctionHandler::from(i_to_e::<Self, HostMsg>()))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerData>(
+            .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerMsg>(
                 TargetReactor::Link(host_id),
             )))
     }
@@ -47,13 +47,13 @@ struct HostLink {
 impl HostLink {
     fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self { clients })
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerData>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
             .external_handler(FunctionHandler::from(Self::handle_from_host))
     }
 
     fn handle_from_host(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {
         let target = match e {
-            HostMsg::Data(data) => data.target,
+            HostMsg::Data(_, id) => id.clone(),
             HostMsg::Kick(id) => Some(*id),
         };
 

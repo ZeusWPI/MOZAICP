@@ -31,23 +31,23 @@ impl EchoReactor {
     fn handle_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, msg: &PlayerMsg) {
         println!("Echo ing");
         let value = match msg {
-            PlayerMsg::Data(e) => {
-                if "stop".eq_ignore_ascii_case(&e.value) {
+            PlayerMsg { id, data: Some(value) } => {
+                if "stop".eq_ignore_ascii_case(&value.value) {
                     handle.close();
                 }
 
-                if "quit".eq_ignore_ascii_case(&e.value) {
-                    handle.send_internal(HostMsg::Kick(e.id), TargetReactor::All)
+                if "quit".eq_ignore_ascii_case(&value.value) {
+                    handle.send_internal(HostMsg::Kick(*id), TargetReactor::All)
                 }
 
-                format!("{}: {}\n", e.id, e.value)
+                format!("{}: {}\n", id, value.value)
             },
-            PlayerMsg::Timeout(id) => {
+            PlayerMsg { id, data: None } => {
                 format!("{}: TIMEOUT\n", id)
             }
         };
 
-        handle.send_internal(HostMsg::Data(HostData { value, target: None }), TargetReactor::All);
+        handle.send_internal(HostMsg::Data(Data{value}, None), TargetReactor::All);
     }
 }
 

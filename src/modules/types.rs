@@ -3,26 +3,20 @@ use serde::{Deserialize, Serialize};
 pub type PlayerId = u64;
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
-pub struct PlayerData {
-    pub value: String,
-    pub id: PlayerId,
+pub struct PlayerMsg {
+    pub id: PlayerId, 
+    pub data: Option<Data>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Key, Debug)]
-pub enum PlayerMsg {
-    Data(PlayerData),
-    Timeout(PlayerId),
-}
-
-#[derive(Serialize, Deserialize, Clone, Key, Debug)]
-pub struct HostData {
-    pub value: String,
-    pub target: Option<PlayerId>,
-}
+// #[derive(Serialize, Deserialize, Clone, Key, Debug)]
+// pub struct HostData {
+//     pub value: String,
+//     pub target: Option<PlayerId>,
+// }
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub enum HostMsg {
-    Data(HostData),
+    Data(Data, Option<PlayerId>),
     Kick(PlayerId),
 }
 

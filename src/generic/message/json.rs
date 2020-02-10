@@ -37,6 +37,12 @@ impl<T: Key<String>> Key<String> for Typed<T> {
     }
 }
 
+impl Key<String> for Typed<String> {
+    fn key() -> String {
+        "String".to_string()
+    }
+}
+
 pub struct JSONMessage {
     value: Value,
     id: String,
