@@ -28,20 +28,26 @@ impl EchoReactor {
             .handler(FunctionHandler::from(Self::handle_msg))
     }
 
-    fn handle_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, e: &PlayerMsg) {
+    fn handle_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, msg: &PlayerMsg) {
         println!("Echo ing");
-        let value = format!("{}: {}\n", e.id, e.value);
+        let value = match msg {
+            PlayerMsg::Data(e) => {
+                if "stop".eq_ignore_ascii_case(&e.value) {
+                    handle.close();
+                }
 
-        handle.send_internal(HostMsg { value, target: None }, TargetReactor::All);
+                if "quit".eq_ignore_ascii_case(&e.value) {
+                    handle.send_internal(HostMsg::Kick(e.id), TargetReactor::All)
+                }
 
-        if "stop".eq_ignore_ascii_case(&e.value) {
-            handle.close();
-        }
+                format!("{}: {}\n", e.id, e.value)
+            },
+            PlayerMsg::Timeout(id) => {
+                format!("{}: TIMEOUT\n", id)
+            }
+        };
 
-        // ?: Add way of player to quit the game, echo server whatever
-        // if "quit".eq_ignore_ascii_case(&e.value) {
-        //     handle.send_internal(Typed::from(Close{}, TargetReactor::Link(e.))
-        // }
+        handle.send_internal(HostMsg::Data(HostData { value, target: None }), TargetReactor::All);
     }
 }
 

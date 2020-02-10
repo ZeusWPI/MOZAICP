@@ -1,4 +1,4 @@
-use super::types::{HostMsg, PlayerId, PlayerMsg};
+use super::types::{HostMsg, PlayerId, PlayerMsg, PlayerData};
 use crate::generic::*;
 
 use futures::channel::mpsc;
@@ -17,7 +17,7 @@ struct TimeOut;
 struct ResetTimeOut;
 
 pub struct StepLock {
-    step: HashMap<PlayerId, Option<PlayerMsg>>,
+    step: HashMap<PlayerId, Option<PlayerData>>,
     players: Vec<PlayerId>,
     host: ReactorID,
     player_id: ReactorID,
@@ -44,7 +44,8 @@ impl StepLock {
     }
 
     /// Insert the player message in the buffered message
-    fn player_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, e: &PlayerMsg) {
+    fn player_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, e: &PlayerData) {
+        info!("Got player data");
         self.step.insert(e.id, Some(e.clone()));
         if self.step.values().all(Option::is_some) {
             self.flush_msgs(handle);
@@ -59,10 +60,7 @@ impl StepLock {
     fn flush_msgs(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>) {
         handle.send_internal(ResetTimeOut, TargetReactor::Links);
         for (&id, msg) in self.step.iter_mut() {
-            let msg = mem::replace(msg, None).unwrap_or(PlayerMsg {
-                value: String::new(),
-                id,
-            });
+            let msg = mem::replace(msg, None).map(|data| PlayerMsg::Data(data)).unwrap_or(PlayerMsg::Timeout(id));
             handle.send_internal(msg, TargetReactor::Link(self.host));
         }
     }
@@ -83,7 +81,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         // Open link to client
         let client_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
+            .external_handler(FunctionHandler::from(e_to_i::<(), PlayerData>(
                 TargetReactor::Reactor,
             )));
         handle.open_link(self.player_id, client_link_params, true);
