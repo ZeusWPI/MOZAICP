@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub type PlayerId = u64;
+pub type DataType = String;
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct PlayerMsg {
@@ -20,9 +21,19 @@ pub enum HostMsg {
     Kick(PlayerId),
 }
 
+impl HostMsg {
+    pub fn new(value: DataType, player: Option<PlayerId>) -> Self {
+        HostMsg::Data(Data{ value }, player)
+    }
+
+    pub fn kick(player: PlayerId) -> Self {
+        HostMsg::Kick(player)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Data {
-    pub value: String,
+    pub value: DataType,
 }
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]

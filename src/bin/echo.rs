@@ -9,69 +9,43 @@ extern crate serde_json;
 extern crate tracing;
 extern crate tracing_subscriber;
 
-use tracing_subscriber::{FmtSubscriber, EnvFilter};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use std::{any, time};
+use std::{time};
 
-use mozaic::generic;
 use mozaic::generic::*;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{ClientController, ConnectionManager, Aggregator, StepLock};
+use mozaic::modules::{
+    Aggregator, ClientController, ConnectionManager, GameController, GameRunner, StepLock,
+};
 
 use futures::executor::ThreadPool;
 
-struct EchoReactor(ReactorID);
-impl EchoReactor {
-    fn params(clients: ReactorID) -> CoreParams<Self, any::TypeId, Message> {
-        generic::CoreParams::new(EchoReactor(clients))
-            .handler(FunctionHandler::from(Self::handle_msg))
-    }
+struct Echo {
+    clients: Vec<PlayerId>,
+}
 
-    fn handle_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, msg: &PlayerMsg) {
-        println!("Echo ing");
-        let value = match msg {
-            PlayerMsg { id, data: Some(value) } => {
-                if "stop".eq_ignore_ascii_case(&value.value) {
-                    handle.close();
-                }
-
-                if "quit".eq_ignore_ascii_case(&value.value) {
-                    handle.send_internal(HostMsg::Kick(*id), TargetReactor::All)
-                }
-
-                format!("{}: {}\n", id, value.value)
-            },
-            PlayerMsg { id, data: None } => {
-                format!("{}: TIMEOUT\n", id)
+impl GameController for Echo {
+    fn step<'a>(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
+        let mut sub = Vec::new();
+        for PlayerMsg { id, data } in turns {
+            let msg = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
+            if "stop".eq_ignore_ascii_case(&msg) {
+                sub.push(HostMsg::kick(id));
             }
-        };
 
-        handle.send_internal(HostMsg::Data(Data{value}, None), TargetReactor::All);
-    }
-}
+            for target in &self.clients {
+                sub.push(HostMsg::Data(
+                    Data {
+                        value: format!("{}: {}\n", id, msg),
+                    },
+                    Some(*target),
+                ));
+            }
+        }
 
-impl ReactorState<any::TypeId, Message> for EchoReactor {
-    const NAME: &'static str = "EchoReactor";
-    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
-        handle.open_link(self.0, EchoLink::params(), true);
-    }
-}
-
-struct EchoLink();
-impl EchoLink {
-    fn params() -> LinkParams<Self, any::TypeId, Message> {
-        LinkParams::new(Self())
-            .internal_handler(FunctionHandler::from(Self::handle_inc))
-            .external_handler(FunctionHandler::from(Self::handle_out))
-    }
-
-    fn handle_inc(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {
-        handle.send_message(e.clone());
-    }
-
-    fn handle_out(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &PlayerMsg) {
-        handle.send_internal(e.clone(), TargetReactor::Reactor);
+        sub
     }
 }
 
@@ -84,14 +58,23 @@ async fn run(pool: ThreadPool) {
     let player_ids = vec![10, 11];
     let cc_ids = vec![11.into(), 12.into()];
 
-    let player_map: HashMap<PlayerId, ReactorID> = player_ids.iter().cloned().zip(cc_ids.iter().cloned()).collect();
+    let player_map: HashMap<PlayerId, ReactorID> = player_ids
+        .iter()
+        .cloned()
+        .zip(cc_ids.iter().cloned())
+        .collect();
 
     let echo_id = 0.into();
     let step_id = 2.into();
     let agg_id = 1.into();
     let cm_id = 100.into();
 
-    let echo = EchoReactor::params(step_id);
+    let echo = GameRunner::params(
+        step_id,
+        Echo {
+            clients: player_ids.clone(),
+        },
+    );
     let agg = Aggregator::params(step_id, player_map.clone());
     let step = StepLock::params(echo_id, agg_id, player_ids, Some(3000));
 
@@ -102,16 +85,10 @@ async fn run(pool: ThreadPool) {
         player_map.clone(),
     );
 
-    player_map.iter()
+    player_map
+        .iter()
         .map(|(&id, &r_id)| {
-            ClientController::new(
-                r_id,
-                json_broker.clone(),
-                broker.clone(),
-                agg_id,
-                cm_id,
-                id,
-            )
+            ClientController::new(r_id, json_broker.clone(), broker.clone(), agg_id, cm_id, id)
         })
         .for_each(|cc| pool.spawn_ok(cc));
 
