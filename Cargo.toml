@@ -1,6 +1,6 @@
 [package]
 name = "mozaic"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Zeus WPI"]
 edition = "2018"
 
@@ -10,7 +10,6 @@ path = "src/lib.rs"
 
 [dependencies]
 bytes = "0.5.4"
-error-chain = "0.12.1"
 hex = "0.4.0"
 rand = { version = "0.7.3", default-features = true }
 
@@ -26,14 +25,4 @@ tracing-subscriber = "0.2.0"
 
 mozaic-derive = { path = "./mozaic-derive" }
 
-capnp = "0.12.1"
-capnp-futures = "0.12.0"
-
 ws = "0.9.1"
-
-# for chat example
-cursive = "0.13.0"
-
-[build-dependencies]
-capnpc = "0.10.1"
-mozaic-build = { path = "./mozaic-build" }
