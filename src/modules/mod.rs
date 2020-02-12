@@ -9,7 +9,7 @@ mod steplock;
 pub use steplock::StepLock;
 
 mod gamerunner;
-pub use gamerunner::{GameRunner, GameController};
+pub use gamerunner::{GameRunner, GameController, GameBuilder};
 
 pub mod types;
 pub mod net;

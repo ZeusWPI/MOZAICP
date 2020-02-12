@@ -201,7 +201,6 @@ async fn accepting<A: ToSocketAddrs + std::fmt::Debug>(
                             let value = v?
                                 .map_err(|error| { info!(?error, "Player stream error")})
                                 .ok()?;
-                            println!("Got value {}", value);
                             cc_f.send(id, Typed::from(Data { value })).unwrap();
                         },
                         complete => {

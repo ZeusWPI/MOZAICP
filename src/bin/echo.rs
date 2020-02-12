@@ -1,24 +1,19 @@
 extern crate futures;
 extern crate mozaic;
 extern crate mozaic_derive;
-#[macro_use]
-extern crate tokio;
 extern crate serde;
 extern crate serde_json;
+extern crate tokio;
 
 extern crate tracing;
 extern crate tracing_subscriber;
 
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use std::{time};
-
-use mozaic::generic::*;
+use std::time;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{
-    Aggregator, ClientController, ConnectionManager, GameController, GameRunner, StepLock,
-};
+use mozaic::modules::{GameController, StepLock};
 
 use futures::executor::ThreadPool;
 
@@ -49,57 +44,7 @@ impl GameController for Echo {
     }
 }
 
-async fn run(pool: ThreadPool) {
-    use std::collections::HashMap;
-
-    let broker = BrokerHandle::new(pool.clone());
-    let json_broker = BrokerHandle::new(pool.clone());
-
-    let player_ids = vec![10, 11];
-    let cc_ids = vec![11.into(), 12.into()];
-
-    let player_map: HashMap<PlayerId, ReactorID> = player_ids
-        .iter()
-        .cloned()
-        .zip(cc_ids.iter().cloned())
-        .collect();
-
-    let echo_id = 0.into();
-    let step_id = 2.into();
-    let agg_id = 1.into();
-    let cm_id = 100.into();
-
-    let echo = GameRunner::params(
-        step_id,
-        Echo {
-            clients: player_ids.clone(),
-        },
-    );
-    let agg = Aggregator::params(step_id, player_map.clone());
-    let step = StepLock::params(echo_id, agg_id, player_ids, Some(3000));
-
-    let cm = ConnectionManager::params(
-        pool.clone(),
-        "127.0.0.1:6666".parse().unwrap(),
-        json_broker.clone(),
-        player_map.clone(),
-    );
-
-    player_map
-        .iter()
-        .map(|(&id, &r_id)| {
-            ClientController::new(r_id, json_broker.clone(), broker.clone(), agg_id, cm_id, id)
-        })
-        .for_each(|cc| pool.spawn_ok(cc));
-
-    join!(
-        broker.spawn_with_handle(echo, Some(echo_id)).0,
-        broker.spawn_with_handle(agg, Some(agg_id)).0,
-        broker.spawn_with_handle(step, Some(step_id)).0,
-        json_broker.spawn_with_handle(cm, Some(cm_id)).0,
-    );
-}
-
+use mozaic::modules::GameBuilder;
 #[tokio::main]
 async fn main() {
     let sub = FmtSubscriber::builder()
@@ -113,7 +58,14 @@ async fn main() {
             .create()
             .unwrap();
 
-        run(pool).await;
+        let players = vec![10, 11];
+        let game = Echo {
+            clients: players.clone(),
+        };
+        let builder = GameBuilder::new(players.clone(), game)
+            .with_step_lock(StepLock::new(players.clone()).with_timeout(3000));
+
+        builder.run(pool).await;
     }
 
     std::thread::sleep(time::Duration::from_millis(100));

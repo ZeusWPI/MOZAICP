@@ -1,4 +1,4 @@
-use super::types::{HostMsg, PlayerId, PlayerMsg, Data};
+use super::types::{Data, HostMsg, PlayerId, PlayerMsg};
 use crate::generic::*;
 
 use futures::channel::mpsc;
@@ -26,27 +26,41 @@ pub struct StepLock {
 }
 
 impl StepLock {
-    pub fn params(
-        host: ReactorID,
-        player_id: ReactorID,
-        players: Vec<PlayerId>,
-        timeout_ms: Option<u64>,
-    ) -> CoreParams<Self, any::TypeId, Message> {
-        CoreParams::new(Self {
-            host,
-            player_id,
+    pub fn new(players: Vec<PlayerId>) -> Self {
+        Self {
+            host: 0.into(),
+            player_id: 0.into(),
             step: players.iter().map(|&id| (id, None)).collect(),
             players,
-            timeout_ms,
-        })
-        .handler(FunctionHandler::from(Self::player_msg))
-        .handler(FunctionHandler::from(Self::timeout))
+            timeout_ms: None,
+        }
+    }
+
+    pub fn with_timeout(mut self, timeout: u64) -> Self {
+        self.timeout_ms = Some(timeout);
+        self
+    }
+
+    pub fn params(mut self, host: ReactorID, player_id: ReactorID,) -> CoreParams<Self, any::TypeId, Message> {
+        self.host = host;
+        self.player_id = player_id;
+        CoreParams::new(self)
+            .handler(FunctionHandler::from(Self::player_msg))
+            .handler(FunctionHandler::from(Self::timeout))
     }
 
     /// Insert the player message in the buffered message
     fn player_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, e: &PlayerMsg) {
         info!("Got player data");
-        self.step.insert(e.id, Some(e.data.as_ref().expect("Player msg from player without DATA?").clone()));
+        self.step.insert(
+            e.id,
+            Some(
+                e.data
+                    .as_ref()
+                    .expect("Player msg from player without DATA?")
+                    .clone(),
+            ),
+        );
         if self.step.values().all(Option::is_some) {
             self.flush_msgs(handle);
         }
@@ -60,7 +74,10 @@ impl StepLock {
     fn flush_msgs(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>) {
         handle.send_internal(ResetTimeOut, TargetReactor::Links);
         for (&id, msg) in self.step.iter_mut() {
-            let msg = PlayerMsg{ id, data: mem::replace(msg, None)};
+            let msg = PlayerMsg {
+                id,
+                data: mem::replace(msg, None),
+            };
             handle.send_internal(msg, TargetReactor::Link(self.host));
         }
     }

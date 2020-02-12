@@ -88,7 +88,6 @@ impl ClientController {
 
     fn handle_client_msg(&mut self, _: String, mut msg: JSONMessage) {
         if let Some(data) = msg.into_t::<Data>() {
-            println!("Got data");
             let msg = PlayerMsg {
                 id: self.client_id,
                 data: Some(data.clone()),
