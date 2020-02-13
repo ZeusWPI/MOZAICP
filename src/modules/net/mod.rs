@@ -17,12 +17,12 @@ use super::types::*;
 use crate::generic::*;
 mod types;
 use types::*;
+pub use types::Register;
 
 mod controller;
 pub use controller::ClientController;
 
-// TODO: add error_chain
-// TODO: add tracing
+// TODO: add better tracing
 
 pub type PlayerMap = HashMap<PlayerId, ReactorID>;
 
@@ -161,8 +161,6 @@ async fn accepting<A: ToSocketAddrs + std::fmt::Debug>(
                     .map_err(|error| { info!(?error, "Player couldn't register")})
                     .ok()
                     .map(|x| x.player)?;
-
-                writer.write_all(b"Hello Player\n").await.unwrap();
 
                 let client_controller = *inner.map.get(&player).or_else(|| {info!(player, "Player not found"); None})?;
                 let cc_f = inner.broker.get_sender(&client_controller);

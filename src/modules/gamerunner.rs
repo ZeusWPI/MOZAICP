@@ -33,6 +33,7 @@ impl GameRunner {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         msg: &PlayerMsg,
     ) {
+        info!("Game step");
         for msg in self.game.step(vec![msg.clone()]) {
             handle.send_internal(msg, TargetReactor::Links);
         }

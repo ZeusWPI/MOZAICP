@@ -22,7 +22,7 @@ struct Echo {
 }
 
 impl GameController for Echo {
-    fn step<'a>(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
+    fn step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
         let mut sub = Vec::new();
         for PlayerMsg { id, data } in turns {
             let msg = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
