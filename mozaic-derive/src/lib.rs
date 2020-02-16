@@ -3,6 +3,27 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+#[proc_macro_derive(Key)]
+pub fn derive_key(input: TokenStream) -> TokenStream {
+    // Parse the string representation
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+
+    // Build the impl
+    let gen = quote! {
+        impl ::generic::Key<String> for #name {
+            fn key() -> String {
+                stringify!(#name).to_lowercase()
+            }
+        }
+    };
+
+    // Return the generated impl
+    gen.into()
+}
+
+
 use proc_macro::TokenStream;
 use std::collections::HashMap;
 

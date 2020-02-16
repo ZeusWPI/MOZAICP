@@ -1,41 +1,28 @@
 [package]
 name = "mozaic"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Zeus WPI"]
+edition = "2018"
 
 [lib]
 name = "mozaic"
 path = "src/lib.rs"
 
 [dependencies]
-bytes = "0.4.12"
-error-chain = "0.12.1"
-futures = "0.1.28"
-hex = "0.3.2"
-rand = { version = "0.6.5", default-features = true }
+bytes = "0.5.4"
+hex = "0.4.0"
+rand = { version = "0.7.3", default-features = true }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-tokio = "0.1.22"
-tokio-core = "0.1.17"
-tokio-process = "0.2.4"
+futures = { version = "0.3.1", features = ["executor", "thread-pool"] }
+tokio = { version = "0.2.11", features = ["macros", "tcp", "sync", "process", "rt-core", "io-util", "time", "stream"] }
 
-tracing = "0.1.9"
-tracing-futures = "0.1.0"
+tracing = "0.1.12"
+tracing-futures = "0.2.1"
+tracing-subscriber = "0.2.0"
 
 mozaic-derive = { path = "./mozaic-derive" }
 
-capnp = "0.10.1"
-capnp-futures = "0.10.1"
-
-tracing-subscriber = "0.1.5"
-
 ws = "0.9.1"
-
-# for chat example
-cursive = "0.13.0"
-
-[build-dependencies]
-capnpc = "0.10.1"
-mozaic-build = { path = "./mozaic-build" }

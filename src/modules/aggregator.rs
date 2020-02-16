@@ -1,117 +1,68 @@
-use core_capnp::initialize;
-use errors::Result;
-use messaging::reactor::*;
-use messaging::types::*;
+use crate::generic::*;
+use crate::modules::types::*;
 
-use base_capnp::{from_client, host_message, to_client};
-use connection_capnp::client_kicked;
-use core_capnp::{actors_joined, terminate_stream};
+use std::any;
+use std::collections::HashMap;
 
 pub struct Aggregator {
-    connection_manager: ReactorId,
-    host: ReactorId,
-    waiting_for: Option<usize>,
+    host_id: ReactorID,
+    clients: HashMap<PlayerId, ReactorID>,
 }
 
 impl Aggregator {
-    pub fn params<C: Ctx>(connection_manager: ReactorId, host: ReactorId) -> CoreParams<Self, C> {
-        let me = Self {
-            connection_manager,
-            host,
-            waiting_for: None,
-        };
-        let mut params = CoreParams::new(me);
-
-        params.handler(initialize::Owned, CtxHandler::new(Self::handle_initialize));
-        params.handler(
-            actors_joined::Owned,
-            CtxHandler::new(Self::handle_actors_joined),
-        );
-
-        params.handler(terminate_stream::Owned, CtxHandler::new(Self::handle_actor_left));
-
-        return params;
-    }
-
-    fn handle_initialize<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        _: initialize::Reader,
-    ) -> Result<()> {
-        handle.open_link(HostLink::params(self.host.clone()))?;
-        handle.open_link(ConnectionsLink::params(self.connection_manager.clone()))?;
-
-        Ok(())
-    }
-
-    fn handle_actor_left<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        _: terminate_stream::Reader,
-    ) -> Result<()> {
-
-        self.waiting_for = self.waiting_for.map(|x| x-1);
-
-        if self.waiting_for == Some(0) {
-            handle.destroy()?;
-        }
-
-        Ok(())
-    }
-
-    fn handle_actors_joined<C: Ctx>(
-        &mut self,
-        handle: &mut ReactorHandle<C>,
-        msg: actors_joined::Reader,
-    ) -> Result<()> {
-        self.waiting_for = Some(0);
-        for id in msg.get_ids()?.iter() {
-            self.waiting_for = self.waiting_for.map(|x| x+1);
-            let id = id.unwrap();
-            let client_id = ReactorId::from(id);
-            handle.open_link(ClientLink::params(client_id)).unwrap();
-        }
-        Ok(())
+    pub fn params(
+        host_id: ReactorID,
+        clients: HashMap<PlayerId, ReactorID>,
+    ) -> CoreParams<Self, any::TypeId, Message> {
+        CoreParams::new(Aggregator { host_id, clients })
     }
 }
 
-struct HostLink;
-impl HostLink {
-    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(remote_id, HostLink);
+impl ReactorState<any::TypeId, Message> for Aggregator {
+    const NAME: &'static str = "Aggregator";
 
-        params.external_handler(host_message::Owned, CtxHandler::new(host_message::e_to_i));
-        params.external_handler(to_client::Owned, CtxHandler::new(to_client::e_to_i));
-        params.external_handler(client_kicked::Owned, CtxHandler::new(client_kicked::e_to_i));
-
-        params.internal_handler(from_client::Owned, CtxHandler::new(from_client::i_to_e));
-
-        return params;
-    }
-}
-
-struct ConnectionsLink;
-impl ConnectionsLink {
-    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(remote_id, ConnectionsLink);
-
-        params.external_handler(actors_joined::Owned, CtxHandler::new(actors_joined::e_to_i));
-
-        return params;
+    fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
+        for client_id in self.clients.values() {
+            handle.open_link(*client_id, ClientLink::params(self.host_id), false);
+        }
+        handle.open_link(self.host_id, HostLink::params(self.clients.clone()), true);
     }
 }
 
 struct ClientLink;
 impl ClientLink {
-    fn params<C: Ctx>(remote_id: ReactorId) -> LinkParams<Self, C> {
-        let mut params = LinkParams::new(remote_id, ClientLink);
-        params.internal_handler(host_message::Owned, CtxHandler::new(host_message::i_to_e));
-        params.internal_handler(to_client::Owned, CtxHandler::new(to_client::i_to_e));
-        params.internal_handler(client_kicked::Owned, CtxHandler::new(client_kicked::i_to_e));
+    fn params(host_id: ReactorID) -> LinkParams<Self, any::TypeId, Message> {
+        LinkParams::new(Self)
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, HostMsg>()))
+            .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerMsg>(
+                TargetReactor::Link(host_id),
+            )))
+    }
+}
 
-        params.external_handler(terminate_stream::Owned, CtxHandler::new(terminate_stream::e_to_i));
-        params.external_handler(from_client::Owned, CtxHandler::new(from_client::e_to_i));
+struct HostLink {
+    clients: HashMap<PlayerId, ReactorID>,
+}
 
-        return params;
+impl HostLink {
+    fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
+        LinkParams::new(Self { clients })
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
+            .external_handler(FunctionHandler::from(Self::handle_from_host))
+    }
+
+    fn handle_from_host(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {
+        let target = match e {
+            HostMsg::Data(_, id) => id.clone(),
+            HostMsg::Kick(id) => Some(*id),
+        };
+
+        if let Some(player_id) = target {
+            if let Some(target) = self.clients.get(&player_id) {
+                handle.send_internal(e.clone(), TargetReactor::Link(*target));
+            }
+        } else {
+            handle.send_internal(e.clone(), TargetReactor::Links);
+        }
     }
 }
