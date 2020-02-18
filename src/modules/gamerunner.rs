@@ -135,7 +135,7 @@ mod builder {
 
             let cm = ConnectionManager::params(
                 pool.clone(),
-                "127.0.0.1:6666".parse().unwrap(),
+                "10.1.0.187:6666".parse().unwrap(),
                 json_broker.clone(),
                 player_map.clone(),
             );

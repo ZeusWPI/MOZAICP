@@ -3,7 +3,7 @@ use futures::executor::ThreadPool;
 use futures::stream::StreamExt;
 use futures::*;
 
-use tracing::{instrument};
+use tracing::instrument;
 use tracing_futures::Instrument;
 
 use tokio;
@@ -16,8 +16,8 @@ use std::net::SocketAddr;
 use super::types::*;
 use crate::generic::*;
 mod types;
-use types::*;
 pub use types::Register;
+use types::*;
 
 mod controller;
 pub use controller::ClientController;
@@ -158,11 +158,16 @@ async fn accepting<A: ToSocketAddrs + std::fmt::Debug>(
 
                 let first_line = lines.next().await?.ok()?;
                 let player = serde_json::from_str::<Register>(&first_line)
-                    .map_err(|error| { info!(?error, "Player couldn't register")})
+                    .map_err(|error| info!(?error, "Player couldn't register"))
                     .ok()
                     .map(|x| x.player)?;
 
-                let client_controller = *inner.map.get(&player).or_else(|| {info!(player, "Player not found"); None})?;
+                info!(player, "Trying");
+
+                let client_controller = *inner.map.get(&player).or_else(|| {
+                    info!(player, "Player not found");
+                    None
+                })?;
                 let cc_f = inner.broker.get_sender(&client_controller);
 
                 let client = ReactorID::rand();
@@ -191,6 +196,7 @@ async fn accepting<A: ToSocketAddrs + std::fmt::Debug>(
                                     writer.write_all(data.value.as_bytes()).await
                                         .map_err(|error| { info!(?error, "Write to player failed")})
                                         .ok()?;
+                                    writer.write_all(b"\n").await.ok()?;
                                     writer.flush();
                                 }
                             }
