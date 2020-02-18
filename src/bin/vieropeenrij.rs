@@ -41,21 +41,23 @@ impl GameController for Server {
                 };
                 
                 if self.field[column as usize].len() < 7 {
+                    self.field[column as usize].push(*id);
+                    if check_if_won(&self.field) {
+                        updates.push(HostMsg::new(String::from("You Win"), Some(self.next_player)));
+                        updates.push(HostMsg::new(String::from("You Lose"), Some(1 - self.next_player)));
+                        updates.push(HostMsg::Kick(0));
+                        updates.push(HostMsg::Kick(1));
+                    } else {
+                        updates.push(HostMsg::new(String::from("Ok"), None));
+                    }
+                    
                     if self.next_player == 0 {
                         self.next_player = 1;
                     } else {
                         self.next_player = 0;
                     }
-                    self.field[column as usize].push(*id)
                 }
-                if check_if_won(&self.field) {
-                    updates.push(HostMsg::new(String::from("You Win"), Some(self.next_player)));
-                    updates.push(HostMsg::new(String::from("You Lose"), Some(1 - self.next_player)));
-                    updates.push(HostMsg::Kick(0));
-                    updates.push(HostMsg::Kick(1));
-                } else {
-                    updates.push(HostMsg::new(String::from("Ok"), None));
-                }
+                
             }
         }
 
