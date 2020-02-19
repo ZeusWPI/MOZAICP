@@ -102,8 +102,8 @@ async fn handle_spawn(
             v = rx.next() => {
                 match v? {
                     None => { trace!("Closing"); break; },
-                    Some((_from, _key, mut message)) => {
-                        let data: &Data = message.borrow()?;
+                    Some((_from, key, mut message)) => {
+                        let data: &Data = Data::from_msg(&key, &mut message)?;
                         writer.write_all(data.value.as_bytes()).await
                             .map_err(|error| { info!(?error, "Write to player failed")})
                             .ok()?;

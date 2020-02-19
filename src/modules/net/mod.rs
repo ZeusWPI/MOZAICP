@@ -22,6 +22,8 @@ use types::*;
 mod controller;
 pub use controller::ClientController;
 
+mod client_controller;
+
 /// So, networking and things
 ///
 /// Registering is the act of sending a specific client key.
