@@ -5,7 +5,7 @@ use crate::generic::ReactorID;
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Register {
-    pub player: PlayerId,
+    pub player: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]

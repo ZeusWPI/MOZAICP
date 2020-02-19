@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![recursion_limit="256"]
+#![recursion_limit = "256"]
 
 extern crate bytes;
 extern crate hex;
@@ -23,5 +23,5 @@ extern crate mozaic_derive;
 
 pub mod modules;
 
-pub mod graph;
 pub mod generic;
+pub mod graph;

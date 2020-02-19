@@ -1,5 +1,4 @@
-
-mod message;
 mod json;
-pub use message::Message;
+mod message;
 pub use json::{JSONMessage, Typed};
+pub use message::Message;

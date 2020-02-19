@@ -41,7 +41,11 @@ impl StepLock {
         self
     }
 
-    pub fn params(mut self, host: ReactorID, player_id: ReactorID,) -> CoreParams<Self, any::TypeId, Message> {
+    pub fn params(
+        mut self,
+        host: ReactorID,
+        player_id: ReactorID,
+    ) -> CoreParams<Self, any::TypeId, Message> {
         self.host = host;
         self.player_id = player_id;
         CoreParams::new(self)

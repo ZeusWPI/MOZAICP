@@ -1,12 +1,11 @@
-
-use crate::generic::{Handler};
 use crate::generic::reactor::ReactorHandle;
+use crate::generic::Handler;
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-
-type HandlersMap<S, K, M> = HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>;
+type HandlersMap<S, K, M> =
+    HashMap<K, Box<dyn for<'a> Handler<S, ReactorHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>;
 /// Builder pattern for constructing reactors
 pub struct CoreParams<S, K, M> {
     state: S,
@@ -14,10 +13,8 @@ pub struct CoreParams<S, K, M> {
 }
 
 impl<S, K, M> CoreParams<S, K, M> {
-    pub fn consume(self) -> (S, HandlersMap<S, K, M>,) {
-        (
-            self.state, self.handlers,
-        )
+    pub fn consume(self) -> (S, HandlersMap<S, K, M>) {
+        (self.state, self.handlers)
     }
 }
 

@@ -115,27 +115,16 @@ mod builder {
 
             let lock = self.steplock.map(|lock| lock.params(game_id, agg_id));
 
-            let game = GameRunner::params(
-                if lock.is_some() {
-                    step_id
-                } else {
-                    agg_id
-                },
-                self.game,
-            );
+            let game = GameRunner::params(if lock.is_some() { step_id } else { agg_id }, self.game);
 
             let agg = Aggregator::params(
-                if lock.is_some() {
-                    step_id
-                } else {
-                    game_id
-                },
+                if lock.is_some() { step_id } else { game_id },
                 player_map.clone(),
             );
 
             let cm = ConnectionManager::params(
                 pool.clone(),
-                "127.0.0.1:6666".parse().unwrap(),
+                "10.1.0.187:6666".parse().unwrap(),
                 json_broker.clone(),
                 player_map.clone(),
             );
@@ -153,7 +142,7 @@ mod builder {
                     )
                 })
                 .for_each(|cc| pool.spawn_ok(cc));
-            
+
             if let Some(lock) = lock {
                 broker.spawn(lock, Some(step_id));
             }

@@ -1,6 +1,5 @@
-
-mod link;
 mod handle;
+mod link;
 mod params;
 
 pub type Closer<S, K, M> = Box<dyn for<'a> Fn(&mut S, &mut LinkHandle<'a, K, M>) -> () + Send>;

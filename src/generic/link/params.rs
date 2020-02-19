@@ -1,10 +1,11 @@
-use super::{Closer, LinkState, Link};
+use super::{Closer, Link, LinkState};
 use crate::generic::{Handler, LinkHandle, LinkSpawner};
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-type HandlersMap<S, K, M> = HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>;
+type HandlersMap<S, K, M> =
+    HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>;
 
 // ANCHOR Params
 /// Builder pattern for constructing links
@@ -16,9 +17,19 @@ pub struct LinkParams<S, K, M> {
 }
 
 impl<S, K, M> LinkParams<S, K, M> {
-    pub fn consume(self) -> (S, HandlersMap<S, K, M>, HandlersMap<S, K, M>, Closer<S, K, M>) {
+    pub fn consume(
+        self,
+    ) -> (
+        S,
+        HandlersMap<S, K, M>,
+        HandlersMap<S, K, M>,
+        Closer<S, K, M>,
+    ) {
         (
-            self.state, self.internal_handlers, self.external_handlers, self.closer
+            self.state,
+            self.internal_handlers,
+            self.external_handlers,
+            self.closer,
         )
     }
 }
@@ -37,7 +48,9 @@ where
     }
 
     pub fn closer<F>(mut self, close_f: F) -> Self
-        where F: 'static + Send + for<'a> Fn(&mut S, &mut LinkHandle<'a, K, M>) -> () {
+    where
+        F: 'static + Send + for<'a> Fn(&mut S, &mut LinkHandle<'a, K, M>) -> (),
+    {
         self.closer = Box::new(close_f);
         self
     }
