@@ -1,5 +1,5 @@
-use crate::generic::{Sender, ReactorID, Handler, ReactorHandle, LinkOperation, Operation};
-use super::{LinkHandle, LinkParams, Closer};
+use super::{Closer, LinkHandle, LinkParams};
+use crate::generic::{Handler, LinkOperation, Operation, ReactorHandle, ReactorID, Sender};
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -25,8 +25,10 @@ pub struct LinkState<K, M> {
 pub struct Link<S, K, M> {
     state: S,
 
-    internal_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
-    external_handlers: HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    internal_handlers:
+        HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
+    external_handlers:
+        HashMap<K, Box<dyn for<'a> Handler<S, LinkHandle<'a, K, M>, (&'a K, &'a mut M)> + Send>>,
 
     link_state: LinkState<K, M>,
     closer: Closer<S, K, M>,

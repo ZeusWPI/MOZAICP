@@ -1,4 +1,3 @@
-
 mod translator;
 pub use translator::Translator;
 
@@ -9,8 +8,8 @@ mod steplock;
 pub use steplock::StepLock;
 
 mod gamerunner;
-pub use gamerunner::{GameRunner, GameController, GameBuilder};
+pub use gamerunner::{GameBuilder, GameController, GameRunner};
 
-pub mod types;
 pub mod net;
+pub mod types;
 pub use net::{ClientController, ConnectionManager};

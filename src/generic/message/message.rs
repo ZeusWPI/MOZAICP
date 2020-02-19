@@ -47,7 +47,7 @@ impl Message {
                 false => {
                     trace!("Trying to deref message with wrong type");
                     None
-                } // When types do not match return None
+                }
             },
         }
     }

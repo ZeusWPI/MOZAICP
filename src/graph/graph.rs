@@ -177,7 +177,7 @@ impl GraphState {
 }
 
 use futures::future::Future;
-use futures::task::{Poll, Context};
+use futures::task::{Context, Poll};
 use std::pin::Pin;
 
 impl Future for GraphState {
@@ -258,11 +258,7 @@ impl GraphLike for Graph {
     }
 
     fn remove_node(&self, id: &ReactorID) {
-        if let Err(_) = self
-            .tx
-            .clone()
-            .try_send(EventWrapper::RemoveNode(**id))
-        {
+        if let Err(_) = self.tx.clone().try_send(EventWrapper::RemoveNode(**id)) {
             error!("Couldn't send message to graph");
         }
     }

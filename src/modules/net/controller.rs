@@ -1,15 +1,15 @@
 use std::any;
-use std::pin::Pin;
 use std::collections::VecDeque;
+use std::pin::Pin;
 
+use futures::channel::mpsc;
 use futures::prelude::*;
 use futures::task::{Context, Poll};
-use futures::channel::mpsc;
 
-use super::types::{Accepted};
-use crate::modules::types::{HostMsg, PlayerId, Data, PlayerMsg};
+use super::types::Accepted;
 use crate::generic::FromMessage;
 use crate::generic::*;
+use crate::modules::types::{Data, HostMsg, PlayerId, PlayerMsg};
 
 pub struct ClientController {
     id: ReactorID,
@@ -37,7 +37,12 @@ impl ClientController {
         connection_manager: ReactorID,
         client_id: PlayerId,
     ) -> Self {
-        trace!("Creating cc: {:?}, with client {:?} and host {:?}", id, client_id, host);
+        trace!(
+            "Creating cc: {:?}, with client {:?} and host {:?}",
+            id,
+            client_id,
+            host
+        );
         let host_sender = t_broker.get_sender(&host);
 
         let (host_tx, host_rx) = mpsc::unbounded();
@@ -53,7 +58,8 @@ impl ClientController {
             conn_man: connection_manager,
             client: None,
             client_id,
-            host_rx, client_rx,
+            host_rx,
+            client_rx,
             closed: false,
             buffer: VecDeque::new(),
         }
@@ -80,7 +86,12 @@ impl ClientController {
 
     fn handle_conn_msg(&mut self, key: String, mut msg: JSONMessage) {
         if key == <Accepted as Key<String>>::key() {
-            if let Some(Accepted { player: _, client_id, contr_id: _}) = Accepted::from_msg(&key, &mut msg) {
+            if let Some(Accepted {
+                player: _,
+                client_id,
+                contr_id: _,
+            }) = Accepted::from_msg(&key, &mut msg)
+            {
                 self.client = Some((*client_id, self.broker.get_sender(&client_id)));
             }
         }
@@ -156,7 +167,12 @@ impl Future for ClientController {
                 trace!("Target link already closed")
             }
 
-            if this.broker.get_sender(&this.conn_man).close(this.id).is_none() {
+            if this
+                .broker
+                .get_sender(&this.conn_man)
+                .close(this.id)
+                .is_none()
+            {
                 trace!("Connection manager already closed");
             }
 

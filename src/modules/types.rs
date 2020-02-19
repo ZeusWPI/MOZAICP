@@ -5,7 +5,7 @@ pub type DataType = String;
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct PlayerMsg {
-    pub id: PlayerId, 
+    pub id: PlayerId,
     pub data: Option<Data>,
 }
 
@@ -23,7 +23,7 @@ pub enum HostMsg {
 
 impl HostMsg {
     pub fn new(value: DataType, player: Option<PlayerId>) -> Self {
-        HostMsg::Data(Data{ value }, player)
+        HostMsg::Data(Data { value }, player)
     }
 
     pub fn kick(player: PlayerId) -> Self {

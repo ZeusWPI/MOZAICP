@@ -22,6 +22,16 @@ use types::*;
 mod controller;
 pub use controller::ClientController;
 
+mod client_manager;
+pub use client_manager::{ClientManager, PlayerUUIDs, RegisterGame, SpawnPlayer};
+
+mod tcp_endpoint;
+pub use tcp_endpoint::TcpEndpoint;
+
+/// GameManager
+/// ClientManager
+/// ClientController
+
 // TODO: add better tracing
 
 pub type PlayerMap = HashMap<PlayerId, ReactorID>;
