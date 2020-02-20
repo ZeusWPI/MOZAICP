@@ -22,7 +22,7 @@ use types::*;
 mod controller;
 pub use controller::ClientController;
 
-mod client_controller;
+pub mod client_controller;
 
 /// So, networking and things
 ///

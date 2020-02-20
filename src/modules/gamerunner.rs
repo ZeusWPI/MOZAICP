@@ -10,17 +10,20 @@ pub type GameBox = Box<dyn GameController + Send>;
 
 pub struct GameRunner {
     clients_id: ReactorID,
+    gm_id: ReactorID,
     game: GameBox,
 }
 
 impl GameRunner {
-    pub fn params<G: GameController + Send + 'static>(
+    pub fn params(
         clients_id: ReactorID,
-        game: G,
+        gm_id: ReactorID,
+        game: GameBox,
     ) -> CoreParams<Self, any::TypeId, Message> {
         let me = Self {
             clients_id,
-            game: Box::new(game),
+            gm_id,
+            game,
         };
 
         CoreParams::new(me)
@@ -67,33 +70,83 @@ impl ReactorState<any::TypeId, Message> for GameRunner {
 
 pub use builder::GameBuilder;
 mod builder {
-    use super::GameController;
+    use super::{GameBox, GameController};
 
     use crate::generic::*;
+    use crate::modules::net::client_controller;
     use crate::modules::types::*;
     use crate::modules::*;
 
     use futures::executor::ThreadPool;
 
+    use std::any;
     use std::collections::HashMap;
 
-    pub struct GameBuilder<G: GameController + Send + 'static> {
+    pub struct GameBuilder {
         steplock: Option<StepLock>,
         players: Vec<PlayerId>,
-        game: G,
+        game: GameBox,
     }
 
-    impl<G: GameController + Send + 'static> GameBuilder<G> {
-        pub fn new(players: Vec<PlayerId>, game: G) -> Self {
+    impl GameBuilder {
+        pub fn new<G: GameController + Send + 'static>(players: Vec<PlayerId>, game: G) -> Self {
             Self {
                 players,
                 steplock: None,
-                game,
+                game: Box::new(game),
             }
         }
         pub fn with_step_lock(mut self, lock: StepLock) -> Self {
             self.steplock = Some(lock);
             self
+        }
+
+        pub fn start(
+            self,
+            broker: BrokerHandle<any::TypeId, Message>,
+            gm_id: ReactorID,
+            cm_id: ReactorID,
+        ) -> (ReactorID, Vec<(PlayerId, ReactorID)>) {
+            let game_id = ReactorID::rand();
+            let step_id = ReactorID::rand();
+            let agg_id = ReactorID::rand();
+
+            let players: Vec<(PlayerId, ReactorID)> = self
+                .players
+                .iter()
+                .map(|&x| {
+                    let params = client_controller::ClientController::params(cm_id, agg_id, x);
+                    let id = broker.spawn(params, None);
+                    (x, id)
+                })
+                .collect();
+
+            let game = GameRunner::params(
+                if self.steplock.is_some() {
+                    step_id
+                } else {
+                    agg_id
+                },
+                gm_id,
+                self.game,
+            );
+            let agg = Aggregator::params(
+                if self.steplock.is_some() {
+                    step_id
+                } else {
+                    game_id
+                },
+                players.iter().cloned().collect(),
+            );
+
+            if let Some(lock) = self.steplock.map(|lock| lock.params(game_id, agg_id)) {
+                broker.spawn(lock, Some(step_id));
+            }
+            broker.spawn(game, Some(game_id));
+
+            broker.spawn(agg, Some(agg_id));
+
+            (game_id, players)
         }
 
         pub async fn run(self, pool: ThreadPool) {
@@ -115,7 +168,11 @@ mod builder {
 
             let lock = self.steplock.map(|lock| lock.params(game_id, agg_id));
 
-            let game = GameRunner::params(if lock.is_some() { step_id } else { agg_id }, self.game);
+            let game = GameRunner::params(
+                if lock.is_some() { step_id } else { agg_id },
+                0.into(),
+                self.game,
+            );
 
             let agg = Aggregator::params(
                 if lock.is_some() { step_id } else { game_id },
