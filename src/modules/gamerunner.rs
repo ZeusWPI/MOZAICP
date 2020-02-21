@@ -106,7 +106,7 @@ mod builder {
             broker: BrokerHandle<any::TypeId, Message>,
             gm_id: ReactorID,
             cm_id: ReactorID,
-        ) -> (ReactorID, Vec<(PlayerId, ReactorID)>) {
+        ) -> ReactorID {
             let game_id = ReactorID::rand();
             let step_id = ReactorID::rand();
             let agg_id = ReactorID::rand();
@@ -146,7 +146,7 @@ mod builder {
 
             broker.spawn(agg, Some(agg_id));
 
-            (game_id, players)
+            game_id
         }
 
         pub async fn run(self, pool: ThreadPool) {

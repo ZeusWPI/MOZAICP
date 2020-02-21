@@ -4,7 +4,6 @@ use crate::generic::ReactorID;
 
 use futures::channel::mpsc;
 use futures::stream::StreamExt;
-use futures::*;
 use serde::{Deserialize, Serialize};
 use ws::Sender;
 

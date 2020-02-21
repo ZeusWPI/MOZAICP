@@ -60,10 +60,10 @@ impl<K, M> BrokerHandle<K, M> {
     }
 
     /// Removes a perticular reactor
-    pub fn remove(&self, id: &ReactorID) {
-        let mut broker = self.broker.lock().unwrap();
-        broker.reactors.remove(&id);
-    }
+    // pub fn remove(&self, id: &ReactorID) {
+    //     let mut broker = self.broker.lock().unwrap();
+    //     broker.reactors.remove(&id);
+    // }
 
     /// Returns a channel to send messages to a reactor,
     /// this reactor may not be spawned yet
@@ -119,6 +119,8 @@ impl<K, M> BrokerHandle<K, M> {
     }
 }
 
+
+use crate::graph;
 impl<K, M> BrokerHandle<K, M>
 where
     K: 'static + Eq + Hash + Send + Unpin,
@@ -141,6 +143,7 @@ where
         id: Option<ReactorID>,
     ) -> (RemoteHandle<()>, ReactorID) {
         let id = id.unwrap_or_else(|| ReactorID::rand());
+        graph::add_node(&id, S::NAME);
 
         let mut reactor = Reactor::new(
             id,

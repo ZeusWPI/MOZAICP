@@ -198,7 +198,9 @@ where
     /// You can only have a most one link to a reactor
     #[instrument(skip(self, spawner, cascade))]
     fn open_link(&mut self, target: ReactorID, spawner: LinkSpawner<K, M>, cascade: bool) {
+        graph::add_edge(&self.id, &target);
         trace!(%target, source = %self.id, "Open link");
+
         let tx = self.broker.get(&target);
         let handles = (self.channels.0.clone(), tx, self.id, target);
         self.links.insert(
@@ -214,6 +216,8 @@ where
     /// Closes a link to the target reactor
     #[instrument(skip(self))]
     fn close_link(&mut self, target: ReactorID) {
+        graph::remove_edge(&self.id, &target);
+
         let mut handle = reactorHandle!(self);
 
         if let Some((mut link, span, cascade)) = self.links.remove(&target) {
@@ -306,5 +310,15 @@ where
 
         info!(name = S::NAME, id = %this.id, "Reactor finished");
         return Poll::Ready(());
+    }
+}
+
+use crate::graph;
+impl<S, K, M> Drop for Reactor<S, K, M>
+where
+    S: ReactorState<K, M>,
+    K: Hash + Eq,
+{    fn drop(&mut self) {
+        graph::remove_node(&self.id);
     }
 }

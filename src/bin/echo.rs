@@ -45,8 +45,11 @@ impl GameController for Echo {
 }
 
 use mozaic::modules::GameBuilder;
+use mozaic::graph;
 #[tokio::main]
 async fn main() {
+    graph::set_default();
+    
     let sub = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .finish();
