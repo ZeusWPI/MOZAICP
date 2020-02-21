@@ -2,8 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use crate::generic::ReactorID;
 
-use tokio::sync::mpsc;
-
+use futures::channel::mpsc;
+use futures::stream::StreamExt;
+use futures::*;
 use serde::{Deserialize, Serialize};
 use ws::Sender;
 
@@ -61,7 +62,7 @@ struct GraphState {
     nodes: Vec<Node>,
     edges: Vec<Edge>,
     created_edges: u64,
-    rx: mpsc::Receiver<EventWrapper>,
+    // rx: mpsc::UnboundedReceiver<EventWrapper>,
 }
 
 fn first_index<T, P>(list: &Vec<T>, mut p: P) -> Option<usize>
@@ -74,17 +75,31 @@ where
 }
 
 impl GraphState {
-    fn new() -> mpsc::Sender<EventWrapper> {
-        let (tx, rx) = mpsc::channel(10);
-        let state = GraphState {
+    fn new() -> mpsc::UnboundedSender<EventWrapper> {
+        let (tx, mut rx) = mpsc::unbounded();
+        let mut this = GraphState {
             conns: Vec::new(),
             nodes: Vec::new(),
             edges: Vec::new(),
             created_edges: 0,
-            rx,
         };
 
-        tokio::spawn(state);
+        tokio::spawn(async move {
+            loop {
+                if let Some(event) = rx.next().await {
+                    match event {
+                        EventWrapper::Conn(c) => this.add_conn(c),
+                        EventWrapper::AddEdge(f, t) => this.add_edge(f, t),
+                        EventWrapper::AddNode(f, t) => this.add_node(f, t),
+                        EventWrapper::RemoveEdge(f, t) => this.remove_edge(f, t),
+                        EventWrapper::RemoveNode(t) => this.remove_node(t),
+                    }
+                } else {
+                    break;
+                }
+            }
+            Some(())
+        });
 
         return tx;
     }
@@ -176,34 +191,9 @@ impl GraphState {
     }
 }
 
-use futures::future::Future;
-use futures::task::{Context, Poll};
-use std::pin::Pin;
-
-impl Future for GraphState {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, _ctx: &mut Context) -> Poll<Self::Output> {
-        let this = Pin::into_inner(self);
-        loop {
-            match this.rx.try_recv() {
-                Err(mpsc::error::TryRecvError::Empty) => return Poll::Pending,
-                Err(mpsc::error::TryRecvError::Closed) => return Poll::Ready(()),
-                Ok(event) => match event {
-                    EventWrapper::Conn(c) => this.add_conn(c),
-                    EventWrapper::AddEdge(f, t) => this.add_edge(f, t),
-                    EventWrapper::AddNode(f, t) => this.add_node(f, t),
-                    EventWrapper::RemoveEdge(f, t) => this.remove_edge(f, t),
-                    EventWrapper::RemoveNode(t) => this.remove_node(t),
-                },
-            }
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct Graph {
-    tx: mpsc::Sender<EventWrapper>,
+    tx: mpsc::UnboundedSender<EventWrapper>,
 }
 
 use std::thread;
@@ -218,7 +208,7 @@ impl Graph {
 
         thread::spawn(move || {
             ws::listen("127.0.0.1:3012", |out| {
-                if let Err(_) = tx.clone().try_send(EventWrapper::Conn(out.clone())) {
+                if let Err(_) = tx.unbounded_send(EventWrapper::Conn(out.clone())) {
                     error!("Couldnt send message to graph");
                 }
 
@@ -240,8 +230,7 @@ impl GraphLike for Graph {
     fn add_node(&self, id: &ReactorID, name: &str) {
         if let Err(_) = self
             .tx
-            .clone()
-            .try_send(EventWrapper::AddNode(**id, String::from(name)))
+            .unbounded_send(EventWrapper::AddNode(**id, String::from(name)))
         {
             error!("Couldnt send message to graph");
         }
@@ -250,15 +239,14 @@ impl GraphLike for Graph {
     fn add_edge(&self, from: &ReactorID, to: &ReactorID) {
         if let Err(_) = self
             .tx
-            .clone()
-            .try_send(EventWrapper::AddEdge(**from, **to))
+            .unbounded_send(EventWrapper::AddEdge(**from, **to))
         {
             error!("Couldn't send message to graph");
         }
     }
 
     fn remove_node(&self, id: &ReactorID) {
-        if let Err(_) = self.tx.clone().try_send(EventWrapper::RemoveNode(**id)) {
+        if let Err(_) = self.tx.unbounded_send(EventWrapper::RemoveNode(**id)) {
             error!("Couldn't send message to graph");
         }
     }
@@ -266,8 +254,7 @@ impl GraphLike for Graph {
     fn remove_edge(&self, from: &ReactorID, to: &ReactorID) {
         if let Err(_) = self
             .tx
-            .clone()
-            .try_send(EventWrapper::RemoveEdge(**from, **to))
+            .unbounded_send(EventWrapper::RemoveEdge(**from, **to))
         {
             error!("Couldn't send message to graph");
         }

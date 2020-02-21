@@ -9,6 +9,10 @@ pub use self::graph::Graph;
 
 pub static mut GRAPH: Option<Arc<dyn GraphLike>> = None;
 
+pub fn set_default() {
+    set_graph(graph::Graph::new());
+}
+
 pub fn set_graph<T: GraphLike + 'static>(graph: T) {
     let graph = Arc::new(graph);
 
