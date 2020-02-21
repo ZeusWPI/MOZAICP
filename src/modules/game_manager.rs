@@ -48,8 +48,8 @@ pub struct GameManager {
 }
 
 impl GameManager {
-    pub fn new(broker: BrokerHandle<any::TypeId, Message>, cm_id: ReactorID) -> Self {
-        let op_tx = GameManagerFuture::spawn(broker, cm_id);
+    pub fn new(broker: BrokerHandle<any::TypeId, Message>, self_id: ReactorID, cm_id: ReactorID) -> Self {
+        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id);
         Self { op_tx }
     }
 
@@ -107,6 +107,7 @@ pub struct GameManagerFuture {
 impl GameManagerFuture {
     fn spawn(
         broker: BrokerHandle<any::TypeId, Message>,
+        self_id: ReactorID,
         cm_id: ReactorID,
     ) -> UnboundedSender<GameOpReq> {
         let (op_tx, mut op_rx) = mpsc::unbounded();
@@ -114,15 +115,13 @@ impl GameManagerFuture {
 
         let mut ch_rx = receiver_handle(ch_rx).boxed().fuse();
 
-        let id = ReactorID::rand();
-
-        broker.spawn_reactorlike(id, ch_tx);
+        broker.spawn_reactorlike(self_id, ch_tx);
 
         let mut this = Self {
             broker,
             games: HashMap::new(),
             requests: HashMap::new(),
-            id,
+            id: self_id,
             cm_id,
         };
 

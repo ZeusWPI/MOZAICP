@@ -29,6 +29,8 @@ impl GameRunner {
         CoreParams::new(me)
             .handler(FunctionHandler::from(Self::handle_client_msg))
             .handler(FunctionHandler::from(Self::handle_client_msgs))
+            .handler(FunctionHandler::from(Self::handle_kill))
+
     }
 
     fn handle_client_msg(
@@ -51,13 +53,24 @@ impl GameRunner {
             handle.send_internal(msg, TargetReactor::Links);
         }
     }
+
+    fn handle_kill(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        req: &KillReq,
+    ) {
+        handle.send_internal(KillRes(req.0), TargetReactor::Link(self.gm_id));
+        handle.close();
+    }
 }
 
+use crate::modules::game_manager::types::*;
 impl ReactorState<any::TypeId, Message> for GameRunner {
     const NAME: &'static str = "Game";
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let client_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), StateReq>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
                 TargetReactor::Reactor,
             )))
@@ -65,6 +78,13 @@ impl ReactorState<any::TypeId, Message> for GameRunner {
                 TargetReactor::Reactor,
             )));
         handle.open_link(self.clients_id, client_params, true);
+
+        let gm_link_params = LinkParams::new(())
+            .internal_handler(FunctionHandler::from(i_to_e::<(), StateRes>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), KillRes>()))
+            .external_handler(FunctionHandler::from(e_to_i::<(), StateReq>(TargetReactor::Link(self.clients_id))))
+            .external_handler(FunctionHandler::from(e_to_i::<(), KillReq>(TargetReactor::Reactor)));
+        handle.open_link(self.gm_id, gm_link_params, true);
     }
 }
 

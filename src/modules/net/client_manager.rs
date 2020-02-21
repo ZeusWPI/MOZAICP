@@ -51,18 +51,23 @@ impl SpawnPlayer {
 }
 
 #[derive(Clone)]
-pub struct RegisterEndpoint(ReactorID);
+pub struct RegisterEndpoint(pub ReactorID);
 
 pub struct ClientManager {
     clients: HashMap<u64, (PlayerId, ReactorID)>,
     game_manager: ReactorID,
+    endpoints: Vec<RegisterEndpoint>,
 }
 
 impl ClientManager {
-    pub fn new(game_manager: ReactorID) -> CoreParams<Self, any::TypeId, Message> {
+    pub fn new(
+        game_manager: ReactorID,
+        endpoints: Vec<ReactorID>,
+    ) -> CoreParams<Self, any::TypeId, Message> {
         let me = Self {
             game_manager,
             clients: HashMap::new(),
+            endpoints: endpoints.iter().map(|x| RegisterEndpoint(*x)).collect(),
         };
 
         CoreParams::new(me)
@@ -84,6 +89,7 @@ impl ClientManager {
             .map(|id| (random(), id))
             .collect();
         let ids: Vec<u64> = new_cliets.keys().cloned().collect();
+        println!("{:?}", new_cliets);
         self.clients.extend(new_cliets);
 
         handle.send_internal(
@@ -154,6 +160,17 @@ impl ReactorState<any::TypeId, Message> for ClientManager {
     const NAME: &'static str = "Client Manager";
 
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
+        for reg in &self.endpoints {
+            let ep_link_params =
+                LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<
+                    (),
+                    BoxSpawnPlayer,
+                >(
+                    TargetReactor::Reactor,
+                )));
+            handle.open_link(reg.0, ep_link_params, false);
+        }
+
         let gm_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerUUIDs>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), RegisterGame>(

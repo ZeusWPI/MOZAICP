@@ -5,6 +5,9 @@ use crate::modules::types::*;
 use std::any;
 use std::collections::VecDeque;
 
+#[derive(Debug, Clone)]
+pub struct Connect(pub PlayerId);
+
 struct ClientClosed;
 
 pub struct ClientController {
@@ -34,7 +37,6 @@ impl ClientController {
         .handler(FunctionHandler::from(Self::handle_client_msg))
         .handler(FunctionHandler::from(Self::handle_conn))
         .handler(FunctionHandler::from(Self::handle_disc))
-
     }
 
     fn handle_host_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, m: &HostMsg) {
@@ -69,6 +71,8 @@ impl ClientController {
                 }
             );
 
+        handle.send_internal(Connect(*accept.client_id), TargetReactor::Link(self.host));
+
         self.client = Some(accept.client_id);
         handle.open_link(accept.client_id, client_link_params, false);
 
@@ -94,6 +98,7 @@ impl ReactorState<any::TypeId, Message> for ClientController {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Connect>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(TargetReactor::Reactor)));
         handle.open_link(self.host, host_link_params, true);
 

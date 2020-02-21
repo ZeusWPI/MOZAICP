@@ -44,12 +44,14 @@ impl GameController for Echo {
     }
 }
 
-use mozaic::modules::GameBuilder;
+use mozaic::generic::*;
 use mozaic::graph;
+use mozaic::modules::*;
+
 #[tokio::main]
 async fn main() {
     graph::set_default();
-    
+
     let sub = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .finish();
@@ -60,15 +62,34 @@ async fn main() {
             // .before_stop(|i| println!("Stopping thread {}", i))
             .create()
             .unwrap();
+        let broker = BrokerHandle::new(pool.clone());
+
+        let gm_id = ReactorID::rand();
+        let cm_id = ReactorID::rand();
+        let ep_id = ReactorID::rand();
+
+        let mut gm = GameManager::new(broker.clone(), gm_id, cm_id);
+        let cm_params = ClientManager::new(gm_id, vec![ep_id]);
+        broker.spawn(cm_params, Some(cm_id));
+
+        broker.spawn_reactorlike(ep_id, TcpEndpoint::new(ep_id, "127.0.0.1:6666".parse().unwrap(), broker.get_sender(&cm_id)));
+
+        println!("Here");
 
         let players = vec![10, 11];
         let game = Echo {
             clients: players.clone(),
         };
-        let builder = GameBuilder::new(players.clone(), game)
-            .with_step_lock(StepLock::new(players.clone()).with_timeout(3000));
+        let builder = GameBuilder::new(players.clone(), game).with_step_lock(
+            StepLock::new(players.clone()).with_timeout(std::time::Duration::from_secs(3)),
+        );
 
-        builder.run(pool).await;
+        println!("Here");
+
+        let game_id = gm.start_game(builder).await.unwrap();
+        println!("Here");
+
+        println!("State: {:?}", gm.get_state(game_id).await);
     }
 
     std::thread::sleep(time::Duration::from_millis(100));

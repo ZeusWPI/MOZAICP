@@ -21,7 +21,8 @@ pub struct StepLock {
     players: Vec<PlayerId>,
     host: ReactorID,
     player_id: ReactorID,
-    timeout_ms: Option<u64>,
+    timeout_ms: Option<Duration>,
+    init_timeout_ms: Option<Duration>,
     // Maybe add threadpool
 }
 
@@ -33,11 +34,17 @@ impl StepLock {
             step: players.iter().map(|&id| (id, None)).collect(),
             players,
             timeout_ms: None,
+            init_timeout_ms: None,
         }
     }
 
-    pub fn with_timeout(mut self, timeout: u64) -> Self {
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout_ms = Some(timeout);
+        self
+    }
+
+    pub fn with_init_timeout(mut self, timeout: Duration) -> Self {
+        self.init_timeout_ms = Some(timeout);
         self
     }
 
@@ -87,6 +94,7 @@ impl StepLock {
     }
 }
 
+use crate::modules::game_manager::types::*;
 impl ReactorState<any::TypeId, Message> for StepLock {
     const NAME: &'static str = "StepLock";
 
@@ -94,7 +102,11 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         // Open link to host
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), StateRes>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
+                TargetReactor::Link(self.player_id),
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), StateReq>(
                 TargetReactor::Link(self.player_id),
             )));
         handle.open_link(self.host, host_link_params, true);
@@ -102,8 +114,12 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         // Open link to client
         let client_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), StateReq>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
                 TargetReactor::Reactor,
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), StateRes>(
+                TargetReactor::Link(self.host),
             )));
         handle.open_link(self.player_id, client_link_params, true);
 
@@ -121,14 +137,26 @@ impl ReactorState<any::TypeId, Message> for StepLock {
 
         handle.open_reactor_like(timeout_id, tx);
 
-        let timeout_ms = self.timeout_ms;
+        let timeout_ms = self.timeout_ms.clone();
+        let init_timeout = self.init_timeout_ms.clone();
 
         tokio::spawn(async move {
             let mut rx = receiver_handle(rx).boxed().fuse();
 
+            if let Some(init_timeout) = init_timeout {
+                let mut timeout = delay_for(init_timeout).fuse();
+                select! {
+                    v = rx.next() => {
+                    },
+                    v = timeout => {
+                        self_send_f.send(timeout_id, TimeOut)?;
+                    }
+                }
+            }
+
             if let Some(timeout_ms) = timeout_ms {
                 loop {
-                    let mut timeout = delay_for(Duration::from_millis(timeout_ms)).fuse();
+                    let mut timeout = delay_for(timeout_ms).fuse();
 
                     select! {
                         v = rx.next() => {
