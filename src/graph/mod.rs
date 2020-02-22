@@ -4,7 +4,7 @@ use std::mem;
 use std::sync::Arc;
 
 use std::pin::Pin;
-use futures::future::{Future, FutureExt};
+use futures::future::{Future};
 
 mod graph;
 

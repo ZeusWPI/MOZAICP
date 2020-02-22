@@ -5,7 +5,7 @@ use futures::channel::mpsc;
 use futures::executor::ThreadPool;
 use futures::{FutureExt, StreamExt};
 
-use tokio::time::delay_for;
+use async_std::task::sleep;
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -144,7 +144,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             let mut rx = receiver_handle(rx).boxed().fuse();
 
             if let Some(init_timeout) = init_timeout {
-                let mut timeout = delay_for(init_timeout).fuse();
+                let mut timeout = sleep(init_timeout).boxed().fuse();
                 select! {
                     v = rx.next() => {
                     },
@@ -156,7 +156,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
 
             if let Some(timeout_ms) = timeout_ms {
                 loop {
-                    let mut timeout = delay_for(timeout_ms).fuse();
+                    let mut timeout = sleep(timeout_ms).boxed().fuse();
                     select! {
                         v = rx.next() => {
                             if v.is_none() {

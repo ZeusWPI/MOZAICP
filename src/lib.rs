@@ -1,10 +1,11 @@
 #![allow(dead_code)]
 #![recursion_limit = "512"]
 
+extern crate async_std;
+
 extern crate bytes;
 extern crate hex;
 
-extern crate tokio;
 #[macro_use]
 extern crate futures;
 extern crate rand;

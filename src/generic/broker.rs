@@ -90,7 +90,7 @@ impl<K, M> BrokerHandle<K, M> {
             info!(%id, "Closed Reactor");
         })).unwrap();
 
-        self.tx.unbounded_send(handle);
+        self.tx.unbounded_send(handle).unwrap();
     }
 
     /// Removes a perticular reactor

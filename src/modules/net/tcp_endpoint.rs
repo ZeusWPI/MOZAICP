@@ -7,9 +7,13 @@ use futures::executor::ThreadPool;
 use futures::stream::StreamExt;
 use futures::*;
 
-use tokio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{TcpListener, TcpStream};
+use futures::io::*;
+
+use async_std::net;
+
+// use tokio;
+// use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+// use tokio::net::{TcpListener, TcpStream};
 
 use std::any;
 use std::pin::Pin;
@@ -38,7 +42,7 @@ async fn accepting(
 ) -> Option<()> {
     let mut rx = receiver_handle(rx).boxed().fuse();
 
-    let mut tcp = TcpListener::bind(addr).await.ok()?;
+    let tcp = net::TcpListener::bind(addr).await.ok()?;
     let mut listener = tcp.incoming().fuse();
 
     loop {
@@ -46,7 +50,7 @@ async fn accepting(
             socket = listener.next() => {
                 info!("Got new socket");
 
-                tp.spawn_ok(handle_socket(id, socket?.ok()?, cm_chan.clone(), tp.clone()).map(
+                tp.spawn_ok(handle_socket(id, socket?.ok()?, cm_chan.clone()).map(
                     |_| ()
                 ));
             },
@@ -66,11 +70,10 @@ async fn accepting(
 
 async fn handle_socket(
     id: ReactorID,
-    stream: TcpStream,
+    stream: net::TcpStream,
     cm_chan: SenderHandle<any::TypeId, Message>,
-    tp: ThreadPool,
 ) -> Option<()> {
-    let (stream, player): (TcpStream, u64) = {
+    let (stream, player): (net::TcpStream, u64) = {
         let mut line = String::new();
         let mut br = BufReader::new(stream);
         br.read_line(&mut line).await.ok()?;
@@ -97,7 +100,7 @@ async fn handle_socket(
 }
 
 async fn handle_spawn(
-    mut stream: TcpStream,
+    stream: net::TcpStream,
     s_id: ReactorID,
     cc_chan: SenderHandle<any::TypeId, Message>,
     rx: Receiver<any::TypeId, Message>,
@@ -117,7 +120,7 @@ async fn handle_spawn(
                             .map_err(|error| { info!(?error, "Write to player failed")})
                             .ok()?;
                         writer.write_all(b"\n").await.ok()?;
-                        writer.flush();
+                        writer.flush().await.ok()?;
                     }
                 }
             },

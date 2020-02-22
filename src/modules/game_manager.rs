@@ -53,9 +53,8 @@ impl GameManager {
         broker: BrokerHandle<any::TypeId, Message>,
         self_id: ReactorID,
         cm_id: ReactorID,
-        pool: ThreadPool,
     ) -> Self {
-        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id, pool);
+        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id);
         Self { op_tx }
     }
 
@@ -112,14 +111,11 @@ pub struct GameManagerFuture {
     cm_chan: SenderHandle<any::TypeId, Message>,
 }
 
-use futures::executor::ThreadPool;
-use futures::task::SpawnExt;
 impl GameManagerFuture {
     fn spawn(
         broker: BrokerHandle<any::TypeId, Message>,
         self_id: ReactorID,
         cm_id: ReactorID,
-        pool: ThreadPool,
     ) -> UnboundedSender<GameOpReq> {
         let (op_tx, mut op_rx) = mpsc::unbounded();
         let (ch_tx, ch_rx) = mpsc::unbounded();

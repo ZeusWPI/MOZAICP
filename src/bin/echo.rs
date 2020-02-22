@@ -3,7 +3,7 @@ extern crate mozaic;
 extern crate mozaic_derive;
 extern crate serde;
 extern crate serde_json;
-extern crate tokio;
+extern crate async_std;
 
 extern crate tracing;
 extern crate tracing_subscriber;
@@ -49,8 +49,8 @@ use mozaic::generic::*;
 use mozaic::graph;
 use mozaic::modules::*;
 
-#[tokio::main]
-async fn main() {
+#[async_std::main]
+async fn main() -> std::io::Result<()> {
     let fut = graph::set_default();
 
     let sub = FmtSubscriber::builder()
@@ -71,7 +71,7 @@ async fn main() {
         let cm_id = ReactorID::rand();
         let ep_id = ReactorID::rand();
 
-        let mut gm = GameManager::new(broker.clone(), gm_id, cm_id, pool.clone());
+        let mut gm = GameManager::new(broker.clone(), gm_id, cm_id);
         let cm_params = ClientManager::new(gm_id, vec![ep_id]);
         broker.spawn(cm_params, Some(cm_id));
 
@@ -96,4 +96,6 @@ async fn main() {
     }
 
     std::thread::sleep(time::Duration::from_millis(100));
+
+    Ok(())
 }

@@ -3,7 +3,6 @@ use crate::modules::net::types::*;
 use crate::modules::types::*;
 
 use std::sync::{Arc, Mutex};
-use std::marker::Unpin;
 
 use futures::future::Future;
 
