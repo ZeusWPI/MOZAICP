@@ -15,4 +15,4 @@ pub use game_manager::{GameManager};
 
 pub mod net;
 pub mod types;
-pub use net::{ClientController, ConnectionManager, client_controller, ClientManager, TcpEndpoint};
+pub use net::{client_controller, ClientManager, TcpEndpoint};

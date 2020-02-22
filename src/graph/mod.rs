@@ -3,14 +3,19 @@ use crate::generic::ReactorID;
 use std::mem;
 use std::sync::Arc;
 
+use std::pin::Pin;
+use futures::future::{Future, FutureExt};
+
 mod graph;
 
 pub use self::graph::Graph;
 
 pub static mut GRAPH: Option<Arc<dyn GraphLike>> = None;
 
-pub fn set_default() {
-    set_graph(graph::Graph::new());
+pub fn set_default() -> Pin<Box<dyn Future<Output = Option<()>> + Send>> {
+    let (graph, fut) = graph::Graph::new();
+    set_graph(graph);
+    fut
 }
 
 pub fn set_graph<T: GraphLike + 'static>(graph: T) {

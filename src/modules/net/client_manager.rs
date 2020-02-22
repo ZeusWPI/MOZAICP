@@ -3,9 +3,13 @@ use crate::modules::net::types::*;
 use crate::modules::types::*;
 
 use std::sync::{Arc, Mutex};
+use std::marker::Unpin;
+
+use futures::future::Future;
 
 use rand::random;
 
+use std::pin::Pin;
 use std::any;
 use std::collections::HashMap;
 
@@ -26,7 +30,7 @@ pub type BoxSpawnPlayer = Arc<Mutex<Option<SpawnPlayer>>>;
 pub struct SpawnPlayer {
     pub player: u64,
     pub builder: Box<
-        dyn FnOnce(ReactorID, SenderHandle<any::TypeId, Message>) -> Sender<any::TypeId, Message>
+        dyn FnOnce(ReactorID, SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output = ()> + Send>>, &'static str)
             + Send
             + Sync
             + 'static,
@@ -35,7 +39,7 @@ pub struct SpawnPlayer {
 
 impl SpawnPlayer {
     pub fn new<
-        F: FnOnce(ReactorID, SenderHandle<any::TypeId, Message>) -> Sender<any::TypeId, Message>
+        F: FnOnce(ReactorID, SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output = ()> + Send>>, &'static str)
             + 'static
             + Send
             + Sync,
@@ -143,7 +147,8 @@ impl ClientManager {
         if let Some(SpawnPlayer { player, builder }) = reg {
             if let Some((player, cc)) = self.clients.get(&player) {
                 let id = ReactorID::rand();
-                handle.open_reactor_like(id, builder(id, handle.get(cc)));
+                let (chan, fut, name) = builder(id, handle.get(cc));
+                handle.open_reactor_like(id, chan, fut, name);
 
                 let accept = Accepted {
                     player: *player,

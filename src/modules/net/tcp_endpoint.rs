@@ -12,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
 use std::any;
+use std::pin::Pin;
 use std::net::SocketAddr;
 
 pub struct TcpEndpoint;
@@ -22,10 +23,9 @@ impl TcpEndpoint {
         addr: SocketAddr,
         cm_chan: SenderHandle<any::TypeId, Message>,
         tp: ThreadPool,
-    ) -> Sender<any::TypeId, Message> {
+    ) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
         let (tx, rx) = mpsc::unbounded();
-        tokio::spawn(accepting(id, addr, rx, cm_chan, tp));
-        tx
+        (tx, accepting(id, addr, rx, cm_chan, tp).boxed())
     }
 }
 
@@ -87,9 +87,9 @@ async fn handle_socket(
             let (tx, rx): (Sender<any::TypeId, Message>, Receiver<any::TypeId, Message>) =
                 mpsc::unbounded();
 
-            tp.spawn_ok(handle_spawn(stream, s_id, cc_chan, rx).map(|_| info!("Socket closed")));
+            // tp.spawn_ok();
 
-            tx
+            (tx, handle_spawn(stream, s_id, cc_chan, rx).map(|_| info!("Socket closed")).boxed(), "Client")
         }),
     );
 

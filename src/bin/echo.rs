@@ -16,6 +16,7 @@ use mozaic::modules::types::*;
 use mozaic::modules::{GameController, StepLock};
 
 use futures::executor::ThreadPool;
+use futures::future::FutureExt;
 
 struct Echo {
     clients: Vec<PlayerId>,
@@ -50,7 +51,7 @@ use mozaic::modules::*;
 
 #[tokio::main]
 async fn main() {
-    graph::set_default();
+    let fut = graph::set_default();
 
     let sub = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
@@ -62,17 +63,21 @@ async fn main() {
             // .before_stop(|i| println!("Stopping thread {}", i))
             .create()
             .unwrap();
-        let broker = BrokerHandle::new(pool.clone());
+        pool.spawn_ok(fut.map(|_| ()));
+
+        let (broker, handle) = BrokerHandle::new(pool.clone());
 
         let gm_id = ReactorID::rand();
         let cm_id = ReactorID::rand();
         let ep_id = ReactorID::rand();
 
-        let (handle, mut gm) = GameManager::new(broker.clone(), gm_id, cm_id, pool.clone());
+        let mut gm = GameManager::new(broker.clone(), gm_id, cm_id, pool.clone());
         let cm_params = ClientManager::new(gm_id, vec![ep_id]);
         broker.spawn(cm_params, Some(cm_id));
 
-        broker.spawn_reactorlike(ep_id, TcpEndpoint::new(ep_id, "127.0.0.1:6666".parse().unwrap(), broker.get_sender(&cm_id), pool.clone()));
+        let (tp_tx, tp_fut) = TcpEndpoint::new(ep_id, "127.0.0.1:6666".parse().unwrap(), broker.get_sender(&cm_id), pool.clone());
+
+        broker.spawn_reactorlike(ep_id, tp_tx, tp_fut, "TCP endpoint");
 
         let players = vec![10, 11];
         let game = Echo {

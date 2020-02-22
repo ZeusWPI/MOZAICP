@@ -100,11 +100,7 @@ mod builder {
     use crate::modules::types::*;
     use crate::modules::*;
 
-    use futures::executor::ThreadPool;
-
     use std::any;
-    use std::collections::HashMap;
-
     pub struct GameBuilder {
         steplock: Option<StepLock>,
         players: Vec<PlayerId>,
@@ -172,66 +168,66 @@ mod builder {
             (game_id, players)
         }
 
-        pub async fn run(self, pool: ThreadPool) {
-            let broker = BrokerHandle::new(pool.clone());
-            let json_broker = BrokerHandle::new(pool.clone());
+        // pub async fn run(self, pool: ThreadPool) {
+        //     let broker = BrokerHandle::new(pool.clone());
+        //     let json_broker = BrokerHandle::new(pool.clone());
 
-            let cc_ids: Vec<ReactorID> = self.players.iter().map(|_| ReactorID::rand()).collect();
-            let player_map: HashMap<PlayerId, ReactorID> = self
-                .players
-                .iter()
-                .cloned()
-                .zip(cc_ids.iter().cloned())
-                .collect();
+        //     let cc_ids: Vec<ReactorID> = self.players.iter().map(|_| ReactorID::rand()).collect();
+        //     let player_map: HashMap<PlayerId, ReactorID> = self
+        //         .players
+        //         .iter()
+        //         .cloned()
+        //         .zip(cc_ids.iter().cloned())
+        //         .collect();
 
-            let game_id = ReactorID::rand();
-            let step_id = ReactorID::rand();
-            let agg_id = ReactorID::rand();
-            let cm_id = ReactorID::rand();
+        //     let game_id = ReactorID::rand();
+        //     let step_id = ReactorID::rand();
+        //     let agg_id = ReactorID::rand();
+        //     let cm_id = ReactorID::rand();
 
-            let lock = self.steplock.map(|lock| lock.params(game_id, agg_id));
+        //     let lock = self.steplock.map(|lock| lock.params(game_id, agg_id));
 
-            let game = GameRunner::params(
-                if lock.is_some() { step_id } else { agg_id },
-                0.into(),
-                self.game,
-            );
+        //     let game = GameRunner::params(
+        //         if lock.is_some() { step_id } else { agg_id },
+        //         0.into(),
+        //         self.game,
+        //     );
 
-            let agg = Aggregator::params(
-                if lock.is_some() { step_id } else { game_id },
-                player_map.clone(),
-            );
+        //     let agg = Aggregator::params(
+        //         if lock.is_some() { step_id } else { game_id },
+        //         player_map.clone(),
+        //     );
 
-            let cm = ConnectionManager::params(
-                pool.clone(),
-                "10.1.0.187:6666".parse().unwrap(),
-                json_broker.clone(),
-                player_map.clone(),
-            );
+        //     let cm = ConnectionManager::params(
+        //         pool.clone(),
+        //         "10.1.0.187:6666".parse().unwrap(),
+        //         json_broker.clone(),
+        //         player_map.clone(),
+        //     );
 
-            player_map
-                .iter()
-                .map(|(&id, &r_id)| {
-                    ClientController::new(
-                        r_id,
-                        json_broker.clone(),
-                        broker.clone(),
-                        agg_id,
-                        cm_id,
-                        id,
-                    )
-                })
-                .for_each(|cc| pool.spawn_ok(cc));
+        //     player_map
+        //         .iter()
+        //         .map(|(&id, &r_id)| {
+        //             ClientController::new(
+        //                 r_id,
+        //                 json_broker.clone(),
+        //                 broker.clone(),
+        //                 agg_id,
+        //                 cm_id,
+        //                 id,
+        //             )
+        //         })
+        //         .for_each(|cc| pool.spawn_ok(cc));
 
-            if let Some(lock) = lock {
-                broker.spawn(lock, Some(step_id));
-            }
+        //     if let Some(lock) = lock {
+        //         broker.spawn(lock, Some(step_id));
+        //     }
 
-            join!(
-                broker.spawn_with_handle(game, Some(game_id)).0,
-                broker.spawn_with_handle(agg, Some(agg_id)).0,
-                json_broker.spawn_with_handle(cm, Some(cm_id)).0,
-            );
-        }
+        //     join!(
+        //         broker.spawn_with_handle(game, Some(game_id)).0,
+        //         broker.spawn_with_handle(agg, Some(agg_id)).0,
+        //         json_broker.spawn_with_handle(cm, Some(cm_id)).0,
+        //     );
+        // }
     }
 }

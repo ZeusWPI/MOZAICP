@@ -54,9 +54,9 @@ impl GameManager {
         self_id: ReactorID,
         cm_id: ReactorID,
         pool: ThreadPool,
-    ) -> (RemoteHandle<()>, Self) {
-        let (handle, op_tx) = GameManagerFuture::spawn(broker, self_id, cm_id, pool);
-        (handle, Self { op_tx })
+    ) -> Self {
+        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id, pool);
+        Self { op_tx }
     }
 
     pub async fn start_game(&mut self, builder: GameBuilder) -> Option<u64> {
@@ -113,7 +113,6 @@ pub struct GameManagerFuture {
 }
 
 use futures::executor::ThreadPool;
-use futures::future::RemoteHandle;
 use futures::task::SpawnExt;
 impl GameManagerFuture {
     fn spawn(
@@ -121,25 +120,23 @@ impl GameManagerFuture {
         self_id: ReactorID,
         cm_id: ReactorID,
         pool: ThreadPool,
-    ) -> (RemoteHandle<()>, UnboundedSender<GameOpReq>) {
+    ) -> UnboundedSender<GameOpReq> {
         let (op_tx, mut op_rx) = mpsc::unbounded();
         let (ch_tx, ch_rx) = mpsc::unbounded();
 
         let mut ch_rx = receiver_handle(ch_rx).boxed().fuse();
 
-        broker.spawn_reactorlike(self_id, ch_tx);
 
         let mut this = Self {
             cm_chan: broker.get_sender(&cm_id),
-            broker,
+            broker: broker.clone(),
             games: HashMap::new(),
             requests: HashMap::new(),
             id: self_id,
             cm_id,
         };
 
-        let handle = pool.spawn_with_handle(
-            async move {
+        let fut = async move {
                 loop {
                     select! {
                         req = op_rx.next() => {
@@ -182,8 +179,11 @@ impl GameManagerFuture {
                 }
 
                 Some(())
-            }.map(|_| ())).unwrap();
-        (handle, op_tx)
+            }.map(|_| ());
+
+        broker.spawn_reactorlike(self_id, ch_tx, fut, "Game Manager");
+
+        op_tx
     }
 
     fn send_msg(&mut self, uuid: UUID, res: GameOpRes) {

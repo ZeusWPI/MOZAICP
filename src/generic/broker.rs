@@ -2,7 +2,8 @@ use super::{CoreParams, Reactor, ReactorID, ReactorState, Receiver, Sender, Send
 
 use futures::channel::mpsc;
 use futures::executor::ThreadPool;
-use futures::future::RemoteHandle;
+use futures::future::{FutureExt, RemoteHandle, Future};
+use futures::stream::StreamExt;
 use futures::task::SpawnExt;
 
 use tracing_futures::Instrument;
@@ -35,6 +36,7 @@ struct Broker<K, M> {
 pub struct BrokerHandle<K, M> {
     broker: Arc<Mutex<Broker<K, M>>>,
     pool: ThreadPool,
+    tx: mpsc::UnboundedSender<RemoteHandle<()>>,
 }
 
 impl<K, M> Clone for BrokerHandle<K, M> {
@@ -42,21 +44,53 @@ impl<K, M> Clone for BrokerHandle<K, M> {
         BrokerHandle {
             broker: self.broker.clone(),
             pool: self.pool.clone(),
+            tx: self.tx.clone(),
         }
     }
 }
 
 impl<K, M> BrokerHandle<K, M> {
     /// Creates a new broker
-    pub fn new(pool: ThreadPool) -> BrokerHandle<K, M> {
+    pub fn new(pool: ThreadPool) -> (Self, RemoteHandle<()>) {
+        let (tx, mut rx) = mpsc::unbounded();
+
+        let fut = async move {
+            loop {
+                if let Some(next) = rx.next().await {
+                    next.await;
+                } else {
+                    break;
+                }
+            }
+            Some(())
+        };
+
+        let handle = pool.spawn_with_handle(fut.map(|_| info!("Broker finished") )).unwrap();
+
         let broker = Broker {
             reactors: HashMap::new(),
         };
 
-        BrokerHandle {
-            broker: Arc::new(Mutex::new(broker)),
-            pool,
-        }
+        (
+            BrokerHandle {
+                broker: Arc::new(Mutex::new(broker)),
+                pool,
+                tx,
+            },
+            handle,
+        )
+    }
+
+    pub fn spawn_fut<O, Fut: Future<Output=O> + Send +'static>(&self, id: ReactorID, name: &str, fut: Fut) {
+        info!(%id, "Start Reactor");
+        graph::add_node(&id, name);
+
+        let handle = self.pool.spawn_with_handle(fut.map(move |_| {
+            graph::remove_node(&id);
+            info!(%id, "Closed Reactor");
+        })).unwrap();
+
+        self.tx.unbounded_send(handle);
     }
 
     /// Removes a perticular reactor
@@ -114,11 +148,11 @@ impl<K, M> BrokerHandle<K, M> {
             .insert(id, ReactorChannel::Connected(sender));
     }
 
-    pub fn spawn_reactorlike(&self, id: ReactorID, sender: Sender<K, M>) {
+    pub fn spawn_reactorlike<O, Fut: Future<Output=O> + Send +'static>(&self, id: ReactorID, sender: Sender<K, M>, fut: Fut, name: &str) {
         self.set(id, sender);
+        self.spawn_fut(id, name, fut);
     }
 }
-
 
 use crate::graph;
 impl<K, M> BrokerHandle<K, M>
@@ -132,18 +166,7 @@ where
         params: CoreParams<S, K, M>,
         id: Option<ReactorID>,
     ) -> ReactorID {
-        let (handle, id) = self.spawn_with_handle(params, id);
-        handle.forget();
-        id
-    }
-
-    pub fn spawn_with_handle<S: 'static + Send + ReactorState<K, M> + Unpin>(
-        &self,
-        params: CoreParams<S, K, M>,
-        id: Option<ReactorID>,
-    ) -> (RemoteHandle<()>, ReactorID) {
         let id = id.unwrap_or_else(|| ReactorID::rand());
-        graph::add_node(&id, S::NAME);
 
         let mut reactor = Reactor::new(
             id,
@@ -154,14 +177,9 @@ where
 
         reactor.init();
 
-        let fut = self
-            .pool
-            .spawn_with_handle(reactor.instrument(trace_span!("Reactor", name = S::NAME, %id)))
-            .expect("Couldn't spawn reactor");
+        self.spawn_fut(id, S::NAME, reactor.instrument(trace_span!("Reactor", name = S::NAME, %id)));
 
-        info!(name = S::NAME, %id, "Reactor spawned");
-
-        (fut, id)
+        id
     }
 
     pub fn get_sender(&self, target: &ReactorID) -> SenderHandle<K, M> {

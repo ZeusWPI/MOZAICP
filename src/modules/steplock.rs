@@ -137,12 +137,10 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             )));
         handle.open_link(timeout_id, timeout_params, true);
 
-        handle.open_reactor_like(timeout_id, tx);
-
         let timeout_ms = self.timeout_ms.clone();
         let init_timeout = self.init_timeout_ms.clone();
 
-        self.tp.spawn_ok(async move {
+        let fut = async move {
             let mut rx = receiver_handle(rx).boxed().fuse();
 
             if let Some(init_timeout) = init_timeout {
@@ -181,6 +179,8 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             }
 
             Some(())
-        }.map(|_| ()));
+        }.map(|_| ());
+
+        handle.open_reactor_like(timeout_id, tx, fut, "Timeouter");
     }
 }

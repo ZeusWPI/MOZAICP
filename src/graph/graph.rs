@@ -73,8 +73,10 @@ where
         .find_map(|(i, x)| if p(x) { Some(i) } else { None })
 }
 
+use std::pin::Pin;
+use futures::future::{Future, FutureExt};
 impl GraphState {
-    fn new() -> mpsc::UnboundedSender<EventWrapper> {
+    fn new() -> (mpsc::UnboundedSender<EventWrapper>, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
         let (tx, mut rx) = mpsc::unbounded();
         let mut this = GraphState {
             conns: Vec::new(),
@@ -83,7 +85,7 @@ impl GraphState {
             created_edges: 0,
         };
 
-        tokio::spawn(async move {
+        let fut = async move {
             loop {
                 if let Some(event) = rx.next().await {
                     match event {
@@ -98,9 +100,9 @@ impl GraphState {
                 }
             }
             Some(())
-        });
+        };
 
-        return tx;
+        return (tx, fut.boxed());
     }
 
     fn add_conn(&mut self, conn: Sender) {
@@ -198,9 +200,10 @@ pub struct Graph {
 use std::thread;
 
 impl Graph {
-    pub fn new() -> Graph {
+    pub fn new() -> (Graph, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
+        let (tx, fut) = GraphState::new();
         let out = Graph {
-            tx: GraphState::new(),
+            tx
         };
 
         let tx = out.tx.clone();
@@ -216,11 +219,12 @@ impl Graph {
             .unwrap()
         });
 
-        return out;
+        return (out, fut);
     }
 
-    pub fn new_boxed() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self::new()))
+    pub fn new_boxed() -> (Arc<Mutex<Self>>, Pin<Box<dyn Future<Output=Option<()>> + Send>>)  {
+        let (me, fut) = Self::new();
+        (Arc::new(Mutex::new(me)), fut)
     }
 }
 

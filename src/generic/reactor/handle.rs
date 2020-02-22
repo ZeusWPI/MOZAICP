@@ -31,6 +31,8 @@ impl<'a, K, M> ReactorHandle<'a, K, M> {
     }
 }
 
+use futures::future::Future;
+
 impl<'a, K, M> ReactorHandle<'a, K, M>
 where
     K: 'static + Send + Eq + Hash + Unpin,
@@ -44,8 +46,8 @@ where
             .push_back(InnerOp::OpenLink(target, spawner.into(), cascade));
     }
 
-    pub fn open_reactor_like(&mut self, target: ReactorID, tx: Sender<K, M>) {
-        self.broker.spawn_reactorlike(target, tx);
+    pub fn open_reactor_like<O, Fut: Future<Output=O> + Send +'static>(&mut self, target: ReactorID, tx: Sender<K, M>, fut: Fut, name: &str) {
+        self.broker.spawn_reactorlike(target, tx, fut, name);
     }
 
     pub fn close(&mut self) {
