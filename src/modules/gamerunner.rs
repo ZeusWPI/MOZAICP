@@ -76,6 +76,9 @@ impl ReactorState<any::TypeId, Message> for GameRunner {
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), Vec<PlayerMsg>>(
                 TargetReactor::Reactor,
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), StateRes>(
+                TargetReactor::Link(self.gm_id),
             )));
         handle.open_link(self.clients_id, client_params, true);
 
@@ -126,7 +129,7 @@ mod builder {
             broker: BrokerHandle<any::TypeId, Message>,
             gm_id: ReactorID,
             cm_id: ReactorID,
-        ) -> ReactorID {
+        ) -> (ReactorID, Vec<(PlayerId, ReactorID)>) {
             let game_id = ReactorID::rand();
             let step_id = ReactorID::rand();
             let agg_id = ReactorID::rand();
@@ -166,7 +169,7 @@ mod builder {
 
             broker.spawn(agg, Some(agg_id));
 
-            game_id
+            (game_id, players)
         }
 
         pub async fn run(self, pool: ThreadPool) {

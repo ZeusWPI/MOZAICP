@@ -1,3 +1,4 @@
+use super::net::{PlayerUUIDs, RegisterGame};
 use crate::generic::*;
 use crate::modules::GameBuilder;
 
@@ -48,9 +49,14 @@ pub struct GameManager {
 }
 
 impl GameManager {
-    pub fn new(broker: BrokerHandle<any::TypeId, Message>, self_id: ReactorID, cm_id: ReactorID) -> Self {
-        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id);
-        Self { op_tx }
+    pub fn new(
+        broker: BrokerHandle<any::TypeId, Message>,
+        self_id: ReactorID,
+        cm_id: ReactorID,
+        pool: ThreadPool,
+    ) -> (RemoteHandle<()>, Self) {
+        let (handle, op_tx) = GameManagerFuture::spawn(broker, self_id, cm_id, pool);
+        (handle, Self { op_tx })
     }
 
     pub async fn start_game(&mut self, builder: GameBuilder) -> Option<u64> {
@@ -102,14 +108,20 @@ pub struct GameManagerFuture {
 
     id: ReactorID,
     cm_id: ReactorID,
+
+    cm_chan: SenderHandle<any::TypeId, Message>,
 }
 
+use futures::executor::ThreadPool;
+use futures::future::RemoteHandle;
+use futures::task::SpawnExt;
 impl GameManagerFuture {
     fn spawn(
         broker: BrokerHandle<any::TypeId, Message>,
         self_id: ReactorID,
         cm_id: ReactorID,
-    ) -> UnboundedSender<GameOpReq> {
+        pool: ThreadPool,
+    ) -> (RemoteHandle<()>, UnboundedSender<GameOpReq>) {
         let (op_tx, mut op_rx) = mpsc::unbounded();
         let (ch_tx, ch_rx) = mpsc::unbounded();
 
@@ -118,6 +130,7 @@ impl GameManagerFuture {
         broker.spawn_reactorlike(self_id, ch_tx);
 
         let mut this = Self {
+            cm_chan: broker.get_sender(&cm_id),
             broker,
             games: HashMap::new(),
             requests: HashMap::new(),
@@ -125,51 +138,56 @@ impl GameManagerFuture {
             cm_id,
         };
 
-        tokio::spawn(async move {
-            loop {
-                select! {
-                    req = op_rx.next() => {
-                        // Handle request
-                        if let Some(GameOpReq(req, chan)) = req {
-                            let uuid = rand::random();
-                            this.requests.insert(uuid, chan);
+        let handle = pool.spawn_with_handle(
+            async move {
+                loop {
+                    select! {
+                        req = op_rx.next() => {
+                            // Handle request
+                            if let Some(GameOpReq(req, chan)) = req {
+                                let uuid = rand::random();
+                                this.requests.insert(uuid, chan);
 
-                            match req {
-                                GameOp::Build(builder) => this.handle_gamebuilder(uuid, builder),
-                                GameOp::State(game) => this.handle_state(uuid, game),
-                                GameOp::Kill(game) => this.handle_kill(uuid, game),
-                            }
-                        } else {
-                            break;
-                        }
-                    },
-                    res = ch_rx.next() => {
-                        if let Some((_from, key, mut msg)) = res? {
-                            // Handle response
-                            if if key == any::TypeId::of::<StateRes>() {
-                                StateRes::from_msg(&key, &mut msg).map(|StateRes(id, value)| {
-                                    this.send_msg(*id, GameOpRes::State(Some(value.clone())))
-                                }).is_none()
+                                match req {
+                                    GameOp::Build(builder) => this.handle_gamebuilder(uuid, builder),
+                                    GameOp::State(game) => this.handle_state(uuid, game),
+                                    GameOp::Kill(game) => this.handle_kill(uuid, game),
+                                }
                             } else {
-                                KillRes::from_msg(&key, &mut msg).map(|KillRes(id)| {
-                                    this.send_msg(*id, GameOpRes::Kill(Some(())))
-                                }).is_none()
-                            } {
-                                error!("HELP");
+                                break;
                             }
-                        } else {
-                            break;
+                        },
+                        res = ch_rx.next() => {
+                            if let Some((from, key, mut msg)) = res? {
+                                info!(%from, "msg");
+                                // Handle response
+                                if if key == any::TypeId::of::<StateRes>() {
+                                    StateRes::from_msg(&key, &mut msg).map(|StateRes(id, value)| {
+                                        this.send_msg(*id, GameOpRes::State(Some(value.clone())))
+                                    }).is_none()
+                                } else if key == any::TypeId::of::<PlayerUUIDs>() {
+                                    PlayerUUIDs::from_msg(&key, &mut msg).map(|x| println!("{:?}", x)).is_none()
+                                } else {
+                                    KillRes::from_msg(&key, &mut msg).map(|KillRes(id)| {
+                                        this.send_msg(*id, GameOpRes::Kill(Some(())))
+                                    }).is_none()
+                                } {
+                                    error!("HELP");
+                                }
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }
-            }
 
-            Some(())
-        });
-        op_tx
+                Some(())
+            }.map(|_| ())).unwrap();
+        (handle, op_tx)
     }
 
     fn send_msg(&mut self, uuid: UUID, res: GameOpRes) {
+        info!("Sending msg to gm");
         if self
             .requests
             .remove(&uuid)
@@ -181,9 +199,16 @@ impl GameManagerFuture {
     }
 
     fn handle_gamebuilder(&mut self, uuid: UUID, builder: GameBuilder) {
-        let game_id = builder.start(self.broker.clone(), self.id, self.cm_id);
         let game_uuid = rand::random();
-
+        let (game_id, players) = builder.start(self.broker.clone(), self.id, self.cm_id);
+        self.cm_chan.send(
+            self.id,
+            RegisterGame {
+                game: game_uuid,
+                players,
+            },
+        );
+        info!(%game_id, "Spawning game");
         self.games
             .insert(game_uuid, self.broker.get_sender(&game_id));
 

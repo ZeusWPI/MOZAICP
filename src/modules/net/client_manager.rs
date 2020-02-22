@@ -11,11 +11,11 @@ use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct RegisterGame {
-    game: u64,
-    players: Vec<(PlayerId, ReactorID)>,
+    pub game: u64,
+    pub players: Vec<(PlayerId, ReactorID)>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PlayerUUIDs {
     game: u64,
     ids: Vec<u64>,

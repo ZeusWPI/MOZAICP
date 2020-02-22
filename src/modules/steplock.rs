@@ -2,6 +2,7 @@ use super::types::{Data, HostMsg, PlayerId, PlayerMsg};
 use crate::generic::*;
 
 use futures::channel::mpsc;
+use futures::executor::ThreadPool;
 use futures::{FutureExt, StreamExt};
 
 use tokio::time::delay_for;
@@ -23,11 +24,11 @@ pub struct StepLock {
     player_id: ReactorID,
     timeout_ms: Option<Duration>,
     init_timeout_ms: Option<Duration>,
-    // Maybe add threadpool
+    tp: ThreadPool,
 }
 
 impl StepLock {
-    pub fn new(players: Vec<PlayerId>) -> Self {
+    pub fn new(players: Vec<PlayerId>, tp: ThreadPool) -> Self {
         Self {
             host: 0.into(),
             player_id: 0.into(),
@@ -35,6 +36,7 @@ impl StepLock {
             players,
             timeout_ms: None,
             init_timeout_ms: None,
+            tp,
         }
     }
 
@@ -140,7 +142,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         let timeout_ms = self.timeout_ms.clone();
         let init_timeout = self.init_timeout_ms.clone();
 
-        tokio::spawn(async move {
+        self.tp.spawn_ok(async move {
             let mut rx = receiver_handle(rx).boxed().fuse();
 
             if let Some(init_timeout) = init_timeout {
@@ -157,7 +159,6 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             if let Some(timeout_ms) = timeout_ms {
                 loop {
                     let mut timeout = delay_for(timeout_ms).fuse();
-
                     select! {
                         v = rx.next() => {
                             if v.is_none() {
@@ -180,6 +181,6 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             }
 
             Some(())
-        });
+        }.map(|_| ()));
     }
 }

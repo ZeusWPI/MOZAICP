@@ -68,28 +68,26 @@ async fn main() {
         let cm_id = ReactorID::rand();
         let ep_id = ReactorID::rand();
 
-        let mut gm = GameManager::new(broker.clone(), gm_id, cm_id);
+        let (handle, mut gm) = GameManager::new(broker.clone(), gm_id, cm_id, pool.clone());
         let cm_params = ClientManager::new(gm_id, vec![ep_id]);
         broker.spawn(cm_params, Some(cm_id));
 
-        broker.spawn_reactorlike(ep_id, TcpEndpoint::new(ep_id, "127.0.0.1:6666".parse().unwrap(), broker.get_sender(&cm_id)));
-
-        println!("Here");
+        broker.spawn_reactorlike(ep_id, TcpEndpoint::new(ep_id, "127.0.0.1:6666".parse().unwrap(), broker.get_sender(&cm_id), pool.clone()));
 
         let players = vec![10, 11];
         let game = Echo {
             clients: players.clone(),
         };
+
         let builder = GameBuilder::new(players.clone(), game).with_step_lock(
-            StepLock::new(players.clone()).with_timeout(std::time::Duration::from_secs(3)),
+            StepLock::new(players.clone(), pool.clone()),
         );
 
-        println!("Here");
-
         let game_id = gm.start_game(builder).await.unwrap();
-        println!("Here");
 
         println!("State: {:?}", gm.get_state(game_id).await);
+
+        handle.await;
     }
 
     std::thread::sleep(time::Duration::from_millis(100));

@@ -3,6 +3,7 @@ use crate::modules::net::SpawnPlayer;
 use crate::modules::types::*;
 
 use futures::channel::mpsc;
+use futures::executor::ThreadPool;
 use futures::stream::StreamExt;
 use futures::*;
 
@@ -20,9 +21,10 @@ impl TcpEndpoint {
         id: ReactorID,
         addr: SocketAddr,
         cm_chan: SenderHandle<any::TypeId, Message>,
+        tp: ThreadPool,
     ) -> Sender<any::TypeId, Message> {
         let (tx, rx) = mpsc::unbounded();
-        tokio::spawn(accepting(id, addr, rx, cm_chan));
+        tokio::spawn(accepting(id, addr, rx, cm_chan, tp));
         tx
     }
 }
@@ -32,6 +34,7 @@ async fn accepting(
     addr: SocketAddr,
     rx: Receiver<any::TypeId, Message>,
     cm_chan: SenderHandle<any::TypeId, Message>,
+    tp: ThreadPool,
 ) -> Option<()> {
     let mut rx = receiver_handle(rx).boxed().fuse();
 
@@ -41,15 +44,18 @@ async fn accepting(
     loop {
         select! {
             socket = listener.next() => {
-                tokio::spawn(
-                    handle_socket(id, socket?.ok()?, cm_chan.clone())
-                );
+                info!("Got new socket");
+
+                tp.spawn_ok(handle_socket(id, socket?.ok()?, cm_chan.clone(), tp.clone()).map(
+                    |_| ()
+                ));
             },
             item = rx.next() => {
                 if item.is_none() {
+                    info!("TCP closing");
                     break;
                 } else {
-                    error!("Tcp endpoint got unexpected message");
+                    error!("Tcp endpoint got an unexpected message");
                 }
             }
         }
@@ -62,6 +68,7 @@ async fn handle_socket(
     id: ReactorID,
     stream: TcpStream,
     cm_chan: SenderHandle<any::TypeId, Message>,
+    tp: ThreadPool,
 ) -> Option<()> {
     let (stream, player): (TcpStream, u64) = {
         let mut line = String::new();
@@ -69,16 +76,18 @@ async fn handle_socket(
         br.read_line(&mut line).await.ok()?;
 
         // Help needed: into_inner loses the underlying data
-        Some((br.into_inner(), line.parse().ok()?))
+        Some((br.into_inner(), line.trim().parse().ok()?))
     }?;
+
+    info!(player, "Got new player");
 
     cm_chan.send(
         id,
-        SpawnPlayer::new(player, |s_id, cc_chan| {
+        SpawnPlayer::new(player, move |s_id, cc_chan| {
             let (tx, rx): (Sender<any::TypeId, Message>, Receiver<any::TypeId, Message>) =
                 mpsc::unbounded();
 
-            tokio::spawn(handle_spawn(stream, s_id, cc_chan, rx));
+            tp.spawn_ok(handle_spawn(stream, s_id, cc_chan, rx).map(|_| info!("Socket closed")));
 
             tx
         }),
@@ -114,7 +123,7 @@ async fn handle_spawn(
             },
             v = lines.next() => {
                 let value = v?
-                .map_err(|error| { info!(?error, "Player stream error")})
+                .map_err(|error| { info!(?error, "Player stream error") })
                 .ok()?;
                 cc_chan.send(s_id, Typed::from(Data { value })).unwrap();
             },
