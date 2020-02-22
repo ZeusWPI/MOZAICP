@@ -46,7 +46,13 @@ where
             .push_back(InnerOp::OpenLink(target, spawner.into(), cascade));
     }
 
-    pub fn open_reactor_like<O, Fut: Future<Output=O> + Send +'static>(&mut self, target: ReactorID, tx: Sender<K, M>, fut: Fut, name: &str) {
+    pub fn open_reactor_like<O, Fut: Future<Output = O> + Send + 'static>(
+        &mut self,
+        target: ReactorID,
+        tx: Sender<K, M>,
+        fut: Fut,
+        name: &str,
+    ) {
         self.broker.spawn_reactorlike(target, tx, fut, name);
     }
 
@@ -86,9 +92,13 @@ where
 impl<'a, K, M> ReactorHandle<'a, K, M> {
     pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T, to: TargetReactor) {
         if let Some((id, msg)) = T::into_msg(msg) {
-            self.chan
+            if self
+                .chan
                 .unbounded_send(Operation::InternalMessage(id, msg, to))
-                .expect("crashed");
+                .is_err()
+            {
+                trace!("Internal reactor is already closed, nothing to do");
+            }
         }
     }
 }

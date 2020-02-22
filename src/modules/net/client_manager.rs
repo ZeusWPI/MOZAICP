@@ -112,11 +112,17 @@ impl ClientManager {
 
     fn handle_cc_close(&mut self, _: &mut ReactorHandle<any::TypeId, Message>, id: &ReactorID) {
         let orig_len = self.clients.len();
+
+        if orig_len == 0 {
+            error!("Tried to remove client controller, but there are none");
+            return;
+        }
+
         self.clients.retain(|_, (_, x)| x != id);
 
         if orig_len == self.clients.len() {
             error!(%id, "Tried to remove client controller, but client controller was not there");
-        } else if orig_len == self.clients.len() - 1 {
+        } else if orig_len - 1 == self.clients.len() {
             trace!(%id, "Successfully removed client controller");
         } else {
             error!(%id, "Remove more then one client controller!");

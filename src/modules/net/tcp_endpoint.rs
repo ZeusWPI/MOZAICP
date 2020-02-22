@@ -128,7 +128,7 @@ async fn handle_spawn(
                 let value = v?
                 .map_err(|error| { info!(?error, "Player stream error") })
                 .ok()?;
-                cc_chan.send(s_id, Typed::from(Data { value })).unwrap();
+                cc_chan.send(s_id, Data { value }).unwrap();
             },
             complete => {
                 trace!("Done");

@@ -147,6 +147,7 @@ impl GameManagerFuture {
                                     GameOp::Kill(game) => this.handle_kill(uuid, game),
                                 }
                             } else {
+                                error!("Breaking here here");
                                 break;
                             }
                         },
@@ -167,8 +168,6 @@ impl GameManagerFuture {
                                 } {
                                     error!("HELP");
                                 }
-                            } else {
-                                break;
                             }
                         }
                     }

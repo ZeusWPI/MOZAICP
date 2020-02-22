@@ -60,6 +60,7 @@ impl StepLock {
         CoreParams::new(self)
             .handler(FunctionHandler::from(Self::player_msg))
             .handler(FunctionHandler::from(Self::timeout))
+            .handler(FunctionHandler::from(Self::host_msg))
     }
 
     /// Insert the player message in the buffered message
@@ -76,6 +77,12 @@ impl StepLock {
         );
         if self.step.values().all(Option::is_some) {
             self.flush_msgs(handle);
+        }
+    }
+
+    fn host_msg(&mut self, _handle: &mut ReactorHandle<any::TypeId, Message>, m: &HostMsg) {
+        if let HostMsg::Kick(id) = m {
+            self.step.remove(&id);
         }
     }
 
@@ -106,7 +113,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), StateRes>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
-                TargetReactor::Link(self.player_id),
+                TargetReactor::All,
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), StateReq>(
                 TargetReactor::Link(self.player_id),
@@ -147,11 +154,14 @@ impl ReactorState<any::TypeId, Message> for StepLock {
                 let mut timeout = sleep(init_timeout).boxed().fuse();
                 select! {
                     v = rx.next() => {
+                        v??;
                     },
                     v = timeout => {
                         self_send_f.send(timeout_id, TimeOut)?;
                     }
                 }
+            } else {
+                rx.next().await??;
             }
 
             if let Some(timeout_ms) = timeout_ms {
@@ -159,7 +169,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
                     let mut timeout = sleep(timeout_ms).boxed().fuse();
                     select! {
                         v = rx.next() => {
-                            if v.is_none() {
+                            if v?.is_none() {
                                 break;
                             }
                         },
@@ -170,7 +180,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
                 }
             } else {
                 loop {
-                    let v = rx.next().await;
+                    let v = rx.next().await?;
                     if v.is_none() {
                         break;
                     }
@@ -181,6 +191,6 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             Some(())
         }.map(|_| ());
 
-        handle.open_reactor_like(timeout_id, tx, fut, "Timeouter");
+        handle.open_reactor_like(timeout_id, tx, fut, "Time-out Generator");
     }
 }

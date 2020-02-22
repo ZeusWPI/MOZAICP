@@ -2,6 +2,7 @@ use super::*;
 use crate::generic::{
     BrokerHandle, Handler, LinkOperation, LinkSpawner, Operation, ReactorID, Receiver, Sender,
 };
+use crate::graph;
 
 use tracing::{instrument, Span};
 
@@ -310,15 +311,5 @@ where
 
         info!(name = S::NAME, id = %this.id, "Reactor finished");
         return Poll::Ready(());
-    }
-}
-
-use crate::graph;
-impl<S, K, M> Drop for Reactor<S, K, M>
-where
-    S: ReactorState<K, M>,
-    K: Hash + Eq,
-{    fn drop(&mut self) {
-        graph::remove_node(&self.id);
     }
 }

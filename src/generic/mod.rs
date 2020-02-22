@@ -144,8 +144,8 @@ pub fn receiver_handle<K, M>(
     inner.filter_map(move |item| async {
         match item {
             Operation::ExternalMessage(id, k, m) => Some(Some((id, k, m))),
-            Operation::CloseLink(_id) => Some(None),
-            _ => None,
+            _ => Some(None),
+            // _ => None,
         }
     })
 }

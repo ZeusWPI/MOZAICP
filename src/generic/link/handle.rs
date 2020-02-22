@@ -15,31 +15,50 @@ impl<'a, K, M> LinkHandle<'a, K, M> {
     }
     pub fn send_message<T: 'static + IntoMessage<K, M>>(&mut self, msg: T) {
         if let Some((id, msg)) = T::into_msg(msg) {
-            self.state
+            if self
+                .state
                 .target
                 .unbounded_send(Operation::ExternalMessage(
                     self.state.source_id.clone(),
                     id,
                     msg,
                 ))
-                .expect("Link handle crashed");
+                .is_err()
+            {
+                if self
+                    .state
+                    .source
+                    .unbounded_send(Operation::CloseLink(self.state.target_id))
+                    .is_err()
+                {
+                    trace!("Internal reactor is already closed, nothing to do.");
+                }
+            }
         }
     }
 
     pub fn send_internal<T: 'static + IntoMessage<K, M>>(&mut self, msg: T, target: TargetReactor) {
         if let Some((id, msg)) = T::into_msg(msg) {
-            self.state
+            if self
+                .state
                 .source
                 .unbounded_send(Operation::InternalMessage(id, msg, target))
-                .expect("Link handle crashed");
+                .is_err()
+            {
+                trace!("Internal reactor is already closed, nothing to do.");
+            }
         }
     }
 
     pub fn close_link(&mut self) {
-        self.state
+        if self
+            .state
             .source
             .unbounded_send(Operation::CloseLink(self.state.target_id))
-            .expect("Link handle crashed");
+            .is_err()
+        {
+            trace!("Cannot closed link, link already closed");
+        }
     }
 
     pub fn target_id(&'a self) -> &'a ReactorID {

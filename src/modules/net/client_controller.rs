@@ -53,15 +53,20 @@ impl ClientController {
     }
 
     fn handle_client_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, m: &Data) {
+        info!(?m, "Got client msg");
         let msg = PlayerMsg {
             id: self.client_id,
             data: Some(m.clone()),
         };
 
-        handle.send_internal(msg, TargetReactor::Reactor);
+        handle.send_internal(msg, TargetReactor::Link(self.host));
     }
 
     fn handle_conn(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, accept: &Accepted) {
+        handle.send_internal(Connect(*accept.client_id), TargetReactor::Link(self.host));
+
+        info!("Opening link to client");
+
         let client_link_params = LinkParams::new(())
             .external_handler(FunctionHandler::from(e_to_i::<(), Data>(TargetReactor::Reactor)))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Data>()))
@@ -70,8 +75,6 @@ impl ClientController {
                     handle.send_internal(ClientClosed, TargetReactor::Reactor);
                 }
             );
-
-        handle.send_internal(Connect(*accept.client_id), TargetReactor::Link(self.host));
 
         self.client = Some(accept.client_id);
         handle.open_link(accept.client_id, client_link_params, false);
