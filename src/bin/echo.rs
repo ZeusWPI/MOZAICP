@@ -13,7 +13,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use std::time;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{GameController, StepLock};
+use mozaic::modules::{GameController, StepLock, GameManagerBuilder};
 
 use futures::executor::ThreadPool;
 use futures::future::FutureExt;
@@ -62,7 +62,6 @@ fn gen_builder(pool: &ThreadPool) -> GameBuilder {
     )
 }
 
-use mozaic::generic::*;
 use mozaic::graph;
 use mozaic::modules::*;
 
@@ -86,24 +85,14 @@ async fn main() -> std::io::Result<()> {
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
 
-        let (broker, handle) = BrokerHandle::new(pool.clone());
-
-        let gm_id = ReactorID::rand();
-        let cm_id = ReactorID::rand();
-        let ep_id = ReactorID::rand();
-
-        let mut gm = GameManager::new(broker.clone(), gm_id, cm_id);
-        let cm_params = ClientManager::new(gm_id, vec![ep_id]);
-        broker.spawn(cm_params, Some(cm_id));
-
-        let (tp_tx, tp_fut) = TcpEndpoint::new(
-            ep_id,
+        let (gmb, handle) = GameManagerBuilder::new(pool.clone());
+        let ep = TcpEndpoint::new(
             "127.0.0.1:6666".parse().unwrap(),
-            broker.get_sender(&cm_id),
             pool.clone(),
         );
 
-        broker.spawn_reactorlike(ep_id, tp_tx, tp_fut, "TCP endpoint");
+        let gmb = gmb.add_endpoint(ep, "TCP endpoint");
+        let mut gm = gmb.build();
 
         let mut games = VecDeque::new();
 

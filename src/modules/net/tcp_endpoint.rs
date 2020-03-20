@@ -1,5 +1,5 @@
 use crate::generic::*;
-use crate::modules::net::SpawnPlayer;
+use crate::modules::net::{SpawnPlayer, EndpointBuilder};
 use crate::modules::types::*;
 
 use futures::channel::mpsc;
@@ -11,18 +11,29 @@ use futures::io::*;
 
 use async_std::net;
 
-// use tokio;
-// use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-// use tokio::net::{TcpListener, TcpStream};
-
 use std::any;
 use std::pin::Pin;
 use std::net::SocketAddr;
 
+pub struct Builder {
+    addr: SocketAddr,
+    tp: ThreadPool,
+}
+
+impl EndpointBuilder for Builder {
+    fn build(self, id: ReactorID, cm_chan: SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
+        TcpEndpoint::build(id, self.addr, cm_chan, self.tp)
+    }
+}
+
 pub struct TcpEndpoint;
 impl TcpEndpoint {
     /// Spawn reactor_like TcpEndpoint to handle clients connecting to this address
-    pub fn new(
+    pub fn new(addr: SocketAddr, tp: ThreadPool) -> impl EndpointBuilder {
+        Builder { addr, tp }
+    }
+
+    fn build(
         id: ReactorID,
         addr: SocketAddr,
         cm_chan: SenderHandle<any::TypeId, Message>,

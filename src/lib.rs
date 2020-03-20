@@ -18,6 +18,8 @@ extern crate tracing;
 extern crate tracing_futures;
 
 extern crate ws;
+extern crate tokio_tungstenite;
+extern crate ws_stream_tungstenite;
 
 #[macro_use]
 extern crate mozaic_derive;

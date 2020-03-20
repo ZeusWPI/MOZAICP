@@ -1,12 +1,15 @@
 use super::net::{PlayerUUIDs, RegisterGame};
 use crate::generic::*;
-use crate::modules::GameBuilder;
+use crate::modules::{GameBuilder, ClientManager, EndpointBuilder};
 
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::channel::oneshot;
 use futures::prelude::*;
+use futures::executor::ThreadPool;
+use futures::future::RemoteHandle;
 
 use std::any;
+use std::marker::{PhantomData};
 
 pub mod types {
     use super::UUID;
@@ -22,6 +25,58 @@ pub mod types {
     pub struct KillRes(pub UUID);
 }
 use types::*;
+
+
+pub struct ToInsert;
+pub struct Inserted;
+
+pub struct GameManagerBuilder<Ep> {
+    pd: PhantomData<Ep>,
+    broker: BrokerHandle<any::TypeId, Message>,
+    eps: Vec<ReactorID>,
+    cm_id: ReactorID,
+}
+
+impl<Ep> GameManagerBuilder<Ep> {
+    pub fn add_endpoint<E: EndpointBuilder>(self, ep: E, name: &str) -> GameManagerBuilder<Inserted> {
+        let GameManagerBuilder { pd: _, broker, mut eps, cm_id } = self;
+        let ep_id = ReactorID::rand();
+        let (sender, fut) = ep.build(ep_id, broker.get_sender(&cm_id));
+
+        broker.spawn_reactorlike(ep_id, sender, fut, name);
+        eps.push(ep_id);
+
+        GameManagerBuilder {
+            pd: PhantomData,
+            broker, eps, cm_id
+        }
+    }
+}
+
+impl GameManagerBuilder<ToInsert> {
+    pub fn new(pool: ThreadPool) -> (Self, RemoteHandle<()>) {
+        let (broker, handle) = BrokerHandle::new(pool);
+        (GameManagerBuilder {
+            pd: PhantomData,
+            broker,
+            eps: Vec::new(),
+            cm_id: ReactorID::rand(),
+        }, handle)
+    }
+}
+
+impl GameManagerBuilder<Inserted> {
+    pub fn build(self) -> GameManager {
+        let gm_id = ReactorID::rand();
+        let GameManagerBuilder { pd: _, broker, eps, cm_id } = self;
+        let cm_params = ClientManager::new(gm_id, eps);
+        broker.spawn(cm_params, Some(cm_id));
+
+
+        GameManager::new(broker, gm_id, cm_id)
+    }
+}
+
 
 struct GameOpReq(GameOp, oneshot::Sender<GameOpRes>);
 impl GameOpReq {
@@ -49,6 +104,10 @@ pub struct GameManager {
 }
 
 impl GameManager {
+    pub fn builder(pool: ThreadPool) -> (GameManagerBuilder<ToInsert>, RemoteHandle<()>) {
+        GameManagerBuilder::new(pool)
+    }
+
     pub fn new(
         broker: BrokerHandle<any::TypeId, Message>,
         self_id: ReactorID,
