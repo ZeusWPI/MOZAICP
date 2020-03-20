@@ -1,6 +1,6 @@
 use super::net::{PlayerUUIDs, RegisterGame};
 use crate::generic::*;
-use crate::modules::{GameBuilder, ClientManager, EndpointBuilder};
+use crate::modules::{BoxedGameBuilder, ClientManager, EndpointBuilder};
 
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::channel::oneshot;
@@ -87,7 +87,7 @@ impl GameOpReq {
 }
 
 enum GameOp {
-    Build(GameBuilder),
+    Build(BoxedGameBuilder),
     Kill(GameID),
     State(GameID),
 }
@@ -117,8 +117,8 @@ impl GameManager {
         Self { op_tx }
     }
 
-    pub async fn start_game(&mut self, builder: GameBuilder) -> Option<u64> {
-        let (req, chan) = GameOpReq::new(GameOp::Build(builder));
+    pub async fn start_game<B: Into<BoxedGameBuilder>>(&mut self, builder: B) -> Option<u64> {
+        let (req, chan) = GameOpReq::new(GameOp::Build(builder.into()));
         self.op_tx.unbounded_send(req).ok()?;
 
         if let GameOpRes::Built(x) = chan.await.ok()? {
@@ -252,9 +252,9 @@ impl GameManagerFuture {
         }
     }
 
-    fn handle_gamebuilder(&mut self, uuid: UUID, builder: GameBuilder) {
+    fn handle_gamebuilder(&mut self, uuid: UUID, builder: BoxedGameBuilder) {
         let game_uuid = rand::random();
-        let (game_id, players) = builder.start(self.broker.clone(), self.id, self.cm_id);
+        let (game_id, players) = builder(self.broker.clone(), self.id, self.cm_id);
         self.cm_chan.send(
             self.id,
             RegisterGame {

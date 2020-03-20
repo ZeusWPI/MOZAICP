@@ -17,6 +17,7 @@ struct TimeOut;
 #[derive(Clone, Debug)]
 struct ResetTimeOut;
 
+#[derive(Clone)]
 pub struct StepLock {
     step: HashMap<PlayerId, Option<Data>>,
     players: Vec<PlayerId>,

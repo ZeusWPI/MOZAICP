@@ -8,7 +8,7 @@ mod steplock;
 pub use steplock::StepLock;
 
 mod gamerunner;
-pub use gamerunner::{GameBuilder, GameController, GameRunner};
+pub use gamerunner::{GameBuilder, BoxedGameBuilder, GameController, GameRunner};
 
 pub mod game_manager;
 pub use game_manager::{GameManager, GameManagerBuilder};

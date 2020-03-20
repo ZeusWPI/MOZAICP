@@ -1,9 +1,6 @@
 extern crate async_std;
 extern crate futures;
 extern crate mozaic;
-extern crate mozaic_derive;
-extern crate serde;
-extern crate serde_json;
 
 extern crate tracing;
 extern crate tracing_subscriber;
@@ -18,6 +15,7 @@ use mozaic::modules::{GameController, StepLock, GameManagerBuilder};
 use futures::executor::ThreadPool;
 use futures::future::FutureExt;
 
+#[derive(Clone)]
 struct Echo {
     clients: Vec<PlayerId>,
 }
@@ -48,18 +46,6 @@ impl GameController for Echo {
     fn is_done(&mut self) -> bool {
         self.clients.is_empty()
     }
-}
-
-fn gen_builder(pool: &ThreadPool) -> GameBuilder {
-    let players = vec![10, 11, 12, 13];
-    let game = Echo {
-        clients: players.clone(),
-    };
-
-    GameBuilder::new(players.clone(), game).with_step_lock(
-        StepLock::new(players.clone(), pool.clone())
-            .with_timeout(std::time::Duration::from_secs(5)),
-    )
 }
 
 use mozaic::graph;
@@ -96,24 +82,36 @@ async fn main() -> std::io::Result<()> {
 
         let mut games = VecDeque::new();
 
-        games.push_back(gm.start_game(gen_builder(&pool)).await.unwrap());
+        let game_builder = {
+            let players = vec![10, 11, 12, 13];
+            let game = Echo {
+                clients: players.clone(),
+            };
+
+            GameBuilder::new(players.clone(), game).with_step_lock(
+                StepLock::new(players.clone(), pool.clone())
+                    .with_timeout(std::time::Duration::from_secs(5)),
+            )
+        };
+
+        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(gen_builder(&pool)).await.unwrap());
+        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(gen_builder(&pool)).await.unwrap());
+        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
         gm.kill_game(games.pop_front().unwrap()).await.unwrap();
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(gen_builder(&pool)).await.unwrap());
+        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
         gm.kill_game(games.pop_front().unwrap()).await.unwrap();
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(gen_builder(&pool)).await.unwrap());
+        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
         async_std::task::sleep(std::time::Duration::from_secs(3)).await;
         gm.kill_game(games.pop_front().unwrap()).await.unwrap();

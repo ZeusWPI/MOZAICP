@@ -96,28 +96,41 @@ impl ReactorState<any::TypeId, Message> for GameRunner {
     }
 }
 
-pub use builder::GameBuilder;
+pub use builder::{GameBuilder, BoxedGameBuilder};
 mod builder {
-    use super::{GameBox, GameController};
+    use super::{GameController};
 
     use crate::generic::*;
     use crate::modules::net::client_controller;
     use crate::modules::types::*;
     use crate::modules::*;
 
+    pub type BoxedGameBuilder = Box<dyn Send + FnOnce(BrokerHandle<any::TypeId, Message>, ReactorID, ReactorID) -> (ReactorID, Vec<(PlayerId, ReactorID)>)>;
+
     use std::any;
-    pub struct GameBuilder {
+
+    pub struct GameBuilder<G> {
         steplock: Option<StepLock>,
         players: Vec<PlayerId>,
-        game: GameBox,
+        game: G,
     }
 
-    impl GameBuilder {
-        pub fn new<G: GameController + Send + 'static>(players: Vec<PlayerId>, game: G) -> Self {
+    impl<G: Clone> Clone for GameBuilder<G> {
+        fn clone(&self) -> Self {
+            Self {
+                steplock: self.steplock.clone(),
+                players: self.players.clone(),
+                game: self.game.clone(),
+            }
+        }
+    }
+
+    impl<G: GameController + Send + 'static> GameBuilder<G> {
+        pub fn new(players: Vec<PlayerId>, game: G) -> Self {
             Self {
                 players,
                 steplock: None,
-                game: Box::new(game),
+                game,
             }
         }
         pub fn with_step_lock(mut self, lock: StepLock) -> Self {
@@ -125,52 +138,58 @@ mod builder {
             self
         }
 
-        pub fn start(
+
+    }
+
+    impl<G: GameController + Send + 'static> Into<BoxedGameBuilder> for GameBuilder<G> {
+        fn into(
             self,
-            broker: BrokerHandle<any::TypeId, Message>,
-            gm_id: ReactorID,
-            cm_id: ReactorID,
-        ) -> (ReactorID, Vec<(PlayerId, ReactorID)>) {
-            let game_id = ReactorID::rand();
-            let step_id = ReactorID::rand();
-            let agg_id = ReactorID::rand();
+        ) -> BoxedGameBuilder {
+            Box::new(
+                |broker: BrokerHandle<any::TypeId, Message>, gm_id: ReactorID, cm_id: ReactorID,| {
 
-            let players: Vec<(PlayerId, ReactorID)> = self
-                .players
-                .iter()
-                .map(|&x| {
-                    let params = client_controller::ClientController::params(cm_id, agg_id, x);
-                    let id = broker.spawn(params, None);
-                    (x, id)
-                })
-                .collect();
+                    let game_id = ReactorID::rand();
+                    let step_id = ReactorID::rand();
+                    let agg_id = ReactorID::rand();
 
-            let game = GameRunner::params(
-                if self.steplock.is_some() {
-                    step_id
-                } else {
-                    agg_id
-                },
-                gm_id,
-                self.game,
-            );
-            let agg = Aggregator::params(
-                if self.steplock.is_some() {
-                    step_id
-                } else {
-                    game_id
-                },
-                players.iter().cloned().collect(),
-            );
+                    let players: Vec<(PlayerId, ReactorID)> = self
+                    .players
+                    .iter()
+                    .map(|&x| {
+                        let params = client_controller::ClientController::params(cm_id, agg_id, x);
+                        let id = broker.spawn(params, None);
+                        (x, id)
+                    })
+                    .collect();
 
-            if let Some(lock) = self.steplock.map(|lock| lock.params(game_id, agg_id)) {
-                broker.spawn(lock, Some(step_id));
-            }
-            broker.spawn(game, Some(game_id));
+                    let game = GameRunner::params(
+                        if self.steplock.is_some() {
+                            step_id
+                        } else {
+                            agg_id
+                        },
+                        gm_id,
+                        Box::new(self.game),
+                    );
+                    let agg = Aggregator::params(
+                        if self.steplock.is_some() {
+                            step_id
+                        } else {
+                            game_id
+                        },
+                        players.iter().cloned().collect(),
+                    );
 
-            broker.spawn(agg, Some(agg_id));
+                    if let Some(lock) = self.steplock.map(|lock| lock.params(game_id, agg_id)) {
+                        broker.spawn(lock, Some(step_id));
+                    }
+                    broker.spawn(game, Some(game_id));
 
-            (game_id, players)
+                    broker.spawn(agg, Some(agg_id));
+
+                    (game_id, players)
+                }
+            )
         }
     }
 }
