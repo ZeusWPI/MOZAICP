@@ -31,7 +31,6 @@ impl GameRunner {
             .handler(FunctionHandler::from(Self::handle_client_msg))
             .handler(FunctionHandler::from(Self::handle_client_msgs))
             .handler(FunctionHandler::from(Self::handle_kill))
-
     }
 
     fn handle_client_msg(
@@ -59,11 +58,7 @@ impl GameRunner {
         }
     }
 
-    fn handle_kill(
-        &mut self,
-        handle: &mut ReactorHandle<any::TypeId, Message>,
-        req: &KillReq,
-    ) {
+    fn handle_kill(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, req: &KillReq) {
         handle.send_internal(KillRes(req.0), TargetReactor::Link(self.gm_id));
         handle.close();
     }
@@ -90,22 +85,35 @@ impl ReactorState<any::TypeId, Message> for GameRunner {
         let gm_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), StateRes>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), KillRes>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), StateReq>(TargetReactor::Link(self.clients_id))))
-            .external_handler(FunctionHandler::from(e_to_i::<(), KillReq>(TargetReactor::Reactor)));
+            .external_handler(FunctionHandler::from(e_to_i::<(), StateReq>(
+                TargetReactor::Link(self.clients_id),
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), KillReq>(
+                TargetReactor::Reactor,
+            )));
         handle.open_link(self.gm_id, gm_link_params, false);
     }
 }
 
-pub use builder::{GameBuilder, BoxedGameBuilder};
+pub use builder::{BoxedGameBuilder, GameBuilder};
 mod builder {
-    use super::{GameController};
+    use super::GameController;
 
     use crate::generic::*;
     use crate::modules::net::client_controller;
     use crate::modules::types::*;
     use crate::modules::*;
 
-    pub type BoxedGameBuilder = Box<dyn Send + FnOnce(BrokerHandle<any::TypeId, Message>, ReactorID, ReactorID) -> (ReactorID, Vec<(PlayerId, ReactorID)>)>;
+    use std::collections::HashMap;
+
+    pub type BoxedGameBuilder = Box<
+        dyn Send
+            + FnOnce(
+                BrokerHandle<any::TypeId, Message>,
+                ReactorID,
+                ReactorID,
+            ) -> (ReactorID, HashMap<u64, (PlayerId, ReactorID)>),
+    >;
 
     use std::any;
 
@@ -126,6 +134,10 @@ mod builder {
     }
 
     impl<G: GameController + Send + 'static> GameBuilder<G> {
+        /// When called, you might want to wait a little
+        /// It is a known but that not all connections are established
+        /// right away.
+        /// 100 ms should be more than enough, for most hardware.
         pub fn new(players: Vec<PlayerId>, game: G) -> Self {
             Self {
                 players,
@@ -137,30 +149,27 @@ mod builder {
             self.steplock = Some(lock);
             self
         }
-
-
     }
 
     impl<G: GameController + Send + 'static> Into<BoxedGameBuilder> for GameBuilder<G> {
-        fn into(
-            self,
-        ) -> BoxedGameBuilder {
+        fn into(self) -> BoxedGameBuilder {
             Box::new(
-                |broker: BrokerHandle<any::TypeId, Message>, gm_id: ReactorID, cm_id: ReactorID,| {
-
+                |broker: BrokerHandle<any::TypeId, Message>, gm_id: ReactorID, cm_id: ReactorID| {
                     let game_id = ReactorID::rand();
                     let step_id = ReactorID::rand();
                     let agg_id = ReactorID::rand();
 
-                    let players: Vec<(PlayerId, ReactorID)> = self
-                    .players
-                    .iter()
-                    .map(|&x| {
-                        let params = client_controller::ClientController::params(cm_id, agg_id, x);
-                        let id = broker.spawn(params, None);
-                        (x, id)
-                    })
-                    .collect();
+                    let players: HashMap<u64, (PlayerId, ReactorID)> = self
+                        .players
+                        .iter()
+                        .map(|&x| {
+                            let key = rand::random();
+                            let params =
+                                client_controller::ClientController::params(cm_id, agg_id, x, key);
+                            let id = broker.spawn(params, None);
+                            (key, (x, id))
+                        })
+                        .collect();
 
                     let game = GameRunner::params(
                         if self.steplock.is_some() {
@@ -177,7 +186,7 @@ mod builder {
                         } else {
                             game_id
                         },
-                        players.iter().cloned().collect(),
+                        players.values().cloned().collect(),
                     );
 
                     if let Some(lock) = self.steplock.map(|lock| lock.params(game_id, agg_id)) {
@@ -188,7 +197,7 @@ mod builder {
                     broker.spawn(agg, Some(agg_id));
 
                     (game_id, players)
-                }
+                },
             )
         }
     }

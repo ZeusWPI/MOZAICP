@@ -1,7 +1,7 @@
 mod translator;
 pub use translator::Translator;
 
-mod aggregator;
+pub mod aggregator;
 pub use aggregator::Aggregator;
 
 mod steplock;

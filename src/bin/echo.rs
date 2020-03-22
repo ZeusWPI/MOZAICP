@@ -69,7 +69,7 @@ async fn main() -> std::io::Result<()> {
             .unwrap();
         pool.spawn_ok(fut.map(|_| ()));
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
 
         let (gmb, handle) = GameManagerBuilder::new(pool.clone());
         let ep = TcpEndpoint::new(
@@ -93,28 +93,35 @@ async fn main() -> std::io::Result<()> {
                     .with_timeout(std::time::Duration::from_secs(5)),
             )
         };
+        async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 
         games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
+        println!("{:?}", gm.get_state(*games.back().unwrap()).await);
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
+        loop {
+            async_std::task::sleep(std::time::Duration::from_millis(1000)).await;
+            println!("{:?}", gm.get_state(*games.back().unwrap()).await);
+        }
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        gm.kill_game(games.pop_front().unwrap()).await.unwrap();
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // gm.kill_game(games.pop_front().unwrap()).await.unwrap();
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        gm.kill_game(games.pop_front().unwrap()).await.unwrap();
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // gm.kill_game(games.pop_front().unwrap()).await.unwrap();
 
-        async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        gm.kill_game(games.pop_front().unwrap()).await.unwrap();
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
+
+        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+        // gm.kill_game(games.pop_front().unwrap()).await.unwrap();
 
         handle.await;
     }

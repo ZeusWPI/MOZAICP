@@ -89,6 +89,8 @@ async fn handle_socket(
         let mut br = BufReader::new(stream);
         br.read_line(&mut line).await.ok()?;
 
+        info!("Got line {}", line);
+
         // Help needed: into_inner loses the underlying data
         Some((br.into_inner(), line.trim().parse().ok()?))
     }?;

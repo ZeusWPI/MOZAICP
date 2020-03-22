@@ -6,8 +6,6 @@ use std::sync::{Arc, Mutex};
 
 use futures::future::Future;
 
-use rand::random;
-
 use std::pin::Pin;
 use std::any;
 use std::collections::HashMap;
@@ -15,7 +13,7 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub struct RegisterGame {
     pub game: u64,
-    pub players: Vec<(PlayerId, ReactorID)>,
+    pub players: HashMap<u64, (PlayerId, ReactorID)>,
 }
 
 #[derive(Clone, Debug)]
@@ -85,22 +83,22 @@ impl ClientManager {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         cs: &RegisterGame,
     ) {
-        let new_cliets: HashMap<u64, (PlayerId, ReactorID)> = cs
-            .players
-            .iter()
-            .cloned()
-            .map(|id| (random(), id))
-            .collect();
-        let ids: Vec<u64> = new_cliets.keys().cloned().collect();
-        println!("{:?}", new_cliets);
-        self.clients.extend(new_cliets);
+        // let new_cliets: HashMap<u64, (PlayerId, ReactorID)> = cs
+        //     .players
+        //     .iter()
+        //     .cloned()
+        //     .map(|id| (random(), id))
+        //     .collect();
+        let ids: Vec<u64> = cs.players.keys().cloned().collect();
+        println!("new_cliets {:?}", cs.players);
+        self.clients.extend(cs.players.clone());
 
         handle.send_internal(
             PlayerUUIDs { game: cs.game, ids },
             TargetReactor::Link(self.game_manager),
         );
 
-        for (_, cc) in &cs.players {
+        for (_, cc) in cs.players.values() {
             let cc_params = LinkParams::new(())
                 .internal_handler(FunctionHandler::from(i_to_e::<(), Accepted>()))
                 .closer(|_, handle| {

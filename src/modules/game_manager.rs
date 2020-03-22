@@ -69,9 +69,9 @@ impl GameManagerBuilder<Inserted> {
     pub fn build(self) -> GameManager {
         let gm_id = ReactorID::rand();
         let GameManagerBuilder { pd: _, broker, eps, cm_id } = self;
+        println!("GM {}, CM {}, eps {:?}", gm_id, cm_id, eps);
         let cm_params = ClientManager::new(gm_id, eps);
         broker.spawn(cm_params, Some(cm_id));
-
 
         GameManager::new(broker, gm_id, cm_id)
     }
