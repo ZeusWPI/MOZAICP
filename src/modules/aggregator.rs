@@ -1,23 +1,15 @@
 use crate::generic::*;
 use crate::modules::types::*;
+use crate::util::request::*;
 
 use std::any;
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-pub enum ConnectRes {
-    Connected(PlayerId),
-    Reconnecting(PlayerId),
-    Waiting(PlayerId, u64),
-}
-#[derive(Debug, Clone)]
-pub struct ConnectReq(pub u64);
 
 pub struct Aggregator {
     host_id: ReactorID,
     clients: HashMap<PlayerId, ReactorID>,
 
-    current_requests: HashMap<u64, HashMap<PlayerId, Option<ConnectRes>>>,
+    current_requests: HashMap<UUID, HashMap<PlayerId, Option<Connect>>>,
 }
 
 impl Aggregator {
@@ -37,12 +29,13 @@ impl Aggregator {
     fn handle_conn(
         &mut self,
         handle: &mut ReactorHandle<any::TypeId, Message>,
-        (uuid, conn): &(u64, ConnectRes),
+        Res(uuid, conn): &Res<Connect>,
     ) {
         let (id, res) = match conn {
-            ConnectRes::Connected(id) => (id, ConnectRes::Connected(*id)),
-            ConnectRes::Reconnecting(id) => (id, ConnectRes::Reconnecting(*id)),
-            ConnectRes::Waiting(id, key) => (id, ConnectRes::Waiting(*id, *key)),
+            Connect::Connected(id) => (id, Connect::Connected(*id)),
+            Connect::Reconnecting(id) => (id, Connect::Reconnecting(*id)),
+            Connect::Waiting(id, key) => (id, Connect::Waiting(*id, *key)),
+            _ => panic!("Wrong connection response"),
         };
 
         let mut done = false;
@@ -51,7 +44,7 @@ impl Aggregator {
 
             if requests.values().all(Option::is_some) {
                 handle.send_internal(
-                    StateRes(*uuid, format!("res: {:?}", requests.values().cloned().map(Option::unwrap).collect::<Vec<ConnectRes>>())),
+                    Res(*uuid, State::Response(requests.values().cloned().filter_map(|x| x).collect())),
                     TargetReactor::Link(self.host_id),
                 );
                 done = true;
@@ -66,13 +59,13 @@ impl Aggregator {
     fn handle_state_req(
         &mut self,
         handle: &mut ReactorHandle<any::TypeId, Message>,
-        req: &StateReq,
+        req: &Req<State>,
     ) {
         let waiting = self.clients.keys().map(|id| (*id, None)).collect();
         self.current_requests.insert(req.0, waiting);
 
         for id in self.clients.values() {
-            handle.send_internal(ConnectReq(req.0), TargetReactor::Link(*id));
+            handle.send_internal(Req(req.0, Connect::Request), TargetReactor::Link(*id));
         }
     }
 }
@@ -93,11 +86,11 @@ impl ClientLink {
     fn params(host_id: ReactorID) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self)
             .internal_handler(FunctionHandler::from(i_to_e::<Self, HostMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, ConnectReq>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, Req<Connect>>()))
             .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerMsg>(
                 TargetReactor::Link(host_id),
             )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, (u64, ConnectRes)>(
+            .external_handler(FunctionHandler::from(e_to_i::<Self, Res<Connect>>(
                 TargetReactor::Reactor,
             )))
     }
@@ -107,14 +100,13 @@ struct HostLink {
     clients: HashMap<PlayerId, ReactorID>,
 }
 
-use crate::modules::game_manager::types::*;
 impl HostLink {
     fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self { clients })
             .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, StateRes>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, Res<State>>()))
             .external_handler(FunctionHandler::from(Self::handle_from_host))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, StateReq>(
+            .external_handler(FunctionHandler::from(e_to_i::<Self, Req<State>>(
                 TargetReactor::Reactor,
             )))
     }

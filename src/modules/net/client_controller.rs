@@ -1,7 +1,7 @@
 use crate::generic::*;
 use crate::modules::net::types::*;
 use crate::modules::types::*;
-use crate::modules::aggregator::{ConnectReq, ConnectRes};
+use crate::util::request::*;
 
 use std::any;
 use std::collections::VecDeque;
@@ -66,11 +66,11 @@ impl ClientController {
         handle.send_internal(msg, TargetReactor::Link(self.host));
     }
 
-    fn handle_conn_req(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, req: &ConnectReq) {
+    fn handle_conn_req(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, req: &Req<Connect>) {
         if self.client.is_some() {
-            handle.send_internal((req.0, ConnectRes::Connected(self.client_id)), TargetReactor::Link(self.host));
+            handle.send_internal(req.res(Connect::Connected(self.client_id)), TargetReactor::Link(self.host));
         } else {
-            handle.send_internal((req.0, ConnectRes::Waiting(self.client_id, self.key)), TargetReactor::Link(self.host));
+            handle.send_internal(req.res(Connect::Waiting(self.client_id, self.key)), TargetReactor::Link(self.host));
         }
     }
 
@@ -112,8 +112,8 @@ impl ReactorState<any::TypeId, Message> for ClientController {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), (u64, ConnectRes)>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), ConnectReq>(TargetReactor::Reactor)))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Connect>>()))
+            .external_handler(FunctionHandler::from(e_to_i::<(), Req<Connect>>(TargetReactor::Reactor)))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(TargetReactor::Reactor)));
         handle.open_link(self.host, host_link_params, true);
 

@@ -104,7 +104,8 @@ impl StepLock {
     }
 }
 
-use crate::modules::game_manager::types::*;
+use crate::util::request::*;
+
 impl ReactorState<any::TypeId, Message> for StepLock {
     const NAME: &'static str = "StepLock";
 
@@ -112,11 +113,11 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         // Open link to host
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), StateRes>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
                 TargetReactor::All,
             )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), StateReq>(
+            .external_handler(FunctionHandler::from(e_to_i::<(), Req<State>>(
                 TargetReactor::Link(self.player_id),
             )));
         handle.open_link(self.host, host_link_params, true);
@@ -124,11 +125,11 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         // Open link to client
         let client_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), StateReq>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Req<State>>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
                 TargetReactor::Reactor,
             )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), StateRes>(
+            .external_handler(FunctionHandler::from(e_to_i::<(), Res<State>>(
                 TargetReactor::Link(self.host),
             )));
         handle.open_link(self.player_id, client_link_params, true);

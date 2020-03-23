@@ -10,7 +10,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use std::time;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{GameController, StepLock, GameManagerBuilder};
+use mozaic::modules::{game, StepLock};
 
 use futures::executor::ThreadPool;
 use futures::future::FutureExt;
@@ -20,7 +20,7 @@ struct Echo {
     clients: Vec<PlayerId>,
 }
 
-impl GameController for Echo {
+impl game::Controller for Echo {
     fn step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
         let mut sub = Vec::new();
         for PlayerMsg { id, data } in turns {
@@ -49,7 +49,7 @@ impl GameController for Echo {
 }
 
 use mozaic::graph;
-use mozaic::modules::*;
+use mozaic::modules::net::TcpEndpoint;
 
 use std::collections::VecDeque;
 
@@ -63,15 +63,11 @@ async fn main() -> std::io::Result<()> {
     tracing::subscriber::set_global_default(sub).unwrap();
     {
         let pool = ThreadPool::builder()
-            // .after_start(|i| println!("Starting thread {}", i))
-            // .before_stop(|i| println!("Stopping thread {}", i))
             .create()
             .unwrap();
         pool.spawn_ok(fut.map(|_| ()));
 
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-
-        let (gmb, handle) = GameManagerBuilder::new(pool.clone());
+        let (gmb, handle) = game::Manager::builder(pool.clone());
         let ep = TcpEndpoint::new(
             "127.0.0.1:6666".parse().unwrap(),
             pool.clone(),
@@ -88,7 +84,7 @@ async fn main() -> std::io::Result<()> {
                 clients: players.clone(),
             };
 
-            GameBuilder::new(players.clone(), game).with_step_lock(
+            game::Builder::new(players.clone(), game).with_step_lock(
                 StepLock::new(players.clone(), pool.clone())
                     .with_timeout(std::time::Duration::from_secs(5)),
             )
