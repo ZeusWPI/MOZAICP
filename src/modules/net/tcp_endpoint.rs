@@ -105,7 +105,7 @@ async fn handle_socket(
 
             // tp.spawn_ok();
 
-            (tx, handle_spawn(stream, s_id, cc_chan, rx).map(|_| info!("Socket closed")).boxed(), "Client")
+            (tx, handle_spawn(stream, s_id, cc_chan.clone(), rx).map(move |_| { cc_chan.close(s_id); info!("Socket closed") }).boxed(), "Client")
         }),
     );
 
@@ -154,6 +154,5 @@ async fn handle_spawn(
         };
     }
 
-    cc_chan.close(s_id);
     Some(())
 }

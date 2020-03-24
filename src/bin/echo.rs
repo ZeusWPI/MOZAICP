@@ -79,7 +79,7 @@ async fn main() -> std::io::Result<()> {
         let mut games = VecDeque::new();
 
         let game_builder = {
-            let players = vec![10, 11, 12, 13];
+            let players = vec![10, 11];
             let game = Echo {
                 clients: players.clone(),
             };
@@ -95,7 +95,7 @@ async fn main() -> std::io::Result<()> {
         println!("Res: {:?}", gm.get_state(*games.back().unwrap()).await);
 
         loop {
-            async_std::task::sleep(std::time::Duration::from_millis(1000)).await;
+            async_std::task::sleep(std::time::Duration::from_millis(3000)).await;
             println!("{:?}", gm.get_state(*games.back().unwrap()).await);
         }
         // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
