@@ -92,7 +92,7 @@ async fn main() -> std::io::Result<()> {
         async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 
         games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-        println!("{:?}", gm.get_state(*games.back().unwrap()).await);
+        println!("Res: {:?}", gm.get_state(*games.back().unwrap()).await);
 
         loop {
             async_std::task::sleep(std::time::Duration::from_millis(1000)).await;

@@ -109,7 +109,7 @@ enum GameOp {
 
 pub enum GameOpRes {
     Built(Option<GameID>),
-    State(Option<String>),
+    State(Option<Vec<Connect>>),
     Kill(Option<()>),
 }
 
@@ -144,7 +144,7 @@ impl Manager {
         }
     }
 
-    pub async fn get_state(&mut self, game: u64) -> Option<String> {
+    pub async fn get_state(&mut self, game: u64) -> Option<Vec<Connect>> {
         let (req, chan) = GameOpReq::new(GameOp::State(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -231,7 +231,7 @@ impl GameManagerFuture {
                                 // Handle response
                                 if if key == any::TypeId::of::<Res::<State>>() {
                                     Res::<State>::from_msg(&key, &mut msg).map(|Res(id, value)| {
-                                        this.send_msg(*id, GameOpRes::State(Some(format!("Res: {:?}", value.res()))))
+                                        this.send_msg(*id, GameOpRes::State(Some(value.res().clone())))
                                     }).is_none()
                                 } else if key == any::TypeId::of::<PlayerUUIDs>() {
                                     PlayerUUIDs::from_msg(&key, &mut msg).map(|x| println!("{:?}", x)).is_none()
