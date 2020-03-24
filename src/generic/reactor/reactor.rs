@@ -191,7 +191,7 @@ where
             })
             .is_none()
         {
-            error!("No link found to reactor {}", origin);
+            error!("No link found {} -> {}", self.id, origin);
         }
     }
 
