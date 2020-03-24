@@ -96,20 +96,7 @@ impl ClientManager {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         cs: &RegisterGame,
     ) {
-        // let new_cliets: HashMap<u64, (PlayerId, ReactorID)> = cs
-        //     .players
-        //     .iter()
-        //     .cloned()
-        //     .map(|id| (random(), id))
-        //     .collect();
-        let ids: Vec<u64> = cs.players.keys().cloned().collect();
-        println!("new_cliets {:?}", cs.players);
         self.clients.extend(cs.players.clone());
-
-        handle.send_internal(
-            PlayerUUIDs { game: cs.game, ids },
-            TargetReactor::Link(self.game_manager),
-        );
 
         for (_, cc) in cs.players.values() {
             let cc_params = LinkParams::new(())

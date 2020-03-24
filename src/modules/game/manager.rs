@@ -78,7 +78,6 @@ pub mod builder {
                 eps,
                 cm_id,
             } = self;
-            println!("GM {}, CM {}, eps {:?}", gm_id, cm_id, eps);
             let cm_params = ClientManager::new(gm_id, eps);
             broker.spawn(cm_params, Some(cm_id));
 
@@ -222,14 +221,11 @@ impl GameManagerFuture {
                         },
                         res = ch_rx.next() => {
                             if let Some((from, key, mut msg)) = res? {
-                                info!(%from, "msg");
                                 // Handle response
                                 if if key == any::TypeId::of::<Res::<State>>() {
                                     Res::<State>::from_msg(&key, &mut msg).map(|Res(id, value)| {
                                         this.send_msg(*id, GameOpRes::State(Some(value.res().clone())))
                                     }).is_none()
-                                } else if key == any::TypeId::of::<PlayerUUIDs>() {
-                                    PlayerUUIDs::from_msg(&key, &mut msg).map(|x| println!("{:?}", x)).is_none()
                                 } else {
                                     Res::<Kill>::from_msg(&key, &mut msg).map(|Res::<Kill>(id, _)| {
                                         this.send_msg(*id, GameOpRes::Kill(Some(())))
@@ -251,7 +247,6 @@ impl GameManagerFuture {
     }
 
     fn send_msg(&mut self, uuid: UUID, res: GameOpRes) {
-        info!("Sending msg to gm");
         if self
             .requests
             .remove(&uuid)
