@@ -31,8 +31,10 @@ impl Runner {
             .handler(FunctionHandler::from(Self::handle_start))
     }
 
-    fn handle_start(&mut self, _handle: &mut ReactorHandle<any::TypeId, Message>, _msg: &Start) {
-        self.game.start();
+    fn handle_start(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, _msg: &Start) {
+        for msg in self.game.start() {
+            handle.send_internal(msg, TargetReactor::Links);
+        }
     }
 
     fn handle_client_msg(

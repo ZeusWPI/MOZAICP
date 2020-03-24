@@ -10,8 +10,9 @@ pub use runner::Runner;
 use crate::modules::types::{HostMsg, PlayerMsg};
 
 pub trait Controller {
-    fn start(&mut self) {
+    fn start(&mut self) -> Vec<HostMsg>{
         info!("Starting this game");
+        Vec::new()
     }
     fn step<'a>(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg>;
     fn is_done(&mut self) -> bool;
