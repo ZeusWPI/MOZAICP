@@ -138,9 +138,13 @@ async fn handle_spawn(
                 }
             },
             v = lines.next() => {
-                let value = v?
-                .map_err(|error| { info!(?error, "Player stream error") })
-                .ok()?;
+                let value = match v? {
+                    Ok(v) => v,
+                    Err(err) => {
+                        info!(?err, "Player stream error");
+                        break;
+                    }
+                };
                 cc_chan.send(s_id, Data { value }).unwrap();
             },
             complete => {
@@ -149,5 +153,7 @@ async fn handle_spawn(
             },
         };
     }
+
+    cc_chan.close(s_id);
     Some(())
 }
