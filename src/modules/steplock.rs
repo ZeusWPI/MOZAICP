@@ -1,4 +1,4 @@
-use super::types::{Data, HostMsg, PlayerId, PlayerMsg};
+use super::types::{Data, HostMsg, PlayerId, PlayerMsg, Start};
 use crate::generic::*;
 
 use futures::channel::mpsc;
@@ -114,6 +114,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Start>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
                 TargetReactor::All,
             )))
@@ -128,6 +129,9 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             .internal_handler(FunctionHandler::from(i_to_e::<(), Req<State>>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
                 TargetReactor::Reactor,
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), Start>(
+                TargetReactor::Link(self.host),
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), Res<State>>(
                 TargetReactor::Link(self.host),
@@ -191,7 +195,8 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             }
 
             Some(())
-        }.map(|_| ());
+        }
+        .map(|_| ());
 
         handle.open_reactor_like(timeout_id, tx, fut, "Time-out Generator");
     }

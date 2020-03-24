@@ -38,3 +38,5 @@ pub struct Data {
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Close {}
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub struct Start;

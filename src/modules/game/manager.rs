@@ -1,6 +1,6 @@
 use super::builder::BoxedBuilder;
-use crate::modules::net::{PlayerUUIDs, RegisterGame};
 use crate::generic::*;
+use crate::modules::net::{PlayerUUIDs, RegisterGame};
 
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::channel::oneshot;
@@ -32,11 +32,7 @@ pub mod builder {
     }
 
     impl<Ep> Builder<Ep> {
-        pub fn add_endpoint<E: EndpointBuilder>(
-            self,
-            ep: E,
-            name: &str,
-        ) -> Builder<Inserted> {
+        pub fn add_endpoint<E: EndpointBuilder>(self, ep: E, name: &str) -> Builder<Inserted> {
             let Builder {
                 pd: _,
                 broker,
@@ -195,7 +191,6 @@ impl GameManagerFuture {
         let (ch_tx, ch_rx) = mpsc::unbounded();
 
         let mut ch_rx = receiver_handle(ch_rx).boxed().fuse();
-
 
         let mut this = Self {
             cm_chan: broker.get_sender(&cm_id),

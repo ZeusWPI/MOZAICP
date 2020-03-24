@@ -2,7 +2,7 @@ use super::{CoreParams, Reactor, ReactorID, ReactorState, Receiver, Sender, Send
 
 use futures::channel::mpsc;
 use futures::executor::ThreadPool;
-use futures::future::{FutureExt, RemoteHandle, Future};
+use futures::future::{Future, FutureExt, RemoteHandle};
 use futures::stream::StreamExt;
 use futures::task::SpawnExt;
 
@@ -65,7 +65,9 @@ impl<K, M> BrokerHandle<K, M> {
             Some(())
         };
 
-        let handle = pool.spawn_with_handle(fut.map(|_| info!("Broker finished") )).unwrap();
+        let handle = pool
+            .spawn_with_handle(fut.map(|_| info!("Broker finished")))
+            .unwrap();
 
         let broker = Broker {
             reactors: HashMap::new(),
@@ -81,14 +83,22 @@ impl<K, M> BrokerHandle<K, M> {
         )
     }
 
-    pub fn spawn_fut<O, Fut: Future<Output=O> + Send +'static>(&self, id: ReactorID, name: &str, fut: Fut) {
+    pub fn spawn_fut<O, Fut: Future<Output = O> + Send + 'static>(
+        &self,
+        id: ReactorID,
+        name: &str,
+        fut: Fut,
+    ) {
         info!(%id, "Start Reactor");
         graph::add_node(&id, name);
 
-        let handle = self.pool.spawn_with_handle(fut.map(move |_| {
-            graph::remove_node(&id);
-            info!(%id, "Closed Reactor");
-        })).unwrap();
+        let handle = self
+            .pool
+            .spawn_with_handle(fut.map(move |_| {
+                graph::remove_node(&id);
+                info!(%id, "Closed Reactor");
+            }))
+            .unwrap();
 
         self.tx.unbounded_send(handle).unwrap();
     }
@@ -148,7 +158,13 @@ impl<K, M> BrokerHandle<K, M> {
             .insert(id, ReactorChannel::Connected(sender));
     }
 
-    pub fn spawn_reactorlike<O, Fut: Future<Output=O> + Send +'static>(&self, id: ReactorID, sender: Sender<K, M>, fut: Fut, name: &str) {
+    pub fn spawn_reactorlike<O, Fut: Future<Output = O> + Send + 'static>(
+        &self,
+        id: ReactorID,
+        sender: Sender<K, M>,
+        fut: Fut,
+        name: &str,
+    ) {
         self.set(id, sender);
         self.spawn_fut(id, name, fut);
     }
@@ -177,7 +193,11 @@ where
 
         reactor.init();
 
-        self.spawn_fut(id, S::NAME, reactor.instrument(trace_span!("Reactor", name = S::NAME, %id)));
+        self.spawn_fut(
+            id,
+            S::NAME,
+            reactor.instrument(trace_span!("Reactor", name = S::NAME, %id)),
+        );
 
         id
     }

@@ -1,5 +1,3 @@
-
-
 use super::types::*;
 mod types;
 pub use types::Register;
@@ -42,13 +40,20 @@ pub use tcp_endpoint::TcpEndpoint;
 // mod ws_endpoint;
 // pub use ws_endpoint::WSEndpoint;
 
+use crate::generic::*;
 use futures::future::Future;
 use std::any;
 use std::pin::Pin;
-use crate::generic::*;
 
 pub trait EndpointBuilder {
-    fn build(self, id: ReactorID, cm_chan: SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output=Option<()>> + Send>>);
+    fn build(
+        self,
+        id: ReactorID,
+        cm_chan: SenderHandle<any::TypeId, Message>,
+    ) -> (
+        Sender<any::TypeId, Message>,
+        Pin<Box<dyn Future<Output = Option<()>> + Send>>,
+    );
 }
 
 // / GameManager

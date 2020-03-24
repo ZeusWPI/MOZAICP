@@ -3,8 +3,8 @@ use crate::generic::ReactorID;
 use std::mem;
 use std::sync::Arc;
 
+use futures::future::Future;
 use std::pin::Pin;
-use futures::future::{Future};
 
 mod graph;
 

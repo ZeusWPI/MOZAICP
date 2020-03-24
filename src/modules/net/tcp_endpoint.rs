@@ -1,5 +1,5 @@
 use crate::generic::*;
-use crate::modules::net::{SpawnPlayer, EndpointBuilder};
+use crate::modules::net::{EndpointBuilder, SpawnPlayer};
 use crate::modules::types::*;
 
 use futures::channel::mpsc;
@@ -12,8 +12,8 @@ use futures::io::*;
 use async_std::net;
 
 use std::any;
-use std::pin::Pin;
 use std::net::SocketAddr;
+use std::pin::Pin;
 
 pub struct Builder {
     addr: SocketAddr,
@@ -21,7 +21,14 @@ pub struct Builder {
 }
 
 impl EndpointBuilder for Builder {
-    fn build(self, id: ReactorID, cm_chan: SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
+    fn build(
+        self,
+        id: ReactorID,
+        cm_chan: SenderHandle<any::TypeId, Message>,
+    ) -> (
+        Sender<any::TypeId, Message>,
+        Pin<Box<dyn Future<Output = Option<()>> + Send>>,
+    ) {
         TcpEndpoint::build(id, self.addr, cm_chan, self.tp)
     }
 }
@@ -38,7 +45,10 @@ impl TcpEndpoint {
         addr: SocketAddr,
         cm_chan: SenderHandle<any::TypeId, Message>,
         tp: ThreadPool,
-    ) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
+    ) -> (
+        Sender<any::TypeId, Message>,
+        Pin<Box<dyn Future<Output = Option<()>> + Send>>,
+    ) {
         let (tx, rx) = mpsc::unbounded();
         (tx, accepting(id, addr, rx, cm_chan, tp).boxed())
     }
@@ -105,7 +115,16 @@ async fn handle_socket(
 
             // tp.spawn_ok();
 
-            (tx, handle_spawn(stream, s_id, cc_chan.clone(), rx).map(move |_| { cc_chan.close(s_id); info!("Socket closed") }).boxed(), "Client")
+            (
+                tx,
+                handle_spawn(stream, s_id, cc_chan.clone(), rx)
+                    .map(move |_| {
+                        cc_chan.close(s_id);
+                        info!("Socket closed")
+                    })
+                    .boxed(),
+                "Client",
+            )
         }),
     );
 

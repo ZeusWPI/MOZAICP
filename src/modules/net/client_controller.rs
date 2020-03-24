@@ -1,4 +1,5 @@
 use crate::generic::*;
+use crate::modules::aggregator::InitConnect;
 use crate::modules::net::types::*;
 use crate::modules::types::*;
 use crate::util::request::*;
@@ -14,12 +15,11 @@ pub struct ClientController {
     client_id: PlayerId,
     client: Option<ReactorID>,
 
+    init_connected: bool,
+
     buffer: VecDeque<Data>,
     key: u64,
 }
-
-// TODO: handle conneReq
-// TODO: give key to client_controller
 
 impl ClientController {
     pub fn params(
@@ -35,6 +35,7 @@ impl ClientController {
             client: None,
             buffer: VecDeque::new(),
             key,
+            init_connected: false,
         })
         .handler(FunctionHandler::from(Self::handle_host_msg))
         .handler(FunctionHandler::from(Self::handle_client_msg))
@@ -51,7 +52,7 @@ impl ClientController {
                 } else {
                     self.buffer.push_back(data.clone());
                 }
-            },
+            }
             HostMsg::Kick(_) => handle.close(),
         }
     }
@@ -66,26 +67,45 @@ impl ClientController {
         handle.send_internal(msg, TargetReactor::Link(self.host));
     }
 
-    fn handle_conn_req(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, req: &Req<Connect>) {
+    fn handle_conn_req(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        req: &Req<Connect>,
+    ) {
         if self.client.is_some() {
-            handle.send_internal(req.res(Connect::Connected(self.client_id)), TargetReactor::Link(self.host));
+            handle.send_internal(
+                req.res(Connect::Connected(self.client_id)),
+                TargetReactor::Link(self.host),
+            );
+        } else if self.init_connected {
+            handle.send_internal(
+                req.res(Connect::Reconnecting(self.client_id)),
+                TargetReactor::Link(self.host),
+            );
         } else {
-            handle.send_internal(req.res(Connect::Waiting(self.client_id, self.key)), TargetReactor::Link(self.host));
+            handle.send_internal(
+                req.res(Connect::Waiting(self.client_id, self.key)),
+                TargetReactor::Link(self.host),
+            );
         }
     }
 
     fn handle_conn(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, accept: &Accepted) {
+        if !self.init_connected {
+            self.init_connected = true;
+            handle.send_internal(InitConnect(self.client_id), TargetReactor::Link(self.host));
+        }
 
         info!("Opening link to client");
 
         let client_link_params = LinkParams::new(())
-            .external_handler(FunctionHandler::from(e_to_i::<(), Data>(TargetReactor::Reactor)))
+            .external_handler(FunctionHandler::from(e_to_i::<(), Data>(
+                TargetReactor::Reactor,
+            )))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Data>()))
-            .closer(
-                |_state, handle| {
-                    handle.send_internal(ClientClosed, TargetReactor::Reactor);
-                }
-            );
+            .closer(|_state, handle| {
+                handle.send_internal(ClientClosed, TargetReactor::Reactor);
+            });
 
         self.client = Some(accept.client_id);
         handle.open_link(accept.client_id, client_link_params, false);
@@ -113,12 +133,19 @@ impl ReactorState<any::TypeId, Message> for ClientController {
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Connect>>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Req<Connect>>(TargetReactor::Reactor)))
-            .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(TargetReactor::Reactor)));
+            .internal_handler(FunctionHandler::from(i_to_e::<(), InitConnect>()))
+            .external_handler(FunctionHandler::from(e_to_i::<(), Req<Connect>>(
+                TargetReactor::Reactor,
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
+                TargetReactor::Reactor,
+            )));
         handle.open_link(self.host, host_link_params, true);
 
-        let cm_link_params = LinkParams::new(())
-            .external_handler(FunctionHandler::from(e_to_i::<(), Accepted>(TargetReactor::Reactor)));
+        let cm_link_params =
+            LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<(), Accepted>(
+                TargetReactor::Reactor,
+            )));
         handle.open_link(self.client_manager, cm_link_params, true);
     }
 }

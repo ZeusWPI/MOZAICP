@@ -1,4 +1,3 @@
-
 pub mod request {
     use rand;
     use std::hash::Hash;
@@ -56,13 +55,13 @@ pub mod request {
         pub fn res(&self) -> &Vec<Connect> {
             match self {
                 State::Response(s) => s,
-                _ => panic!("Tried getting state response, from a state request!")
+                _ => panic!("Tried getting state response, from a state request!"),
             }
         }
         pub fn req(self) -> () {
             match self {
                 State::Request => (),
-                _ => panic!("Tried getting state request, from a state response!")
+                _ => panic!("Tried getting state request, from a state response!"),
             }
         }
     }

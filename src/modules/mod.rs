@@ -14,7 +14,7 @@ pub use steplock::StepLock;
 // pub use game_manager::{GameManager, GameManagerBuilder};
 
 pub mod net;
-pub use net::{client_controller, ClientManager, TcpEndpoint, EndpointBuilder};
+pub use net::{client_controller, ClientManager, EndpointBuilder, TcpEndpoint};
 
-pub mod types;
 pub mod game;
+pub mod types;

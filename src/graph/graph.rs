@@ -73,10 +73,13 @@ where
         .find_map(|(i, x)| if p(x) { Some(i) } else { None })
 }
 
-use std::pin::Pin;
 use futures::future::{Future, FutureExt};
+use std::pin::Pin;
 impl GraphState {
-    fn new() -> (mpsc::UnboundedSender<EventWrapper>, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
+    fn new() -> (
+        mpsc::UnboundedSender<EventWrapper>,
+        Pin<Box<dyn Future<Output = Option<()>> + Send>>,
+    ) {
         let (tx, mut rx) = mpsc::unbounded();
         let mut this = GraphState {
             conns: Vec::new(),
@@ -200,11 +203,9 @@ pub struct Graph {
 use std::thread;
 
 impl Graph {
-    pub fn new() -> (Graph, Pin<Box<dyn Future<Output=Option<()>> + Send>>) {
+    pub fn new() -> (Graph, Pin<Box<dyn Future<Output = Option<()>> + Send>>) {
         let (tx, fut) = GraphState::new();
-        let out = Graph {
-            tx
-        };
+        let out = Graph { tx };
 
         let tx = out.tx.clone();
 
@@ -222,7 +223,10 @@ impl Graph {
         return (out, fut);
     }
 
-    pub fn new_boxed() -> (Arc<Mutex<Self>>, Pin<Box<dyn Future<Output=Option<()>> + Send>>)  {
+    pub fn new_boxed() -> (
+        Arc<Mutex<Self>>,
+        Pin<Box<dyn Future<Output = Option<()>> + Send>>,
+    ) {
         let (me, fut) = Self::new();
         (Arc::new(Mutex::new(me)), fut)
     }
@@ -240,10 +244,7 @@ impl GraphLike for Graph {
     }
 
     fn add_edge(&self, from: &ReactorID, to: &ReactorID) {
-        if let Err(_) = self
-            .tx
-            .unbounded_send(EventWrapper::AddEdge(**from, **to))
-        {
+        if let Err(_) = self.tx.unbounded_send(EventWrapper::AddEdge(**from, **to)) {
             error!("Couldn't send message to graph");
         }
     }

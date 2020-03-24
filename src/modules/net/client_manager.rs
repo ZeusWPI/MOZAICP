@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use futures::future::Future;
 
-use std::pin::Pin;
 use std::any;
 use std::collections::HashMap;
+use std::pin::Pin;
 
 #[derive(Clone)]
 pub struct RegisterGame {
@@ -27,8 +27,14 @@ pub type BoxSpawnPlayer = Arc<Mutex<Option<SpawnPlayer>>>;
 pub struct SpawnPlayer {
     pub player: u64,
     pub builder: Box<
-        dyn FnOnce(ReactorID, SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output = ()> + Send>>, &'static str)
-            + Send
+        dyn FnOnce(
+                ReactorID,
+                SenderHandle<any::TypeId, Message>,
+            ) -> (
+                Sender<any::TypeId, Message>,
+                Pin<Box<dyn Future<Output = ()> + Send>>,
+                &'static str,
+            ) + Send
             + Sync
             + 'static,
     >,
@@ -36,7 +42,14 @@ pub struct SpawnPlayer {
 
 impl SpawnPlayer {
     pub fn new<
-        F: FnOnce(ReactorID, SenderHandle<any::TypeId, Message>) -> (Sender<any::TypeId, Message>, Pin<Box<dyn Future<Output = ()> + Send>>, &'static str)
+        F: FnOnce(
+                ReactorID,
+                SenderHandle<any::TypeId, Message>,
+            ) -> (
+                Sender<any::TypeId, Message>,
+                Pin<Box<dyn Future<Output = ()> + Send>>,
+                &'static str,
+            )
             + 'static
             + Send
             + Sync,

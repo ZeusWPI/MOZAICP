@@ -5,10 +5,14 @@ use crate::util::request::*;
 use std::any;
 use std::collections::HashMap;
 
+#[derive(Clone, Debug, Copy)]
+pub struct InitConnect(pub PlayerId);
+
 pub struct Aggregator {
     host_id: ReactorID,
     clients: HashMap<PlayerId, ReactorID>,
 
+    init_connected: HashMap<PlayerId, bool>,
     current_requests: HashMap<UUID, HashMap<PlayerId, Option<Connect>>>,
 }
 
@@ -19,11 +23,26 @@ impl Aggregator {
     ) -> CoreParams<Self, any::TypeId, Message> {
         CoreParams::new(Aggregator {
             host_id,
+            init_connected: clients.keys().map(|x| (*x, false)).collect(),
             clients,
             current_requests: HashMap::new(),
         })
         .handler(FunctionHandler::from(Self::handle_state_req))
         .handler(FunctionHandler::from(Self::handle_conn))
+        .handler(FunctionHandler::from(Self::handle_init_connect))
+    }
+
+    fn handle_init_connect(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        con: &InitConnect,
+    ) {
+        self.init_connected.get_mut(&con.0).map(|x| *x = true);
+
+        if self.init_connected.values().all(|x| *x) {
+            // Send start
+            handle.send_internal(Start, TargetReactor::Link(self.host_id));
+        }
     }
 
     fn handle_conn(
@@ -44,7 +63,10 @@ impl Aggregator {
 
             if requests.values().all(Option::is_some) {
                 handle.send_internal(
-                    Res(*uuid, State::Response(requests.values().cloned().filter_map(|x| x).collect())),
+                    Res(
+                        *uuid,
+                        State::Response(requests.values().cloned().filter_map(|x| x).collect()),
+                    ),
                     TargetReactor::Link(self.host_id),
                 );
                 done = true;
@@ -93,6 +115,9 @@ impl ClientLink {
             .external_handler(FunctionHandler::from(e_to_i::<Self, Res<Connect>>(
                 TargetReactor::Reactor,
             )))
+            .external_handler(FunctionHandler::from(e_to_i::<Self, InitConnect>(
+                TargetReactor::Reactor,
+            )))
     }
 }
 
@@ -104,6 +129,7 @@ impl HostLink {
     fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self { clients })
             .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<Self, Start>()))
             .internal_handler(FunctionHandler::from(i_to_e::<Self, Res<State>>()))
             .external_handler(FunctionHandler::from(Self::handle_from_host))
             .external_handler(FunctionHandler::from(e_to_i::<Self, Req<State>>(

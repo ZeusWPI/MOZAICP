@@ -62,16 +62,11 @@ async fn main() -> std::io::Result<()> {
         .finish();
     tracing::subscriber::set_global_default(sub).unwrap();
     {
-        let pool = ThreadPool::builder()
-            .create()
-            .unwrap();
+        let pool = ThreadPool::builder().create().unwrap();
         pool.spawn_ok(fut.map(|_| ()));
 
         let (gmb, handle) = game::Manager::builder(pool.clone());
-        let ep = TcpEndpoint::new(
-            "127.0.0.1:6666".parse().unwrap(),
-            pool.clone(),
-        );
+        let ep = TcpEndpoint::new("127.0.0.1:6666".parse().unwrap(), pool.clone());
 
         let gmb = gmb.add_endpoint(ep, "TCP endpoint");
         let mut gm = gmb.build();
@@ -84,10 +79,7 @@ async fn main() -> std::io::Result<()> {
                 clients: players.clone(),
             };
 
-            game::Builder::new(players.clone(), game).with_step_lock(
-                StepLock::new(players.clone(), pool.clone())
-                    .with_timeout(std::time::Duration::from_secs(5)),
-            )
+            game::Builder::new(players.clone(), game)
         };
         async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 

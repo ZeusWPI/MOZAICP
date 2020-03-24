@@ -1,8 +1,8 @@
 use crate::generic::*;
-use crate::modules::types::{HostMsg, PlayerMsg};
+use crate::modules::types::{HostMsg, PlayerMsg, Start};
 
-use super::{GameBox};
 use super::request::*;
+use super::GameBox;
 
 use std::any;
 
@@ -28,6 +28,11 @@ impl Runner {
             .handler(FunctionHandler::from(Self::handle_client_msg))
             .handler(FunctionHandler::from(Self::handle_client_msgs))
             .handler(FunctionHandler::from(Self::handle_kill))
+            .handler(FunctionHandler::from(Self::handle_start))
+    }
+
+    fn handle_start(&mut self, _handle: &mut ReactorHandle<any::TypeId, Message>, _msg: &Start) {
+        self.game.start();
     }
 
     fn handle_client_msg(
@@ -68,6 +73,9 @@ impl ReactorState<any::TypeId, Message> for Runner {
             .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Req<State>>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
+                TargetReactor::Reactor,
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), Start>(
                 TargetReactor::Reactor,
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), Vec<PlayerMsg>>(

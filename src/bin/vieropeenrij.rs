@@ -279,6 +279,4 @@
 //     assert!(!has_diag_tl_br(&f2));
 // }
 
-fn main() {
-
-}
+fn main() {}
