@@ -1,6 +1,6 @@
 use super::builder::BoxedBuilder;
 use crate::generic::*;
-use crate::modules::net::{PlayerUUIDs, RegisterGame};
+use crate::modules::net::{RegisterGame};
 
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::channel::oneshot;
@@ -127,7 +127,7 @@ impl Manager {
         Self { op_tx }
     }
 
-    pub async fn start_game<B: Into<BoxedBuilder>>(&mut self, builder: B) -> Option<u64> {
+    pub async fn start_game<B: Into<BoxedBuilder>>(&self, builder: B) -> Option<u64> {
         let (req, chan) = GameOpReq::new(GameOp::Build(builder.into()));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -139,7 +139,7 @@ impl Manager {
         }
     }
 
-    pub async fn get_state(&mut self, game: u64) -> Option<Vec<Connect>> {
+    pub async fn get_state(&self, game: u64) -> Option<Vec<Connect>> {
         let (req, chan) = GameOpReq::new(GameOp::State(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -151,7 +151,7 @@ impl Manager {
         }
     }
 
-    pub async fn kill_game(&mut self, game: u64) -> Option<()> {
+    pub async fn kill_game(&self, game: u64) -> Option<()> {
         let (req, chan) = GameOpReq::new(GameOp::Kill(game));
         self.op_tx.unbounded_send(req).ok()?;
 

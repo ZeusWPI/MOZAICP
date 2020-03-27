@@ -10,7 +10,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use std::time;
 
 use mozaic::modules::types::*;
-use mozaic::modules::{game, StepLock};
+use mozaic::modules::{game};
 
 use futures::executor::ThreadPool;
 use futures::future::FutureExt;
