@@ -164,7 +164,9 @@ async fn handle_spawn(
                         break;
                     }
                 };
-                cc_chan.send(s_id, Data { value }).unwrap();
+                if cc_chan.send(s_id, Data { value }).is_none() {
+                    error!("Something something client error");
+                };
             },
             complete => {
                 trace!("Done");

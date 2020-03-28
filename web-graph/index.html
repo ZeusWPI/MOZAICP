@@ -57,51 +57,6 @@
             }
         }
 
-        /*
-
-        Event: {
-            type: string,
-        }
-
-        Event: {
-            type: "init",
-            nodes: [{
-                id: int,
-                label: string
-            }],
-            edges: [{
-                id: int,
-                from: int,
-                to: int
-            }]
-        }
-
-        Event: {
-            type: "add",
-            data_type: "node",
-            data:  {
-                id: int,
-                label: string
-            }
-        }
-
-        Event: {
-            type: "add",
-            data_type: "edge",
-            data:  {
-                id: int,
-                from: int,
-                to: int
-            }
-        }
-
-        Event: {
-            type: "remove",
-            data_type: "edge"|"node",
-            id: int
-        }
-
-        */
         function handle_event(event) {
             if (event.type === "Init") {
                 nodes.clear();
