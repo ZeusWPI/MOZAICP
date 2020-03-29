@@ -94,13 +94,15 @@ impl StepLock {
     /// Flush all messages to the host
     fn flush_msgs(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>) {
         handle.send_internal(ResetTimeOut, TargetReactor::Links);
+        let mut player_msgs = Vec::new();
         for (&id, msg) in self.step.iter_mut() {
             let msg = PlayerMsg {
                 id,
                 data: mem::replace(msg, None),
             };
-            handle.send_internal(msg, TargetReactor::Link(self.host));
+            player_msgs.push(msg);
         }
+        handle.send_internal(player_msgs, TargetReactor::Link(self.host));
     }
 }
 
