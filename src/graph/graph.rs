@@ -210,7 +210,7 @@ impl Graph {
         let tx = out.tx.clone();
 
         thread::spawn(move || {
-            ws::listen("127.0.0.1:3012", |out| {
+            ws::listen("0.0.0.0:3012", |out| {
                 if let Err(_) = tx.unbounded_send(EventWrapper::Conn(out.clone())) {
                     error!("Couldnt send message to graph");
                 }
