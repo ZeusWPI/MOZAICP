@@ -32,6 +32,7 @@ impl Runner {
     }
 
     fn handle_start(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, _msg: &Start) {
+        info!("Starting game!");
         for msg in self.game.start() {
             handle.send_internal(msg, TargetReactor::Links);
         }
@@ -56,12 +57,13 @@ impl Runner {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         msgs: &Vec<PlayerMsg>,
     ) {
+        info!("Game step");
+
         for msg in self.game.step(msgs.clone()) {
             handle.send_internal(msg, TargetReactor::Links);
         }
 
         if self.game.is_done() {
-            info!("Game step");
             handle.close();
         }
     }

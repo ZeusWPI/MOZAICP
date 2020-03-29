@@ -115,6 +115,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         // Open link to host
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Vec<PlayerMsg>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Start>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
