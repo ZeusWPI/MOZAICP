@@ -93,7 +93,7 @@ impl ClientController {
 
     fn handle_conn(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, accept: &Accepted) {
         if self.client_name.is_none() {
-            handle.send_internal(InitConnect(self.client_id), TargetReactor::Link(self.host));
+            handle.send_internal(InitConnect(self.client_id, accept.name.clone()), TargetReactor::Link(self.host));
         }
 
         info!("Opening link to client");

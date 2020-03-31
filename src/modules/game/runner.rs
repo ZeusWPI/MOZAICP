@@ -1,5 +1,5 @@
 use crate::generic::*;
-use crate::modules::types::{HostMsg, PlayerMsg, Start};
+use crate::modules::types::{HostMsg, PlayerMsg, Start, PlayerId};
 
 use super::request::*;
 use super::GameBox;
@@ -14,6 +14,8 @@ pub struct Runner {
     logger_id: ReactorID,
     game: GameBox,
     game_id: u64,
+
+    players: Vec<(PlayerId, String)>,
 }
 
 impl Runner {
@@ -30,6 +32,7 @@ impl Runner {
             game,
             logger_id,
             game_id,
+            players: Vec::new(),
         };
 
         CoreParams::new(me)
@@ -39,7 +42,9 @@ impl Runner {
             .handler(FunctionHandler::from(Self::handle_start))
     }
 
-    fn handle_start(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, _msg: &Start) {
+    fn handle_start(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, start: &Start) {
+        self.players = start.players.clone();
+
         for msg in self.game.start() {
             handle.send_internal(msg, TargetReactor::Links);
         }
@@ -77,9 +82,10 @@ impl Runner {
     }
 
     fn maybe_close(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, ) {
-        if let Some(done) = self.game.is_done() {
-            handle.send_internal((self.game_id, done.clone()), TargetReactor::Link(self.gm_id));
-            handle.send_internal(done, TargetReactor::Link(self.logger_id));
+        if let Some((name, mut value)) = self.game.is_done() {
+            handle.send_internal((name.clone(), value.clone()), TargetReactor::Link(self.logger_id));
+            value.as_object_mut().map(|obj| obj.insert("players".to_string(), serde_json::to_value(self.players.clone()).unwrap()));
+            handle.send_internal((self.game_id, (name, value)), TargetReactor::Link(self.gm_id));
             handle.close();
         }
     }

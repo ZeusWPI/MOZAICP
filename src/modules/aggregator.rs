@@ -5,14 +5,14 @@ use crate::util::request::*;
 use std::any;
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Copy)]
-pub struct InitConnect(pub PlayerId);
+#[derive(Clone, Debug)]
+pub struct InitConnect(pub PlayerId, pub String);
 
 pub struct Aggregator {
     host_id: ReactorID,
     clients: HashMap<PlayerId, ReactorID>,
 
-    init_connected: HashMap<PlayerId, bool>,
+    init_connected: HashMap<PlayerId, Option<String>>,
     current_requests: HashMap<UUID, HashMap<PlayerId, Option<Connect>>>,
 }
 
@@ -23,7 +23,7 @@ impl Aggregator {
     ) -> CoreParams<Self, any::TypeId, Message> {
         CoreParams::new(Aggregator {
             host_id,
-            init_connected: clients.keys().map(|x| (*x, false)).collect(),
+            init_connected: clients.keys().map(|x| (*x, None)).collect(),
             clients,
             current_requests: HashMap::new(),
         })
@@ -37,11 +37,12 @@ impl Aggregator {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         con: &InitConnect,
     ) {
-        self.init_connected.get_mut(&con.0).map(|x| *x = true);
+        self.init_connected.get_mut(&con.0).map(|x| *x = Some(con.1.clone()));
 
-        if self.init_connected.values().all(|x| *x) {
+        if self.init_connected.values().all(|x| x.is_some()) {
             // Send start
-            handle.send_internal(Start, TargetReactor::Link(self.host_id));
+            let players: Vec<(PlayerId, String)> = self.init_connected.iter().map(|(id, name)| (*id, name.clone().unwrap())).collect();
+            handle.send_internal(Start { players }, TargetReactor::Link(self.host_id));
         }
     }
 
