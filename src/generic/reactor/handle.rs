@@ -57,7 +57,9 @@ where
     }
 
     pub fn close(&mut self) {
-        self.inner_ops.push_back(InnerOp::Close());
+        if self.chan.unbounded_send(Operation::Close()).is_err() {
+            error!("Couldn't send close operation");
+        }
     }
 
     pub fn spawn<S: 'static + Send + ReactorState<K, M> + Unpin>(

@@ -227,7 +227,9 @@ where
 
             link.handle(&mut (), &mut handle, &mut LinkOperation::Close());
             if cascade {
-                self.inner_ops.push_back(InnerOp::Close());
+                if self.channels.0.unbounded_send(Operation::Close()).is_err() {
+                    error!("Couldn't send close operation");
+                }
             }
         } else {
             info!(%target, source = %self.id, "Failed to close link");
@@ -263,7 +265,6 @@ where
         while let Some(op) = self.inner_ops.pop_back() {
             match op {
                 InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
-                InnerOp::Close() => self.close(),
                 InnerOp::CloseLink(id) => self.close_link(id),
             }
         }
@@ -304,7 +305,6 @@ where
                     while let Some(op) = this.inner_ops.pop_back() {
                         match op {
                             InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
-                            InnerOp::Close() => this.close(),
                             InnerOp::CloseLink(id) => this.close_link(id),
                         }
                     }

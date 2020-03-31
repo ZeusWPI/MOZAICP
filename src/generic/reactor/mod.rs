@@ -20,5 +20,4 @@ pub enum TargetReactor {
 pub enum InnerOp<K, M> {
     OpenLink(ReactorID, LinkSpawner<K, M>, bool),
     CloseLink(ReactorID),
-    Close(),
 }
