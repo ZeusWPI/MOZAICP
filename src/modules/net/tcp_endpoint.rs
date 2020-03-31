@@ -1,5 +1,6 @@
 use crate::generic::*;
 use crate::modules::net::{EndpointBuilder, SpawnPlayer};
+use crate::modules::net::types::Register;
 use crate::modules::types::*;
 
 use futures::channel::mpsc;
@@ -94,26 +95,34 @@ async fn handle_socket(
     stream: net::TcpStream,
     cm_chan: SenderHandle<any::TypeId, Message>,
 ) -> Option<()> {
-    let (stream, player): (net::TcpStream, u64) = {
+    let (stream, player): (net::TcpStream, Register) = {
         let mut line = String::new();
         let mut br = BufReader::new(stream);
         br.read_line(&mut line).await.ok()?;
 
-        info!("Got line {}", line);
+        let mut stream = br.into_inner();
 
-        // Help needed: into_inner loses the underlying data
-        Some((br.into_inner(), line.trim().parse().ok()?))
+        let reg: Register = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(error) => {
+                stream.write_all(error.to_string().as_bytes()).await.ok()?;
+                return None;
+            }
+        };
+
+        info!("Got line {:?}", reg);
+
+        // TODO: Help needed: into_inner loses the underlying data
+        Some((stream, reg))
     }?;
 
-    info!(player, "Got new player");
+    info!(?player, "Got new player");
 
     cm_chan.send(
         id,
         SpawnPlayer::new(player, move |s_id, cc_chan| {
             let (tx, rx): (Sender<any::TypeId, Message>, Receiver<any::TypeId, Message>) =
                 mpsc::unbounded();
-
-            // tp.spawn_ok();
 
             (
                 tx,

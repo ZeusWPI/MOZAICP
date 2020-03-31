@@ -70,9 +70,21 @@ pub mod request {
 
     #[derive(Clone, Debug)]
     pub enum Connect {
-        Connected(PlayerId),
-        Reconnecting(PlayerId),
+        Connected(PlayerId, String),
+        Reconnecting(PlayerId, String),
         Waiting(PlayerId, u64),
         Request,
+    }
+
+    use std::fmt;
+    impl fmt::Display for Connect {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                Connect::Connected(_, name) => write!(f, "Connected {}", name),
+                Connect::Reconnecting(_, name) => write!(f, "Reconnecting {}", name),
+                Connect::Waiting(_, key) => write!(f, "Key to connect {}", key),
+                Connect::Request => write!(f, "Request"),
+            }
+        }
     }
 }

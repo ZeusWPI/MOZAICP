@@ -51,8 +51,8 @@ impl Aggregator {
         Res(uuid, conn): &Res<Connect>,
     ) {
         let (id, res) = match conn {
-            Connect::Connected(id) => (id, Connect::Connected(*id)),
-            Connect::Reconnecting(id) => (id, Connect::Reconnecting(*id)),
+            Connect::Connected(id, name) => (id, Connect::Connected(*id, name.clone())),
+            Connect::Reconnecting(id, name) => (id, Connect::Reconnecting(*id, name.clone())),
             Connect::Waiting(id, key) => (id, Connect::Waiting(*id, *key)),
             _ => panic!("Wrong connection response"),
         };

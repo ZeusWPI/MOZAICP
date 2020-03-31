@@ -25,7 +25,7 @@ pub struct PlayerUUIDs {
 pub type BoxSpawnPlayer = Arc<Mutex<Option<SpawnPlayer>>>;
 
 pub struct SpawnPlayer {
-    pub player: u64,
+    pub register: Register,
     pub builder: Box<
         dyn FnOnce(
                 ReactorID,
@@ -54,11 +54,11 @@ impl SpawnPlayer {
             + Send
             + Sync,
     >(
-        player: u64,
+        register: Register,
         f: F,
     ) -> BoxSpawnPlayer {
         Arc::new(Mutex::new(Some(Self {
-            player,
+            register,
             builder: Box::new(f),
         })))
     }
@@ -147,14 +147,15 @@ impl ClientManager {
         let mut reg = reg.lock().unwrap();
         let reg = std::mem::replace(&mut *reg, None);
 
-        if let Some(SpawnPlayer { player, builder }) = reg {
-            if let Some((player, cc)) = self.clients.get(&player) {
+        if let Some(SpawnPlayer {  register: Register { id, name }, builder }) = reg {
+            if let Some((player, cc)) = self.clients.get(&id) {
                 let id = ReactorID::rand();
-                let (chan, fut, name) = builder(id, handle.get(cc));
-                handle.open_reactor_like(id, chan, fut, name);
+                let (chan, fut, handler_name) = builder(id, handle.get(cc));
+                handle.open_reactor_like(id, chan, fut, handler_name);
 
                 let accept = Accepted {
                     player: *player,
+                    name,
                     client_id: id,
                     contr_id: *cc,
                 };

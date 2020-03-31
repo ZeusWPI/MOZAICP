@@ -14,8 +14,7 @@ pub struct ClientController {
     host: ReactorID,
     client_id: PlayerId,
     client: Option<ReactorID>,
-
-    init_connected: bool,
+    client_name: Option<String>,
 
     buffer: VecDeque<Data>,
     key: u64,
@@ -32,10 +31,10 @@ impl ClientController {
             client_manager,
             host,
             client_id,
+            client_name: None,
             client: None,
             buffer: VecDeque::new(),
             key,
-            init_connected: false,
         })
         .handler(FunctionHandler::from(Self::handle_host_msg))
         .handler(FunctionHandler::from(Self::handle_client_msg))
@@ -72,16 +71,18 @@ impl ClientController {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         req: &Req<Connect>,
     ) {
-        if self.client.is_some() {
-            handle.send_internal(
-                req.res(Connect::Connected(self.client_id)),
-                TargetReactor::Link(self.host),
-            );
-        } else if self.init_connected {
-            handle.send_internal(
-                req.res(Connect::Reconnecting(self.client_id)),
-                TargetReactor::Link(self.host),
-            );
+        if let Some(name) = &self.client_name {
+            if self.client.is_some() {
+                handle.send_internal(
+                    req.res(Connect::Connected(self.client_id, name.clone())),
+                    TargetReactor::Link(self.host),
+                );
+            } else {
+                handle.send_internal(
+                    req.res(Connect::Reconnecting(self.client_id, name.clone())),
+                    TargetReactor::Link(self.host),
+                );
+            }
         } else {
             handle.send_internal(
                 req.res(Connect::Waiting(self.client_id, self.key)),
@@ -91,8 +92,7 @@ impl ClientController {
     }
 
     fn handle_conn(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, accept: &Accepted) {
-        if !self.init_connected {
-            self.init_connected = true;
+        if self.client_name.is_none() {
             handle.send_internal(InitConnect(self.client_id), TargetReactor::Link(self.host));
         }
 
@@ -108,6 +108,8 @@ impl ClientController {
             });
 
         self.client = Some(accept.client_id);
+        self.client_name = Some(accept.name.clone());
+
         handle.open_link(accept.client_id, client_link_params, false);
 
         self.flush_msgs(handle);
