@@ -191,7 +191,7 @@ where
             })
             .is_none()
         {
-            error!("No link found {} -> {}", self.id, origin);
+            error!("{}: No link found {} -> {}", S::NAME, self.id, origin);
         }
     }
 
@@ -285,26 +285,30 @@ where
         let this = Pin::into_inner(self);
 
         loop {
-            match ready!(Stream::poll_next(Pin::new(&mut this.channels.1), ctx)) {
-                None => break,
-                Some(item) => match item {
-                    Operation::InternalMessage(id, msg, target) => {
-                        this.handle_internal_msg(id, msg, target)
-                    }
-                    Operation::ExternalMessage(target, id, msg) => {
-                        this.handle_external_msg(target, id, msg)
-                    }
-                    Operation::CloseLink(id) => this.close_link(id),
-                    Operation::Close() => this.close(),
-                    _ => unimplemented!(),
+            match Stream::poll_next(Pin::new(&mut this.channels.1), ctx) {
+                Poll::Ready(v) => match v {
+                    None => break,
+                    Some(item) => match item {
+                        Operation::InternalMessage(id, msg, target) => {
+                            this.handle_internal_msg(id, msg, target)
+                        }
+                        Operation::ExternalMessage(target, id, msg) => {
+                            this.handle_external_msg(target, id, msg)
+                        }
+                        Operation::CloseLink(id) => this.close_link(id),
+                        Operation::Close() => this.close(),
+                        _ => unimplemented!(),
+                    },
                 },
-            }
-
-            while let Some(op) = this.inner_ops.pop_back() {
-                match op {
-                    InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
-                    InnerOp::Close() => this.close(),
-                    InnerOp::CloseLink(id) => this.close_link(id),
+                Poll::Pending => {
+                    while let Some(op) = this.inner_ops.pop_back() {
+                        match op {
+                            InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
+                            InnerOp::Close() => this.close(),
+                            InnerOp::CloseLink(id) => this.close_link(id),
+                        }
+                    }
+                    return Poll::Pending;
                 }
             }
         }

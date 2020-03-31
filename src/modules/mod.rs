@@ -18,3 +18,4 @@ pub use net::{client_controller, ClientManager, EndpointBuilder, TcpEndpoint};
 
 pub mod game;
 pub mod types;
+pub mod logger;

@@ -2,12 +2,16 @@ extern crate async_std;
 extern crate futures;
 extern crate mozaic;
 
+#[macro_use]
+extern crate serde_json;
+
 extern crate tracing;
 extern crate tracing_subscriber;
 
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use std::time;
+use serde_json::Value;
 
 use mozaic::modules::types::*;
 use mozaic::modules::{game};
@@ -27,7 +31,8 @@ impl game::Controller for Echo {
             let msg = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
             if "stop".eq_ignore_ascii_case(&msg) {
                 sub.push(HostMsg::kick(id));
-                self.clients = self.clients.iter().cloned().filter(|&x| x == id).collect();
+                self.clients = self.clients.iter().cloned().filter(|&x| x != id).collect();
+                println!("{:?}", self.clients);
             }
 
             for target in &self.clients {
@@ -43,8 +48,13 @@ impl game::Controller for Echo {
         sub
     }
 
-    fn is_done(&mut self) -> bool {
-        self.clients.is_empty()
+    fn is_done(&mut self) -> Option<(String, Value)> {
+        if self.clients.is_empty() {
+            let value = json!({"testing": 123});
+            Some(("Echo game".to_string(), value))
+        } else {
+            None
+        }
     }
 }
 
@@ -69,12 +79,12 @@ async fn main() -> std::io::Result<()> {
         let ep = TcpEndpoint::new("127.0.0.1:6666".parse().unwrap(), pool.clone());
 
         let gmb = gmb.add_endpoint(ep, "TCP endpoint");
-        let mut gm = gmb.build();
+        let gm = gmb.build("game.ini", pool.clone()).await.unwrap();
 
         let mut games = VecDeque::new();
 
         let game_builder = {
-            let players = vec![10, 11];
+            let players = vec![10];
             let game = Echo {
                 clients: players.clone(),
             };
@@ -84,32 +94,17 @@ async fn main() -> std::io::Result<()> {
         async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 
         games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-        println!("Res: {:?}", gm.get_state(*games.back().unwrap()).await);
+        println!("{:?}", gm.get_state(*games.back().unwrap()).await);
 
         loop {
             async_std::task::sleep(std::time::Duration::from_millis(3000)).await;
-            println!("{:?}", gm.get_state(*games.back().unwrap()).await);
+
+            match gm.get_state(*games.back().unwrap()).await {
+                Some(Ok(v)) => println!("{:?}", v),
+                Some(Err(e)) => {println!("{:?}", e); break },
+                None => {}
+            }
         }
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // gm.kill_game(games.pop_front().unwrap()).await.unwrap();
-
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // gm.kill_game(games.pop_front().unwrap()).await.unwrap();
-
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
-
-        // async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-        // gm.kill_game(games.pop_front().unwrap()).await.unwrap();
 
         handle.await;
     }

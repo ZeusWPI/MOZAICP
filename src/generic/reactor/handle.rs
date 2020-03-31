@@ -83,7 +83,6 @@ where
     }
 }
 
-// ANCHOR Implementation with any::TypeId
 /// Generic implementation of reactor handle, this one is able to handle every T
 /// Making it generic by forming a Message and sending it through
 ///

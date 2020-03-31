@@ -13,6 +13,8 @@ pub type BoxedBuilder = Box<
             BrokerHandle<any::TypeId, Message>,
             ReactorID,
             ReactorID,
+            ReactorID,
+            u64,
         ) -> (ReactorID, HashMap<u64, (PlayerId, ReactorID)>)
         + Send,
 >;
@@ -56,6 +58,8 @@ impl<G: Controller + Send + 'static> Builder<G> {
         broker: BrokerHandle<any::TypeId, Message>,
         gm_id: ReactorID,
         cm_id: ReactorID,
+        logger_id: ReactorID,
+        id: u64,
     ) -> (ReactorID, HashMap<u64, (PlayerId, ReactorID)>) {
         let game_id = ReactorID::rand();
         let step_id = ReactorID::rand();
@@ -79,7 +83,9 @@ impl<G: Controller + Send + 'static> Builder<G> {
                 agg_id
             },
             gm_id,
+            logger_id,
             Box::new(self.game),
+            id,
         );
 
         let agg = Aggregator::params(
@@ -104,6 +110,6 @@ impl<G: Controller + Send + 'static> Builder<G> {
 
 impl<G: Controller + Send + 'static> Into<BoxedBuilder> for Builder<G> {
     fn into(self) -> BoxedBuilder {
-        Box::new(|broker, gm_id, cm_id| self.build(broker, gm_id, cm_id))
+        Box::new(|broker, gm_id, cm_id, logger_id, id| self.build(broker, gm_id, cm_id, logger_id, id))
     }
 }

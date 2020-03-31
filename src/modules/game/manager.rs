@@ -1,6 +1,7 @@
 use super::builder::BoxedBuilder;
 use crate::generic::*;
 use crate::modules::net::{RegisterGame};
+use crate::modules::logger::GameJoin;
 
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::channel::oneshot;
@@ -8,12 +9,15 @@ use futures::executor::ThreadPool;
 use futures::future::RemoteHandle;
 use futures::prelude::*;
 
+use serde_json::Value;
+
 use std::any;
 
 pub mod builder {
     use super::Manager;
     use crate::generic::*;
     use crate::modules::{ClientManager, EndpointBuilder};
+    use crate::modules::logger::*;
 
     use futures::executor::ThreadPool;
     use futures::future::RemoteHandle;
@@ -24,20 +28,24 @@ pub mod builder {
     pub struct ToInsert;
     pub struct Inserted;
 
-    pub struct Builder<Ep> {
-        pd: PhantomData<Ep>,
+    pub struct Builder<Ep, Logger> {
+        pd: PhantomData<(Ep, Logger)>,
         broker: BrokerHandle<any::TypeId, Message>,
         eps: Vec<ReactorID>,
+        gm_id: ReactorID,
         cm_id: ReactorID,
+        logger_id: ReactorID,
     }
 
-    impl<Ep> Builder<Ep> {
-        pub fn add_endpoint<E: EndpointBuilder>(self, ep: E, name: &str) -> Builder<Inserted> {
+    impl<Ep, T> Builder<Ep, T> {
+        pub fn add_endpoint<E: EndpointBuilder>(self, ep: E, name: &str) -> Builder<Inserted, T> {
             let Builder {
                 pd: _,
                 broker,
                 mut eps,
                 cm_id,
+                gm_id,
+                logger_id,
             } = self;
             let ep_id = ReactorID::rand();
             let (sender, fut) = ep.build(ep_id, broker.get_sender(&cm_id));
@@ -49,12 +57,14 @@ pub mod builder {
                 pd: PhantomData,
                 broker,
                 eps,
+                gm_id,
                 cm_id,
+                logger_id,
             }
         }
     }
 
-    impl Builder<ToInsert> {
+    impl Builder<ToInsert, ToInsert> {
         pub fn new(pool: ThreadPool) -> (Self, RemoteHandle<()>) {
             let (broker, handle) = BrokerHandle::new(pool);
             (
@@ -63,25 +73,62 @@ pub mod builder {
                     broker,
                     eps: Vec::new(),
                     cm_id: ReactorID::rand(),
+                    gm_id: ReactorID::rand(),
+                    logger_id: ReactorID::rand(),
                 },
                 handle,
             )
         }
     }
 
-    impl Builder<Inserted> {
-        pub fn build(self) -> Manager {
-            let gm_id = ReactorID::rand();
+    use serde_json::Value;
+    impl<I> Builder<I, ToInsert> {
+        pub fn set_logger<H: LogHandler<(String, Value)> + Send + 'static>(self, handler: H, tp: ThreadPool) -> Builder<I, Inserted> {
             let Builder {
                 pd: _,
                 broker,
                 eps,
                 cm_id,
+                gm_id,
+                logger_id,
             } = self;
+
+            let logger = Logger::params(gm_id, handler, tp);
+            broker.spawn(logger, Some(logger_id));
+
+            Builder {
+                pd: PhantomData,
+                broker,
+                eps,
+                cm_id,
+                gm_id,
+                logger_id,
+            }
+        }
+    }
+
+    impl Builder<Inserted, ToInsert> {
+        pub async fn build<P: AsRef<async_std::path::Path> + Send>(self, p: P, tp: ThreadPool) -> Option<Manager> {
+            let log_handler = DefaultLogHandler::new(p).await?;
+            Some(self.set_logger(log_handler, tp).build())
+        }
+    }
+
+    impl Builder<Inserted, Inserted> {
+        pub fn build(self) -> Manager {
+            let Builder {
+                pd: _,
+                broker,
+                eps,
+                cm_id,
+                gm_id,
+                logger_id,
+            } = self;
+
             let cm_params = ClientManager::new(gm_id, eps);
             broker.spawn(cm_params, Some(cm_id));
 
-            Manager::new(broker, gm_id, cm_id)
+            Manager::new(broker, gm_id, cm_id, logger_id)
         }
     }
 }
@@ -104,7 +151,7 @@ enum GameOp {
 
 pub enum GameOpRes {
     Built(Option<GameID>),
-    State(Option<Vec<Connect>>),
+    State(Option<Result<Vec<Connect>, (String, Value)>>),
     Kill(Option<()>),
 }
 
@@ -114,7 +161,7 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn builder(pool: ThreadPool) -> (Builder<builder::ToInsert>, RemoteHandle<()>) {
+    pub fn builder(pool: ThreadPool) -> (Builder<builder::ToInsert, builder::ToInsert>, RemoteHandle<()>) {
         Builder::new(pool)
     }
 
@@ -122,8 +169,9 @@ impl Manager {
         broker: BrokerHandle<any::TypeId, Message>,
         self_id: ReactorID,
         cm_id: ReactorID,
+        logger_id: ReactorID,
     ) -> Self {
-        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id);
+        let op_tx = GameManagerFuture::spawn(broker, self_id, cm_id, logger_id);
         Self { op_tx }
     }
 
@@ -139,7 +187,7 @@ impl Manager {
         }
     }
 
-    pub async fn get_state(&self, game: u64) -> Option<Vec<Connect>> {
+    pub async fn get_state(&self, game: u64) -> Option<Result<Vec<Connect>, (String, Value)>> {
         let (req, chan) = GameOpReq::new(GameOp::State(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -171,13 +219,15 @@ type GameID = u64;
 /// Game manager 'back end'
 struct GameManagerFuture {
     broker: BrokerHandle<any::TypeId, Message>,
-    games: HashMap<GameID, SenderHandle<any::TypeId, Message>>,
+    games: HashMap<GameID, Result<SenderHandle<any::TypeId, Message>, (String, Value)>>,
     requests: HashMap<UUID, oneshot::Sender<GameOpRes>>,
 
     id: ReactorID,
     cm_id: ReactorID,
+    logger_id: ReactorID,
 
     cm_chan: SenderHandle<any::TypeId, Message>,
+    logger_chan: SenderHandle<any::TypeId, Message>,
 }
 
 impl GameManagerFuture {
@@ -185,6 +235,7 @@ impl GameManagerFuture {
         broker: BrokerHandle<any::TypeId, Message>,
         self_id: ReactorID,
         cm_id: ReactorID,
+        logger_id: ReactorID,
     ) -> UnboundedSender<GameOpReq> {
         let (op_tx, mut op_rx) = mpsc::unbounded();
         let (ch_tx, ch_rx) = mpsc::unbounded();
@@ -193,11 +244,13 @@ impl GameManagerFuture {
 
         let mut this = Self {
             cm_chan: broker.get_sender(&cm_id),
+            logger_chan: broker.get_sender(&logger_id),
             broker: broker.clone(),
             games: HashMap::new(),
             requests: HashMap::new(),
             id: self_id,
             cm_id,
+            logger_id,
         };
 
         let fut = async move {
@@ -224,7 +277,11 @@ impl GameManagerFuture {
                                 // Handle response
                                 if if key == any::TypeId::of::<Res::<State>>() {
                                     Res::<State>::from_msg(&key, &mut msg).map(|Res(id, value)| {
-                                        this.send_msg(*id, GameOpRes::State(Some(value.res().clone())))
+                                        this.send_msg(*id, GameOpRes::State(Some(Ok(value.res().clone()))))
+                                    }).is_none()
+                                } else if key == any::TypeId::of::<(u64, (String, Value))>() {
+                                    <(u64, (String, Value))>::from_msg(&key, &mut msg).map(|(id, value)| {
+                                        this.games.insert(*id, Err(value.clone()))
                                     }).is_none()
                                 } else {
                                     Res::<Kill>::from_msg(&key, &mut msg).map(|Res::<Kill>(id, _)| {
@@ -259,7 +316,7 @@ impl GameManagerFuture {
 
     fn handle_gamebuilder(&mut self, uuid: UUID, builder: BoxedBuilder) {
         let game_uuid = rand::random();
-        let (game_id, players) = builder(self.broker.clone(), self.id, self.cm_id);
+        let (game_id, players) = builder(self.broker.clone(), self.id, self.cm_id, self.logger_id, game_uuid);
         self.cm_chan.send(
             self.id,
             RegisterGame {
@@ -268,16 +325,23 @@ impl GameManagerFuture {
             },
         );
         info!(%game_id, "Spawning game");
+        self.logger_chan.send(self.id, GameJoin(game_id)).unwrap();
         self.games
-            .insert(game_uuid, self.broker.get_sender(&game_id));
+            .insert(game_uuid, Ok(self.broker.get_sender(&game_id)));
 
         self.send_msg(uuid, GameOpRes::Built(Some(game_uuid)));
     }
 
     fn handle_state(&mut self, uuid: UUID, game: GameID) {
         if let Some(ch) = self.games.get(&game) {
-            if ch.send(self.id, Req(uuid, State::Request)).is_none() {
-                self.send_msg(uuid, GameOpRes::State(None));
+            match ch {
+                Ok(ch) => if ch.send(self.id, Req(uuid, State::Request)).is_none() {
+                    self.send_msg(uuid, GameOpRes::State(None));
+                },
+                Err(resolved) => {
+                    let res = resolved.clone();
+                    self.send_msg(uuid, GameOpRes::State(Some(Err(res))));
+                }
             }
         } else {
             self.send_msg(uuid, GameOpRes::State(None));
@@ -285,7 +349,7 @@ impl GameManagerFuture {
     }
 
     fn handle_kill(&mut self, uuid: UUID, game: GameID) {
-        if let Some(ch) = self.games.get(&game) {
+        if let Some(Ok(ch)) = self.games.get(&game) {
             if ch.send(self.id, Req(uuid, Kill)).is_none() {
                 self.send_msg(uuid, GameOpRes::Kill(None));
             }
