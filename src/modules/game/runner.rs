@@ -83,8 +83,8 @@ impl Runner {
 
     fn maybe_close(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, ) {
         if let Some(mut value) = self.game.is_done() {
-            handle.send_internal(value.clone(), TargetReactor::Link(self.logger_id));
             value.as_object_mut().map(|obj| obj.insert("players".to_string(), serde_json::to_value(self.players.clone()).unwrap()));
+            handle.send_internal(value.clone(), TargetReactor::Link(self.logger_id));
             handle.send_internal((self.game_id, value), TargetReactor::Link(self.gm_id));
             handle.close();
         }

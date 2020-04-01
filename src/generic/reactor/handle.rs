@@ -32,7 +32,6 @@ impl<'a, K, M> ReactorHandle<'a, K, M> {
 }
 
 use futures::future::Future;
-
 impl<'a, K, M> ReactorHandle<'a, K, M>
 where
     K: 'static + Send + Eq + Hash + Unpin,
