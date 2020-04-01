@@ -228,7 +228,7 @@ where
             link.handle(&mut (), &mut handle, &mut LinkOperation::Close());
             if cascade {
                 if self.channels.0.unbounded_send(Operation::Close()).is_err() {
-                    error!("Couldn't send close operation");
+                    info!("Couldn't send close operation");
                 }
             }
         } else {

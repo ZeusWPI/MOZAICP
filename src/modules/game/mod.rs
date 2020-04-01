@@ -17,6 +17,6 @@ pub trait Controller {
         Vec::new()
     }
     fn step<'a>(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg>;
-    fn is_done(&mut self) -> Option<(String, Value)>;
+    fn is_done(&mut self) -> Option<Value>;
 }
 pub type GameBox = Box<dyn Controller + Send>;

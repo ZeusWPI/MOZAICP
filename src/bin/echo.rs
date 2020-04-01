@@ -48,10 +48,10 @@ impl game::Controller for Echo {
         sub
     }
 
-    fn is_done(&mut self) -> Option<(String, Value)> {
+    fn is_done(&mut self) -> Option<Value> {
         if self.clients.is_empty() {
             let value = json!({"testing": 123});
-            Some(("Echo game".to_string(), value))
+            Some(value)
         } else {
             None
         }

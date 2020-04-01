@@ -82,10 +82,10 @@ impl Runner {
     }
 
     fn maybe_close(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, ) {
-        if let Some((name, mut value)) = self.game.is_done() {
-            handle.send_internal((name.clone(), value.clone()), TargetReactor::Link(self.logger_id));
+        if let Some(mut value) = self.game.is_done() {
+            handle.send_internal(value.clone(), TargetReactor::Link(self.logger_id));
             value.as_object_mut().map(|obj| obj.insert("players".to_string(), serde_json::to_value(self.players.clone()).unwrap()));
-            handle.send_internal((self.game_id, (name, value)), TargetReactor::Link(self.gm_id));
+            handle.send_internal((self.game_id, value), TargetReactor::Link(self.gm_id));
             handle.close();
         }
     }
@@ -114,7 +114,7 @@ impl ReactorState<any::TypeId, Message> for Runner {
         let gm_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Kill>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), (u64, (String, Value))>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), (u64, Value)>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), Req<State>>(
                 TargetReactor::Link(self.clients_id),
             )))
@@ -125,7 +125,7 @@ impl ReactorState<any::TypeId, Message> for Runner {
 
 
         let logger_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), (String, Value)>()));
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Value>()));
         handle.open_link(self.logger_id, logger_link_params, false);
     }
 }

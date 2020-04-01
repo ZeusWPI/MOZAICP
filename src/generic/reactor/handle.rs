@@ -58,7 +58,7 @@ where
 
     pub fn close(&mut self) {
         if self.chan.unbounded_send(Operation::Close()).is_err() {
-            error!("Couldn't send close operation");
+            info!("Couldn't send close operation");
         }
     }
 

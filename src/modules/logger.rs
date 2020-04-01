@@ -18,15 +18,13 @@ pub trait LogHandler<T> {
     fn handle<'a>(&'a mut self, log: T) -> BoxFuture<'a>;
 }
 
-use serde_json::Value;
-
-pub struct Logger {
-    tx: mpsc::UnboundedSender<(String, Value)>,
+pub struct Logger<T> {
+    tx: mpsc::UnboundedSender<T>,
     manager: ReactorID,
 }
 
-impl Logger {
-    pub fn params<H: LogHandler<(String, Value)> + Send + 'static>(
+impl<T: 'static + Send + Clone> Logger<T> {
+    pub fn params<H: LogHandler<T> + Send + 'static>(
         manager: ReactorID,
         handler: H,
         tp: ThreadPool,
@@ -46,20 +44,20 @@ impl Logger {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         game: &GameJoin,
     ) {
-        let link = LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<(), (String, Value)>(
+        let link = LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<(), T>(
             TargetReactor::Reactor,
         )));
         handle.open_link(game.0.clone(), link, false);
     }
 
-    fn handle_log(&mut self, _handle: &mut ReactorHandle<any::TypeId, Message>, log: &(String, Value)) {
+    fn handle_log(&mut self, _handle: &mut ReactorHandle<any::TypeId, Message>, log: &T) {
         self.tx
             .unbounded_send(log.clone())
             .expect("Shit is failing here");
     }
 }
 
-impl ReactorState<any::TypeId, Message> for Logger {
+impl<T> ReactorState<any::TypeId, Message> for Logger<T> {
     const NAME: &'static str = "Logger";
 
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
@@ -119,21 +117,12 @@ mod default {
         }
     }
 
-    impl LogHandler<(String, Value)> for DefaultLogHandler {
-        fn handle<'a>(&'a mut self, (log, vs): (String, Value)) -> BoxFuture<'a> {
+    impl LogHandler<Value> for DefaultLogHandler {
+        fn handle<'a>(&'a mut self, vs: Value) -> BoxFuture<'a> {
             Box::pin(async move {
-                self.write_line(format!("[{}]\n", log).as_bytes()).await?;
-
-                let vs = vs
-                    .as_object()
-                    .ok_or(String::from("That shit ain't an object yo"))?;
-
-                for (key, value) in vs.iter() {
-                    self.write_line(format!("{}={}\n", key, value).as_bytes())
-                        .await?;
-
-                }
-
+                let mut bytes = serde_json::to_vec(&vs).unwrap();
+                bytes.push(b'\n');
+                self.write_line(&bytes).await?;
                 self.file.flush().await.map_err(|_| "Cannot flush file!")?;
                 Ok(())
             })

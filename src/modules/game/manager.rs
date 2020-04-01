@@ -83,7 +83,7 @@ pub mod builder {
 
     use serde_json::Value;
     impl<I> Builder<I, ToInsert> {
-        pub fn set_logger<H: LogHandler<(String, Value)> + Send + 'static>(self, handler: H, tp: ThreadPool) -> Builder<I, Inserted> {
+        pub fn set_logger<H: LogHandler<Value> + Send + 'static>(self, handler: H, tp: ThreadPool) -> Builder<I, Inserted> {
             let Builder {
                 pd: _,
                 broker,
@@ -151,7 +151,7 @@ enum GameOp {
 
 pub enum GameOpRes {
     Built(Option<GameID>),
-    State(Option<Result<Vec<Connect>, (String, Value)>>),
+    State(Option<Result<Vec<Connect>, Value>>),
     Kill(Option<()>),
 }
 
@@ -187,7 +187,7 @@ impl Manager {
         }
     }
 
-    pub async fn get_state(&self, game: u64) -> Option<Result<Vec<Connect>, (String, Value)>> {
+    pub async fn get_state(&self, game: u64) -> Option<Result<Vec<Connect>, Value>> {
         let (req, chan) = GameOpReq::new(GameOp::State(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -219,7 +219,7 @@ type GameID = u64;
 /// Game manager 'back end'
 struct GameManagerFuture {
     broker: BrokerHandle<any::TypeId, Message>,
-    games: HashMap<GameID, Result<SenderHandle<any::TypeId, Message>, (String, Value)>>,
+    games: HashMap<GameID, Result<SenderHandle<any::TypeId, Message>, Value>>,
     requests: HashMap<UUID, oneshot::Sender<GameOpRes>>,
 
     id: ReactorID,
@@ -279,8 +279,8 @@ impl GameManagerFuture {
                                     Res::<State>::from_msg(&key, &mut msg).map(|Res(id, value)| {
                                         this.send_msg(*id, GameOpRes::State(Some(Ok(value.res().clone()))))
                                     }).is_none()
-                                } else if key == any::TypeId::of::<(u64, (String, Value))>() {
-                                    <(u64, (String, Value))>::from_msg(&key, &mut msg).map(|(id, value)| {
+                                } else if key == any::TypeId::of::<(u64, Value)>() {
+                                    <(u64, Value)>::from_msg(&key, &mut msg).map(|(id, value)| {
                                         this.games.insert(*id, Err(value.clone()))
                                     }).is_none()
                                 } else {
