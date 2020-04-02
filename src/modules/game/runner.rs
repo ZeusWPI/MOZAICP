@@ -1,5 +1,5 @@
 use crate::generic::*;
-use crate::modules::types::{HostMsg, PlayerMsg, Start, PlayerId};
+use crate::modules::types::{HostMsg, PlayerId, PlayerMsg, Start};
 
 use super::request::*;
 use super::GameBox;
@@ -40,6 +40,16 @@ impl Runner {
             .handler(FunctionHandler::from(Self::handle_client_msgs))
             .handler(FunctionHandler::from(Self::handle_kill))
             .handler(FunctionHandler::from(Self::handle_start))
+            .handler(FunctionHandler::from(Self::handle_state_res))
+    }
+
+    fn handle_state_res(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        res: &Res<State>,
+    ) {
+        let res = Res::new(res.0, (self.game.state(), res.1.clone()));
+        handle.send_internal(res, TargetReactor::Link(self.gm_id));
     }
 
     fn handle_start(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, start: &Start) {
@@ -81,9 +91,14 @@ impl Runner {
         handle.close();
     }
 
-    fn maybe_close(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, ) {
+    fn maybe_close(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>) {
         if let Some(mut value) = self.game.is_done() {
-            value.as_object_mut().map(|obj| obj.insert("players".to_string(), serde_json::to_value(self.players.clone()).unwrap()));
+            value.as_object_mut().map(|obj| {
+                obj.insert(
+                    "players".to_string(),
+                    serde_json::to_value(self.players.clone()).unwrap(),
+                )
+            });
             handle.send_internal(value.clone(), TargetReactor::Link(self.logger_id));
             handle.send_internal((self.game_id, value), TargetReactor::Link(self.gm_id));
             handle.close();
@@ -107,12 +122,12 @@ impl ReactorState<any::TypeId, Message> for Runner {
                 TargetReactor::Reactor,
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), Res<State>>(
-                TargetReactor::Link(self.gm_id),
+                TargetReactor::Reactor,
             )));
         handle.open_link(self.clients_id, client_params, true);
 
         let gm_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<(Value, State)>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Kill>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), (u64, Value)>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), Req<State>>(
@@ -123,9 +138,8 @@ impl ReactorState<any::TypeId, Message> for Runner {
             )));
         handle.open_link(self.gm_id, gm_link_params, false);
 
-
-        let logger_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Value>()));
+        let logger_link_params =
+            LinkParams::new(()).internal_handler(FunctionHandler::from(i_to_e::<(), Value>()));
         handle.open_link(self.logger_id, logger_link_params, false);
     }
 }

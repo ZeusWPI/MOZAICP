@@ -151,7 +151,7 @@ enum GameOp {
 
 pub enum GameOpRes {
     Built(Option<GameID>),
-    State(Option<Result<Vec<Connect>, Value>>),
+    State(Option<Result<(Value, Vec<Connect>), Value>>),
     Kill(Option<()>),
 }
 
@@ -187,7 +187,7 @@ impl Manager {
         }
     }
 
-    pub async fn get_state(&self, game: u64) -> Option<Result<Vec<Connect>, Value>> {
+    pub async fn get_state(&self, game: u64) -> Option<Result<(Value, Vec<Connect>), Value>> {
         let (req, chan) = GameOpReq::new(GameOp::State(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -275,9 +275,9 @@ impl GameManagerFuture {
                         res = ch_rx.next() => {
                             if let Some((from, key, mut msg)) = res? {
                                 // Handle response
-                                if if key == any::TypeId::of::<Res::<State>>() {
-                                    Res::<State>::from_msg(&key, &mut msg).map(|Res(id, value)| {
-                                        this.send_msg(*id, GameOpRes::State(Some(Ok(value.res().clone()))))
+                                if if key == any::TypeId::of::<Res::<(Value, State)>>() {
+                                    Res::<(Value, State)>::from_msg(&key, &mut msg).map(|Res(id, (value, state))| {
+                                        this.send_msg(*id, GameOpRes::State(Some(Ok((value.clone(), state.res().clone())))))
                                     }).is_none()
                                 } else if key == any::TypeId::of::<(u64, Value)>() {
                                     <(u64, Value)>::from_msg(&key, &mut msg).map(|(id, value)| {

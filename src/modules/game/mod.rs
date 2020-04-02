@@ -16,7 +16,10 @@ pub trait Controller {
         info!("Starting this game");
         Vec::new()
     }
-    fn step<'a>(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg>;
+    fn step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg>;
+    fn state(&mut self) -> Value {
+        Value::Null
+    }
     fn is_done(&mut self) -> Option<Value>;
 }
 pub type GameBox = Box<dyn Controller + Send>;

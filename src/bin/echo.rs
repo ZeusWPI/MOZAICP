@@ -48,6 +48,12 @@ impl game::Controller for Echo {
         sub
     }
 
+    fn state(&mut self) -> Value {
+        json!({
+            "Some": "players"
+        })
+    }
+
     fn is_done(&mut self) -> Option<Value> {
         if self.clients.is_empty() {
             let value = json!({"testing": 123});
