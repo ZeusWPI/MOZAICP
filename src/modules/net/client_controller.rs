@@ -7,7 +7,7 @@ use crate::util::request::*;
 use std::any;
 use std::collections::VecDeque;
 
-struct ClientClosed;
+struct ClientClosed(PlayerId);
 
 pub struct ClientController {
     client_manager: ReactorID,
@@ -93,18 +93,31 @@ impl ClientController {
 
     fn handle_conn(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, accept: &Accepted) {
         if self.client_name.is_none() {
-            handle.send_internal(InitConnect(self.client_id, accept.name.clone()), TargetReactor::Link(self.host));
+            handle.send_internal(
+                InitConnect(self.client_id, accept.name.clone()),
+                TargetReactor::Link(self.host),
+            );
         }
 
+        handle.send_internal(
+            ClientStateUpdate {
+                id: accept.player,
+                state: ClientState::Connected,
+            },
+            TargetReactor::Link(self.host),
+        );
+
         info!("Opening link to client");
+
+        let player_id = accept.player;
 
         let client_link_params = LinkParams::new(())
             .external_handler(FunctionHandler::from(e_to_i::<(), Data>(
                 TargetReactor::Reactor,
             )))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Data>()))
-            .closer(|_state, handle| {
-                handle.send_internal(ClientClosed, TargetReactor::Reactor);
+            .closer(move |_state, handle| {
+                handle.send_internal(ClientClosed(player_id), TargetReactor::Reactor);
             });
 
         self.client = Some(accept.client_id);
@@ -115,8 +128,20 @@ impl ClientController {
         self.flush_msgs(handle);
     }
 
-    fn handle_disc(&mut self, _handle: &mut ReactorHandle<any::TypeId, Message>, _: &ClientClosed) {
+    fn handle_disc(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        closed: &ClientClosed,
+    ) {
         self.client = None;
+
+        handle.send_internal(
+            ClientStateUpdate {
+                id: closed.0,
+                state: ClientState::Disconnected,
+            },
+            TargetReactor::Link(self.host),
+        );
     }
 
     fn flush_msgs(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>) {
@@ -134,6 +159,7 @@ impl ReactorState<any::TypeId, Message> for ClientController {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let host_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), ClientStateUpdate>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Connect>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), InitConnect>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), Req<Connect>>(

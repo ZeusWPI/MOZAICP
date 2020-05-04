@@ -40,5 +40,16 @@ pub struct Data {
 pub struct Close {}
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Start {
-    pub players: Vec<(PlayerId, String)>
+    pub players: Vec<(PlayerId, String)>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub enum ClientState {
+    Connected,
+    Disconnected,
+}
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub struct ClientStateUpdate {
+    pub id: PlayerId,
+    pub state: ClientState,
 }

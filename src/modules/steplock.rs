@@ -1,4 +1,4 @@
-use super::types::{Data, HostMsg, PlayerId, PlayerMsg, Start};
+use super::types::{ClientStateUpdate, Data, HostMsg, PlayerId, PlayerMsg, Start};
 use crate::generic::*;
 
 use futures::channel::mpsc;
@@ -117,6 +117,7 @@ impl ReactorState<any::TypeId, Message> for StepLock {
             .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Vec<PlayerMsg>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), ClientStateUpdate>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Start>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
                 TargetReactor::All,
@@ -137,6 +138,10 @@ impl ReactorState<any::TypeId, Message> for StepLock {
                 TargetReactor::Link(self.host),
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), Res<State>>(
+                TargetReactor::Link(self.host),
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), ClientStateUpdate>(
+                // connect message
                 TargetReactor::Link(self.host),
             )));
         handle.open_link(self.player_id, client_link_params, true);

@@ -10,11 +10,11 @@ extern crate tracing_subscriber;
 
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use std::time;
 use serde_json::Value;
+use std::time;
 
+use mozaic::modules::game;
 use mozaic::modules::types::*;
-use mozaic::modules::{game};
 
 use futures::executor::ThreadPool;
 use futures::future::FutureExt;
@@ -25,7 +25,34 @@ struct Echo {
 }
 
 impl game::Controller for Echo {
-    fn step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
+    fn on_connect(&mut self, player: PlayerId) -> Vec<HostMsg> {
+        let mut out = Vec::new();
+        for target in &self.clients {
+            out.push(HostMsg::Data(
+                Data {
+                    value: format!("{} connected\n", player),
+                },
+                Some(*target),
+            ));
+        }
+        out
+    }
+
+    fn on_disconnect(&mut self, player: PlayerId) -> Vec<HostMsg> {
+        println!("{} disconnected", player);
+        let mut out = Vec::new();
+        for target in &self.clients {
+            out.push(HostMsg::Data(
+                Data {
+                    value: format!("{} disconnected\n", player),
+                },
+                Some(*target),
+            ));
+        }
+        out
+    }
+
+    fn on_step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
         let mut sub = Vec::new();
         for PlayerMsg { id, data } in turns {
             let msg = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
@@ -48,7 +75,7 @@ impl game::Controller for Echo {
         sub
     }
 
-    fn state(&mut self) -> Value {
+    fn get_state(&mut self) -> Value {
         json!({
             "Some": "players"
         })
@@ -90,7 +117,7 @@ async fn main() -> std::io::Result<()> {
         let mut games = VecDeque::new();
 
         let game_builder = {
-            let players = vec![10];
+            let players = vec![10, 11];
             let game = Echo {
                 clients: players.clone(),
             };
@@ -107,7 +134,10 @@ async fn main() -> std::io::Result<()> {
 
             match gm.get_state(*games.back().unwrap()).await {
                 Some(Ok(v)) => println!("{:?}", v),
-                Some(Err(e)) => {println!("{:?}", e); break },
+                Some(Err(e)) => {
+                    println!("{:?}", e);
+                    break;
+                }
                 None => {}
             }
         }

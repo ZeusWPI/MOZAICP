@@ -1,5 +1,5 @@
 use crate::generic::*;
-use crate::modules::types::{HostMsg, PlayerId, PlayerMsg, Start};
+use crate::modules::types::{ClientState, ClientStateUpdate, HostMsg, PlayerId, PlayerMsg, Start};
 
 use super::request::*;
 use super::GameBox;
@@ -41,6 +41,7 @@ impl Runner {
             .handler(FunctionHandler::from(Self::handle_kill))
             .handler(FunctionHandler::from(Self::handle_start))
             .handler(FunctionHandler::from(Self::handle_state_res))
+            .handler(FunctionHandler::from(Self::handle_client_state_update))
     }
 
     fn handle_state_res(
@@ -48,14 +49,37 @@ impl Runner {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         res: &Res<State>,
     ) {
-        let res = Res::new(res.0, (self.game.state(), res.1.clone()));
+        let res = Res::new(res.0, (self.game.get_state(), res.1.clone()));
         handle.send_internal(res, TargetReactor::Link(self.gm_id));
     }
 
     fn handle_start(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, start: &Start) {
         self.players = start.players.clone();
 
-        for msg in self.game.start() {
+        for msg in self.game.on_start() {
+            handle.send_internal(msg, TargetReactor::Links);
+        }
+
+        self.maybe_close(handle);
+    }
+
+    fn handle_client_state_update(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        msg: &ClientStateUpdate,
+    ) {
+        let msgs = match msg {
+            ClientStateUpdate {
+                id,
+                state: ClientState::Connected,
+            } => self.game.on_connect(*id),
+            ClientStateUpdate {
+                id,
+                state: ClientState::Disconnected,
+            } => self.game.on_disconnect(*id),
+        };
+
+        for msg in msgs {
             handle.send_internal(msg, TargetReactor::Links);
         }
 
@@ -67,7 +91,7 @@ impl Runner {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         msg: &PlayerMsg,
     ) {
-        for msg in self.game.step(vec![msg.clone()]) {
+        for msg in self.game.on_step(vec![msg.clone()]) {
             handle.send_internal(msg, TargetReactor::Links);
         }
 
@@ -79,7 +103,7 @@ impl Runner {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         msgs: &Vec<PlayerMsg>,
     ) {
-        for msg in self.game.step(msgs.clone()) {
+        for msg in self.game.on_step(msgs.clone()) {
             handle.send_internal(msg, TargetReactor::Links);
         }
 
@@ -113,6 +137,9 @@ impl ReactorState<any::TypeId, Message> for Runner {
             .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Req<State>>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
+                TargetReactor::Reactor,
+            )))
+            .external_handler(FunctionHandler::from(e_to_i::<(), ClientStateUpdate>(
                 TargetReactor::Reactor,
             )))
             .external_handler(FunctionHandler::from(e_to_i::<(), Start>(
