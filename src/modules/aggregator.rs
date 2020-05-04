@@ -37,11 +37,17 @@ impl Aggregator {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         con: &InitConnect,
     ) {
-        self.init_connected.get_mut(&con.0).map(|x| *x = Some(con.1.clone()));
+        self.init_connected
+            .get_mut(&con.0)
+            .map(|x| *x = Some(con.1.clone()));
 
         if self.init_connected.values().all(|x| x.is_some()) {
             // Send start
-            let players: Vec<(PlayerId, String)> = self.init_connected.iter().map(|(id, name)| (*id, name.clone().unwrap())).collect();
+            let players: Vec<(PlayerId, String)> = self
+                .init_connected
+                .iter()
+                .map(|(id, name)| (*id, name.clone().unwrap()))
+                .collect();
             handle.send_internal(Start { players }, TargetReactor::Link(self.host_id));
         }
     }
@@ -108,20 +114,15 @@ struct ClientLink;
 impl ClientLink {
     fn params(host_id: ReactorID) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self)
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, HostMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, Req<Connect>>()))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerMsg>(
-                TargetReactor::Link(host_id),
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, Res<Connect>>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, InitConnect>(
-                TargetReactor::Reactor,
-            )))
+            .internal_handler(IToE::<HostMsg>::new())
+            .internal_handler(IToE::<Req<Connect>>::new())
+            .external_handler(EToI::<PlayerMsg>::new(TargetReactor::Link(host_id)))
+            .external_handler(EToI::<Res<Connect>>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<InitConnect>::new(TargetReactor::Reactor))
     }
 }
 
+// %s/FunctionHandler::from(i_to_e::<[^<]* \(.*\)>())/IToE::<\1>::new()/g
 struct HostLink {
     clients: HashMap<PlayerId, ReactorID>,
 }
@@ -129,13 +130,11 @@ struct HostLink {
 impl HostLink {
     fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self { clients })
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, Start>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, Res<State>>()))
+            .internal_handler(IToE::<PlayerMsg>::new())
+            .internal_handler(IToE::<Start>::new())
+            .internal_handler(IToE::<Res<State>>::new())
+            .external_handler(EToI::<Req<State>>::new(TargetReactor::Reactor))
             .external_handler(FunctionHandler::from(Self::handle_from_host))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, Req<State>>(
-                TargetReactor::Reactor,
-            )))
     }
 
     fn handle_from_host(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {

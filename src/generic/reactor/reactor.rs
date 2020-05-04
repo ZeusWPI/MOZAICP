@@ -304,7 +304,9 @@ where
                 Poll::Pending => {
                     while let Some(op) = this.inner_ops.pop_back() {
                         match op {
-                            InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
+                            InnerOp::OpenLink(id, spawner, cascade) => {
+                                this.open_link(id, spawner, cascade)
+                            }
                             InnerOp::CloseLink(id) => this.close_link(id),
                         }
                     }
