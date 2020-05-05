@@ -77,7 +77,7 @@ pub enum Operation<K, M> {
     InternalMessage(K, M, TargetReactor),
     ExternalMessage(ReactorID, K, M),
     Close(),
-    OpenLink(ReactorID, LinkSpawner<K, M>),
+    OpenLink(ReactorID, LinkSpawner<K, M>, bool),
     CloseLink(ReactorID),
 }
 

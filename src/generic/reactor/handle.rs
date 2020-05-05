@@ -1,17 +1,14 @@
-use super::InnerOp;
 use crate::generic::{
     BrokerHandle, CoreParams, IntoMessage, LinkSpawner, Operation, ReactorID, ReactorState, Sender,
     SenderHandle, TargetReactor,
 };
 
-use std::collections::VecDeque;
 use std::hash::Hash;
 
 /// Handle to the reactor, managing operation and messages
 pub struct ReactorHandle<'a, K, M> {
     chan: &'a Sender<K, M>,
     id: &'a ReactorID,
-    inner_ops: &'a mut VecDeque<InnerOp<K, M>>,
     broker: &'a mut BrokerHandle<K, M>,
 }
 
@@ -19,13 +16,11 @@ impl<'a, K, M> ReactorHandle<'a, K, M> {
     pub fn new(
         chan: &'a Sender<K, M>,
         id: &'a ReactorID,
-        inner_ops: &'a mut VecDeque<InnerOp<K, M>>,
         broker: &'a mut BrokerHandle<K, M>,
     ) -> Self {
         ReactorHandle {
             chan,
             id,
-            inner_ops,
             broker,
         }
     }
@@ -41,8 +36,9 @@ where
     where
         L: Into<LinkSpawner<K, M>>,
     {
-        self.inner_ops
-            .push_back(InnerOp::OpenLink(target, spawner.into(), cascade));
+        if self.chan.unbounded_send(Operation::OpenLink(target, spawner.into(), cascade)).is_err() {
+            info!("Couldn't send open link operation");
+        }
     }
 
     pub fn open_reactor_like<O, Fut: Future<Output = O> + Send + 'static>(

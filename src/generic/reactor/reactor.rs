@@ -6,7 +6,7 @@ use crate::graph;
 
 use tracing::{instrument, Span};
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap};
 use std::hash::Hash;
 
 use futures::stream::Stream;
@@ -18,7 +18,7 @@ use std::pin::Pin;
 /// This does not borrow the entire Reactor like a function would
 macro_rules! reactorHandle {
     ($e:expr) => {
-        ReactorHandle::new(&$e.channels.0, &$e.id, &mut $e.inner_ops, &mut $e.broker);
+        ReactorHandle::new(&$e.channels.0, &$e.id, &mut $e.broker);
     };
 }
 
@@ -67,7 +67,7 @@ where
 
     channels: (Sender<K, M>, Receiver<K, M>),
 
-    inner_ops: VecDeque<InnerOp<K, M>>,
+    // inner_ops: VecDeque<InnerOp<K, M>>,
 }
 
 impl<S, K, M> Reactor<S, K, M>
@@ -91,7 +91,7 @@ where
             msg_handlers,
             links: HashMap::new(),
             channels,
-            inner_ops: VecDeque::new(),
+            // inner_ops: VecDeque::new(),
         }
     }
 
@@ -249,6 +249,21 @@ where
         // Stop Future
         self.channels.1.close();
     }
+
+    fn handle_operation(&mut self, op: Operation<K, M>) {
+        match op {
+            Operation::InternalMessage(id, msg, target) => {
+                self.handle_internal_msg(id, msg, target)
+            }
+            Operation::ExternalMessage(target, id, msg) => {
+                self.handle_external_msg(target, id, msg)
+            }
+            Operation::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
+
+            Operation::CloseLink(id) => self.close_link(id),
+            Operation::Close() => self.close(),
+        }
+    }
 }
 
 impl<S, K, M> Reactor<S, K, M>
@@ -262,11 +277,8 @@ where
 
         self.state.init(&mut handle);
 
-        while let Some(op) = self.inner_ops.pop_back() {
-            match op {
-                InnerOp::OpenLink(id, spawner, cascade) => self.open_link(id, spawner, cascade),
-                InnerOp::CloseLink(id) => self.close_link(id),
-            }
+        while let Ok(Some(op)) = self.channels.1.try_next() {
+            self.handle_operation(op);
         }
     }
 }
@@ -289,27 +301,9 @@ where
             match Stream::poll_next(Pin::new(&mut this.channels.1), ctx) {
                 Poll::Ready(v) => match v {
                     None => break,
-                    Some(item) => match item {
-                        Operation::InternalMessage(id, msg, target) => {
-                            this.handle_internal_msg(id, msg, target)
-                        }
-                        Operation::ExternalMessage(target, id, msg) => {
-                            this.handle_external_msg(target, id, msg)
-                        }
-                        Operation::CloseLink(id) => this.close_link(id),
-                        Operation::Close() => this.close(),
-                        _ => unimplemented!(),
-                    },
+                    Some(item) => this.handle_operation(item),
                 },
-                Poll::Pending => {
-                    while let Some(op) = this.inner_ops.pop_back() {
-                        match op {
-                            InnerOp::OpenLink(id, spawner, cascade) => this.open_link(id, spawner, cascade),
-                            InnerOp::CloseLink(id) => this.close_link(id),
-                        }
-                    }
-                    return Poll::Pending;
-                }
+                Poll::Pending => return Poll::Pending,
             }
         }
 
