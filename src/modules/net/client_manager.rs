@@ -1,3 +1,4 @@
+use super::ClientControllerBuilder;
 use crate::generic::*;
 use crate::modules::net::types::*;
 use crate::modules::types::*;
@@ -10,10 +11,15 @@ use std::any;
 use std::collections::HashMap;
 use std::pin::Pin;
 
+pub type SpawnCC =
+    Arc<Box<dyn ClientControllerBuilder<any::TypeId, Message> + 'static + Send + Sync>>;
+
 #[derive(Clone)]
 pub struct RegisterGame {
     pub game: u64,
+    pub ag_id: ReactorID,
     pub players: HashMap<u64, (PlayerId, ReactorID)>,
+    pub free_client: Option<(u64, SpawnCC)>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +75,7 @@ pub struct RegisterEndpoint(pub ReactorID);
 
 pub struct ClientManager {
     clients: HashMap<u64, (PlayerId, ReactorID)>,
+    extra_ccs: HashMap<u64, SpawnCC>,
     game_manager: ReactorID,
     endpoints: Vec<RegisterEndpoint>,
 }
@@ -81,6 +88,7 @@ impl ClientManager {
         let me = Self {
             game_manager,
             clients: HashMap::new(),
+            extra_ccs: HashMap::new(),
             endpoints: endpoints.iter().map(|x| RegisterEndpoint(*x)).collect(),
         };
 
@@ -106,6 +114,14 @@ impl ClientManager {
                 });
             handle.open_link(*cc, cc_params, false)
         }
+
+        if let Some((id, spawn_cc)) = &cs.free_client {
+            self.extra_ccs.insert(*id, spawn_cc.clone());
+        }
+
+        let agg_params = LinkParams::new(())
+            .internal_handler(FunctionHandler::from(i_to_e::<(), NewClientController>()));
+        handle.open_link(cs.ag_id, agg_params, false);
     }
 
     fn handle_cc_close(&mut self, _: &mut ReactorHandle<any::TypeId, Message>, id: &ReactorID) {
@@ -147,19 +163,50 @@ impl ClientManager {
         let mut reg = reg.lock().unwrap();
         let reg = std::mem::replace(&mut *reg, None);
 
-        if let Some(SpawnPlayer {  register: Register { id, name }, builder }) = reg {
-            if let Some((player, cc)) = self.clients.get(&id) {
+        if let Some(SpawnPlayer {
+            register: Register { id, name },
+            builder,
+        }) = reg
+        {
+            let maybe_player = self.clients.get(&id).cloned().or_else(|| {
+                if let Some(spawn_cc) = self.extra_ccs.get(&id) {
+                    // No client controller found, but we have to build extra!
+                    let self_id = *handle.id();
+                    let (ket, player, reactor_id, host_id) =
+                        spawn_cc.build(handle.into_spawner(), self_id);
+
+                    handle.send_internal(
+                        NewClientController(player, reactor_id),
+                        TargetReactor::Link(host_id),
+                    );
+
+                    self.clients.insert(ket, (player, reactor_id));
+
+                    let cc_params = LinkParams::new(())
+                        .internal_handler(FunctionHandler::from(i_to_e::<(), Accepted>()))
+                        .closer(|_, handle| {
+                            handle.send_internal(*handle.target_id(), TargetReactor::Reactor);
+                        });
+                    handle.open_link(reactor_id, cc_params, false);
+
+                    Some((player, reactor_id))
+                } else {
+                    None
+                }
+            });
+
+            if let Some((player, cc)) = maybe_player {
                 let id = ReactorID::rand();
-                let (chan, fut, handler_name) = builder(id, handle.get(cc));
+                let (chan, fut, handler_name) = builder(id, handle.get(&cc));
                 handle.open_reactor_like(id, chan, fut, handler_name);
 
                 let accept = Accepted {
-                    player: *player,
+                    player: player,
                     name,
                     client_id: id,
-                    contr_id: *cc,
+                    contr_id: cc,
                 };
-                handle.send_internal(accept.clone(), TargetReactor::Link(*cc));
+                handle.send_internal(accept.clone(), TargetReactor::Link(cc));
             }
         }
     }

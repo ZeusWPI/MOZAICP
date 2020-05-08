@@ -70,7 +70,7 @@ pub mod request {
 
     #[derive(Clone, Debug)]
     pub enum Connect {
-        Connected(PlayerId, String),
+        Connected(PlayerId, String),    // TODO: make vec because of new cc
         Reconnecting(PlayerId, String),
         Waiting(PlayerId, u64),
         Request,

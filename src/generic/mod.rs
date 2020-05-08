@@ -10,7 +10,7 @@ mod broker;
 mod link;
 mod reactor;
 mod types;
-pub use broker::BrokerHandle;
+pub use broker::{BrokerHandle, SpawnHandle};
 
 pub use self::link::{Link, LinkHandle, LinkParams};
 pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState, TargetReactor};

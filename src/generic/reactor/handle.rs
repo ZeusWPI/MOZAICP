@@ -1,6 +1,6 @@
 use crate::generic::{
     BrokerHandle, CoreParams, IntoMessage, LinkSpawner, Operation, ReactorID, ReactorState, Sender,
-    SenderHandle, TargetReactor,
+    SenderHandle, TargetReactor, SpawnHandle,
 };
 
 use std::hash::Hash;
@@ -77,6 +77,10 @@ where
         SenderHandle {
             sender: self.chan.clone(),
         }
+    }
+
+    pub fn into_spawner(&'a self) -> SpawnHandle<'a, K, M> {
+        self.broker.into_spawner()
     }
 }
 

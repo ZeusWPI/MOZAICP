@@ -1,9 +1,3 @@
-use super::types::*;
-mod types;
-pub use types::Register;
-
-pub mod client_controller;
-
 /// So, networking and things
 ///
 /// Registering is the act of sending a specific client key.
@@ -31,8 +25,14 @@ pub mod client_controller;
 /// +---------+--spawn------------------------>| ClientStream |             | ClientController |
 ///                                            +--------------+------------>+------------------+
 ///
+use super::types::*;
+mod types;
+pub use types::Register;
+
+pub mod client_controller;
+
 mod client_manager;
-pub use client_manager::{ClientManager, PlayerUUIDs, RegisterGame, SpawnPlayer};
+pub use client_manager::{ClientManager, PlayerUUIDs, RegisterGame, SpawnCC, SpawnPlayer};
 
 mod tcp_endpoint;
 pub use tcp_endpoint::TcpEndpoint;
@@ -43,6 +43,7 @@ pub use tcp_endpoint::TcpEndpoint;
 use crate::generic::*;
 use futures::future::Future;
 use std::any;
+use std::hash::Hash;
 use std::pin::Pin;
 
 pub trait EndpointBuilder {
@@ -54,6 +55,18 @@ pub trait EndpointBuilder {
         Sender<any::TypeId, Message>,
         Pin<Box<dyn Future<Output = Option<()>> + Send>>,
     );
+}
+
+pub trait ClientControllerBuilder<K, M>
+where
+    K: 'static + Eq + Hash + Send + Unpin,
+    M: 'static + Send,
+{
+    fn build<'a>(
+        &self,
+        spawn: SpawnHandle<'a, K, M>,
+        cm_id: ReactorID,
+    ) -> (u64, PlayerId, ReactorID, ReactorID);
 }
 
 // / GameManager

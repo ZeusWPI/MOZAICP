@@ -1,7 +1,10 @@
 use super::{Controller, Runner};
 
 use crate::generic::*;
-use crate::modules::net::client_controller;
+use crate::modules::net::{
+    client_controller::{self, spawner},
+    SpawnCC,
+};
 use crate::modules::types::*;
 use crate::modules::*;
 
@@ -15,27 +18,37 @@ pub type BoxedBuilder = Box<
             ReactorID,
             ReactorID,
             u64,
-        ) -> (ReactorID, HashMap<u64, (PlayerId, ReactorID)>)
-        + Send,
+        ) -> (
+            ReactorID,
+            ReactorID,
+            HashMap<u64, (PlayerId, ReactorID)>,
+            Option<(u64, SpawnCC)>,
+        ) + Send,
 >;
 
-pub struct Builder<G> {
+pub struct Builder<G, S: spawner::IntoSpawner<any::TypeId, Message>> {
     steplock: Option<StepLock>,
     players: Vec<PlayerId>,
     game: G,
+    free_client: Option<(u64, S)>,
 }
 
-impl<G: Clone> Clone for Builder<G> {
+impl<G: Clone, S: Clone + spawner::IntoSpawner<any::TypeId, Message>> Clone for Builder<G, S> {
     fn clone(&self) -> Self {
         Self {
             steplock: self.steplock.clone(),
             players: self.players.clone(),
             game: self.game.clone(),
+            free_client: self.free_client.clone(),
         }
     }
 }
 
-impl<G: Controller + Send + 'static> Builder<G> {
+impl<
+        G: Controller + Send + 'static,
+        S: spawner::IntoSpawner<any::TypeId, Message> + Send + 'static,
+    > Builder<G, S>
+{
     /// When called, you might want to wait a little
     /// It is a known but that not all connections are established
     /// right away.
@@ -45,11 +58,17 @@ impl<G: Controller + Send + 'static> Builder<G> {
             players,
             steplock: None,
             game,
+            free_client: None,
         }
     }
 
     pub fn with_step_lock(mut self, lock: StepLock) -> Self {
         self.steplock = Some(lock);
+        self
+    }
+
+    pub fn with_free_client(mut self, id: u64, spawner: S) -> Self {
+        self.free_client = Some((id, spawner));
         self
     }
 
@@ -60,7 +79,12 @@ impl<G: Controller + Send + 'static> Builder<G> {
         cm_id: ReactorID,
         logger_id: ReactorID,
         id: u64,
-    ) -> (ReactorID, HashMap<u64, (PlayerId, ReactorID)>) {
+    ) -> (
+        ReactorID,
+        ReactorID,
+        HashMap<u64, (PlayerId, ReactorID)>,
+        Option<(u64, SpawnCC)>,
+    ) {
         let game_id = ReactorID::rand();
         let step_id = ReactorID::rand();
         let agg_id = ReactorID::rand();
@@ -70,7 +94,8 @@ impl<G: Controller + Send + 'static> Builder<G> {
             .iter()
             .map(|&x| {
                 let key = rand::random();
-                let params = client_controller::ClientController::params(cm_id, agg_id, x, key);
+                let params =
+                    client_controller::ClientController::params(cm_id, agg_id, x, key, true);
                 let id = broker.spawn(params, None);
                 (key, (x, id))
             })
@@ -94,6 +119,7 @@ impl<G: Controller + Send + 'static> Builder<G> {
             } else {
                 game_id
             },
+            cm_id,
             players.values().cloned().collect(),
         );
 
@@ -104,12 +130,22 @@ impl<G: Controller + Send + 'static> Builder<G> {
 
         broker.spawn(agg, Some(agg_id));
 
-        (game_id, players)
+        let free_client = self
+            .free_client
+            .map(|(id, fc)| (id, fc.into_spawner(agg_id)));
+
+        (game_id, agg_id, players, free_client)
     }
 }
 
-impl<G: Controller + Send + 'static> Into<BoxedBuilder> for Builder<G> {
+impl<
+        G: Controller + Send + 'static,
+        S: spawner::IntoSpawner<any::TypeId, Message> + Send + 'static,
+    > Into<BoxedBuilder> for Builder<G, S>
+{
     fn into(self) -> BoxedBuilder {
-        Box::new(|broker, gm_id, cm_id, logger_id, id| self.build(broker, gm_id, cm_id, logger_id, id))
+        Box::new(|broker, gm_id, cm_id, logger_id, id| {
+            self.build(broker, gm_id, cm_id, logger_id, id)
+        })
     }
 }

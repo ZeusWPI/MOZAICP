@@ -13,6 +13,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use serde_json::Value;
 use std::time;
 
+use mozaic::modules::client_controller::spawner::SpawnerBuilder;
 use mozaic::modules::game;
 use mozaic::modules::types::*;
 
@@ -59,17 +60,14 @@ impl game::Controller for Echo {
             if "stop".eq_ignore_ascii_case(&msg) {
                 sub.push(HostMsg::kick(id));
                 self.clients = self.clients.iter().cloned().filter(|&x| x != id).collect();
-                println!("{:?}", self.clients);
             }
 
-            for target in &self.clients {
-                sub.push(HostMsg::Data(
-                    Data {
-                        value: format!("{}: {}\n", id, msg),
-                    },
-                    Some(*target),
-                ));
-            }
+            sub.push(HostMsg::Data(
+                Data {
+                    value: format!("{}: {}\n", id, msg),
+                },
+                None,
+            ));
         }
 
         sub
@@ -123,6 +121,7 @@ async fn main() -> std::io::Result<()> {
             };
 
             game::Builder::new(players.clone(), game)
+                .with_free_client(0, SpawnerBuilder::new(false))
         };
         async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 

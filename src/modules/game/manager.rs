@@ -1,7 +1,7 @@
 use super::builder::BoxedBuilder;
 use crate::generic::*;
-use crate::modules::net::{RegisterGame};
 use crate::modules::logger::GameJoin;
+use crate::modules::net::RegisterGame;
 
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::channel::oneshot;
@@ -16,8 +16,8 @@ use std::any;
 pub mod builder {
     use super::Manager;
     use crate::generic::*;
-    use crate::modules::{ClientManager, EndpointBuilder};
     use crate::modules::logger::*;
+    use crate::modules::{ClientManager, EndpointBuilder};
 
     use futures::executor::ThreadPool;
     use futures::future::RemoteHandle;
@@ -83,7 +83,11 @@ pub mod builder {
 
     use serde_json::Value;
     impl<I> Builder<I, ToInsert> {
-        pub fn set_logger<H: LogHandler<Value> + Send + 'static>(self, handler: H, tp: ThreadPool) -> Builder<I, Inserted> {
+        pub fn set_logger<H: LogHandler<Value> + Send + 'static>(
+            self,
+            handler: H,
+            tp: ThreadPool,
+        ) -> Builder<I, Inserted> {
             let Builder {
                 pd: _,
                 broker,
@@ -108,7 +112,11 @@ pub mod builder {
     }
 
     impl Builder<Inserted, ToInsert> {
-        pub async fn build<P: AsRef<async_std::path::Path> + Send>(self, p: P, tp: ThreadPool) -> Option<Manager> {
+        pub async fn build<P: AsRef<async_std::path::Path> + Send>(
+            self,
+            p: P,
+            tp: ThreadPool,
+        ) -> Option<Manager> {
             let log_handler = DefaultLogHandler::new(p).await?;
             Some(self.set_logger(log_handler, tp).build())
         }
@@ -161,7 +169,12 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn builder(pool: ThreadPool) -> (Builder<builder::ToInsert, builder::ToInsert>, RemoteHandle<()>) {
+    pub fn builder(
+        pool: ThreadPool,
+    ) -> (
+        Builder<builder::ToInsert, builder::ToInsert>,
+        RemoteHandle<()>,
+    ) {
         Builder::new(pool)
     }
 
@@ -316,12 +329,20 @@ impl GameManagerFuture {
 
     fn handle_gamebuilder(&mut self, uuid: UUID, builder: BoxedBuilder) {
         let game_uuid = rand::random();
-        let (game_id, players) = builder(self.broker.clone(), self.id, self.cm_id, self.logger_id, game_uuid);
+        let (game_id, ag_id, players, free_client) = builder(
+            self.broker.clone(),
+            self.id,
+            self.cm_id,
+            self.logger_id,
+            game_uuid,
+        );
         self.cm_chan.send(
             self.id,
             RegisterGame {
                 game: game_uuid,
+                ag_id,
                 players,
+                free_client,
             },
         );
         info!(%game_id, "Spawning game");
@@ -335,9 +356,11 @@ impl GameManagerFuture {
     fn handle_state(&mut self, uuid: UUID, game: GameID) {
         if let Some(ch) = self.games.get(&game) {
             match ch {
-                Ok(ch) => if ch.send(self.id, Req(uuid, State::Request)).is_none() {
-                    self.send_msg(uuid, GameOpRes::State(None));
-                },
+                Ok(ch) => {
+                    if ch.send(self.id, Req(uuid, State::Request)).is_none() {
+                        self.send_msg(uuid, GameOpRes::State(None));
+                    }
+                }
                 Err(resolved) => {
                     let res = resolved.clone();
                     self.send_msg(uuid, GameOpRes::State(Some(Err(res))));

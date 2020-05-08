@@ -1,3 +1,4 @@
+use super::ClientControllerBuilder;
 use crate::generic::*;
 use crate::modules::aggregator::InitConnect;
 use crate::modules::net::types::*;
@@ -18,6 +19,8 @@ pub struct ClientController {
 
     buffer: VecDeque<Data>,
     key: u64,
+
+    try_reconnect: bool,
 }
 
 impl ClientController {
@@ -26,6 +29,7 @@ impl ClientController {
         host: ReactorID,
         client_id: PlayerId,
         key: u64,
+        try_reconnect: bool,
     ) -> CoreParams<Self, any::TypeId, Message> {
         CoreParams::new(Self {
             client_manager,
@@ -35,6 +39,7 @@ impl ClientController {
             client: None,
             buffer: VecDeque::new(),
             key,
+            try_reconnect,
         })
         .handler(FunctionHandler::from(Self::handle_host_msg))
         .handler(FunctionHandler::from(Self::handle_client_msg))
@@ -142,6 +147,10 @@ impl ClientController {
             },
             TargetReactor::Link(self.host),
         );
+
+        if !self.try_reconnect {
+            handle.close();
+        }
     }
 
     fn flush_msgs(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>) {
@@ -175,5 +184,66 @@ impl ReactorState<any::TypeId, Message> for ClientController {
                 TargetReactor::Reactor,
             )));
         handle.open_link(self.client_manager, cm_link_params, true);
+    }
+}
+
+pub mod spawner {
+    use super::{super::SpawnCC, ClientController, ClientControllerBuilder};
+    use crate::generic::*;
+    use crate::modules::types::PlayerId;
+    use std::any;
+    use std::hash::Hash;
+    use std::sync::Arc;
+
+    pub trait IntoSpawner<K, M>
+    where
+        K: 'static + Eq + Hash + Send + Unpin,
+        M: 'static + Send,
+    {
+        fn into_spawner(
+            self,
+            agg_id: ReactorID,
+        ) -> Arc<Box<dyn ClientControllerBuilder<K, M> + 'static + Send + Sync>>;
+    }
+
+    #[derive(Clone)]
+    pub struct SpawnerBuilder {
+        try_reconnect: bool,
+    }
+
+    impl SpawnerBuilder {
+        pub fn new(try_reconnect: bool) -> Self {
+            Self { try_reconnect }
+        }
+    }
+
+    impl IntoSpawner<any::TypeId, Message> for SpawnerBuilder {
+        fn into_spawner(self, agg_id: ReactorID) -> SpawnCC {
+            Arc::new(Box::new(Spawner {
+                agg_id,
+                try_reconnect: self.try_reconnect,
+            }))
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct Spawner {
+        agg_id: ReactorID,
+        try_reconnect: bool,
+    }
+
+    impl ClientControllerBuilder<any::TypeId, Message> for Spawner {
+        fn build<'a>(
+            &self,
+            spawn: SpawnHandle<'a, any::TypeId, Message>,
+            cm_id: ReactorID,
+        ) -> (u64, PlayerId, ReactorID, ReactorID) {
+            let key = rand::random();
+            let player: PlayerId = rand::random();
+            let params =
+                ClientController::params(cm_id, self.agg_id, player, key, self.try_reconnect);
+            let reactor_id = spawn.spawn(params);
+            (key, player, reactor_id, self.agg_id)
+        }
     }
 }

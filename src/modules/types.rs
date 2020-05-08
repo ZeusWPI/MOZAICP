@@ -1,3 +1,4 @@
+use crate::generic::ReactorID;
 use serde::{Deserialize, Serialize};
 
 pub type PlayerId = u64;
@@ -8,12 +9,6 @@ pub struct PlayerMsg {
     pub id: PlayerId,
     pub data: Option<Data>,
 }
-
-// #[derive(Serialize, Deserialize, Clone, Key, Debug)]
-// pub struct HostData {
-//     pub value: String,
-//     pub target: Option<PlayerId>,
-// }
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub enum HostMsg {
@@ -53,3 +48,8 @@ pub struct ClientStateUpdate {
     pub id: PlayerId,
     pub state: ClientState,
 }
+
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub struct NewClientController(pub PlayerId, pub ReactorID);
+#[derive(Serialize, Deserialize, Clone, Key, Debug)]
+pub struct ClientControllerDisconnect(pub PlayerId);

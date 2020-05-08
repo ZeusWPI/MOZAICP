@@ -168,6 +168,10 @@ impl<K, M> BrokerHandle<K, M> {
         self.set(id, sender);
         self.spawn_fut(id, name, fut);
     }
+
+    pub fn into_spawner<'a>(&'a self) -> SpawnHandle<'a, K, M> {
+        SpawnHandle(self)
+    }
 }
 
 use crate::graph;
@@ -206,5 +210,21 @@ where
         SenderHandle {
             sender: self.get(target),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct SpawnHandle<'a, K, M>(&'a BrokerHandle<K, M>);
+
+impl<'a, K, M> SpawnHandle<'a, K, M>
+where
+    K: 'static + Eq + Hash + Send + Unpin,
+    M: 'static + Send,
+{
+    pub fn spawn<S: 'static + Send + ReactorState<K, M> + Unpin>(
+        &self,
+        params: CoreParams<S, K, M>,
+    ) -> ReactorID {
+        self.0.spawn(params, None)
     }
 }

@@ -10,6 +10,7 @@ pub struct InitConnect(pub PlayerId, pub String);
 
 pub struct Aggregator {
     host_id: ReactorID,
+    cm_id: ReactorID,
     clients: HashMap<PlayerId, ReactorID>,
 
     init_connected: HashMap<PlayerId, Option<String>>,
@@ -19,10 +20,12 @@ pub struct Aggregator {
 impl Aggregator {
     pub fn params(
         host_id: ReactorID,
+        cm_id: ReactorID,
         clients: HashMap<PlayerId, ReactorID>,
     ) -> CoreParams<Self, any::TypeId, Message> {
         CoreParams::new(Aggregator {
             host_id,
+            cm_id,
             init_connected: clients.keys().map(|x| (*x, None)).collect(),
             clients,
             current_requests: HashMap::new(),
@@ -30,6 +33,13 @@ impl Aggregator {
         .handler(FunctionHandler::from(Self::handle_state_req))
         .handler(FunctionHandler::from(Self::handle_conn))
         .handler(FunctionHandler::from(Self::handle_init_connect))
+        .handler(FunctionHandler::from(Self::handle_host_msg))
+        .handler(FunctionHandler::from(
+            Self::handle_register_client_controller,
+        ))
+        .handler(FunctionHandler::from(
+            Self::handle_disconnect_client_controller,
+        ))
     }
 
     fn handle_init_connect(
@@ -97,6 +107,45 @@ impl Aggregator {
             handle.send_internal(Req(req.0, Connect::Request), TargetReactor::Link(*id));
         }
     }
+
+    fn handle_host_msg(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, msg: &HostMsg) {
+        let target = match msg {
+            HostMsg::Data(_, id) => id.clone(),
+            HostMsg::Kick(id) => Some(*id),
+        };
+
+        if let Some(player_id) = target {
+            if let Some(target) = self.clients.get(&player_id) {
+                handle.send_internal(msg.clone(), TargetReactor::Link(*target));
+            }
+        } else {
+            handle.send_internal(msg.clone(), TargetReactor::Links);
+        }
+    }
+
+    fn handle_register_client_controller(
+        &mut self,
+        handle: &mut ReactorHandle<any::TypeId, Message>,
+        NewClientController(player, reactor): &NewClientController,
+    ) {
+        self.clients.insert(*player, *reactor);
+        let p = *player;
+        handle.open_link(
+            *reactor,
+            ClientLink::params(self.host_id).closer(move |_state, handle| {
+                handle.send_internal(ClientControllerDisconnect(p), TargetReactor::Reactor)
+            }),
+            false,
+        )
+    }
+
+    fn handle_disconnect_client_controller(
+        &mut self,
+        _handle: &mut ReactorHandle<any::TypeId, Message>,
+        ClientControllerDisconnect(player): &ClientControllerDisconnect,
+    ) {
+        self.clients.remove(player);
+    }
 }
 
 impl ReactorState<any::TypeId, Message> for Aggregator {
@@ -106,7 +155,8 @@ impl ReactorState<any::TypeId, Message> for Aggregator {
         for client_id in self.clients.values() {
             handle.open_link(*client_id, ClientLink::params(self.host_id), false);
         }
-        handle.open_link(self.host_id, HostLink::params(self.clients.clone()), true);
+        handle.open_link(self.host_id, HostLink::params(), true);
+        handle.open_link(self.cm_id, CMLink::params(), true);
     }
 }
 
@@ -131,35 +181,31 @@ impl ClientLink {
     }
 }
 
-struct HostLink {
-    clients: HashMap<PlayerId, ReactorID>,
-}
-
+struct HostLink;
 impl HostLink {
-    fn params(clients: HashMap<PlayerId, ReactorID>) -> LinkParams<Self, any::TypeId, Message> {
-        LinkParams::new(Self { clients })
+    fn params() -> LinkParams<Self, any::TypeId, Message> {
+        LinkParams::new(Self)
             .internal_handler(FunctionHandler::from(i_to_e::<Self, ClientStateUpdate>()))
             .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
             .internal_handler(FunctionHandler::from(i_to_e::<Self, Start>()))
             .internal_handler(FunctionHandler::from(i_to_e::<Self, Res<State>>()))
-            .external_handler(FunctionHandler::from(Self::handle_from_host))
+            .external_handler(FunctionHandler::from(e_to_i::<Self, HostMsg>(
+                TargetReactor::Reactor,
+            )))
             .external_handler(FunctionHandler::from(e_to_i::<Self, Req<State>>(
                 TargetReactor::Reactor,
             )))
     }
+}
 
-    fn handle_from_host(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &HostMsg) {
-        let target = match e {
-            HostMsg::Data(_, id) => id.clone(),
-            HostMsg::Kick(id) => Some(*id),
-        };
-
-        if let Some(player_id) = target {
-            if let Some(target) = self.clients.get(&player_id) {
-                handle.send_internal(e.clone(), TargetReactor::Link(*target));
-            }
-        } else {
-            handle.send_internal(e.clone(), TargetReactor::Links);
-        }
+struct CMLink;
+impl CMLink {
+    fn params() -> LinkParams<Self, any::TypeId, Message> {
+        LinkParams::new(Self).external_handler(FunctionHandler::from(e_to_i::<
+            Self,
+            NewClientController,
+        >(
+            TargetReactor::Reactor
+        )))
     }
 }
