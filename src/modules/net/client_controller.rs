@@ -97,6 +97,9 @@ impl ClientController {
     }
 
     fn handle_conn(&mut self, handle: &mut ReactorHandle<any::TypeId, Message>, accept: &Accepted) {
+        // TODO: fix These messages InitConnect and ClientStateUpdate cause errors in the aggregator
+        //       when spawning new cc for the incoming connection
+
         if self.client_name.is_none() {
             handle.send_internal(
                 InitConnect(self.client_id, accept.name.clone()),

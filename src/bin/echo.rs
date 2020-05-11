@@ -28,28 +28,24 @@ struct Echo {
 impl game::Controller for Echo {
     fn on_connect(&mut self, player: PlayerId) -> Vec<HostMsg> {
         let mut out = Vec::new();
-        for target in &self.clients {
-            out.push(HostMsg::Data(
-                Data {
-                    value: format!("{} connected\n", player),
-                },
-                Some(*target),
-            ));
-        }
+        out.push(HostMsg::Data(
+            Data {
+                value: format!("{} connected\n", player),
+            },
+            None,
+        ));
         out
     }
 
     fn on_disconnect(&mut self, player: PlayerId) -> Vec<HostMsg> {
         println!("{} disconnected", player);
         let mut out = Vec::new();
-        for target in &self.clients {
-            out.push(HostMsg::Data(
-                Data {
-                    value: format!("{} disconnected\n", player),
-                },
-                Some(*target),
-            ));
-        }
+        out.push(HostMsg::Data(
+            Data {
+                value: format!("{} disconnected\n", player),
+            },
+            None,
+        ));
         out
     }
 
