@@ -2,6 +2,7 @@ use crate::generic::{FromMessage, IntoMessage};
 use std::any::TypeId;
 use std::sync::atomic::AtomicPtr;
 
+// messages, je stuurt ze.
 pub struct Message {
     ptr: AtomicPtr<u8>,
     type_id: TypeId,
