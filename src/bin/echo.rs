@@ -25,27 +25,37 @@ struct Echo {
 }
 
 impl game::Controller for Echo {
-    fn step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
-        let mut sub = Vec::new();
-        for PlayerMsg { id, data } in turns {
-            let msg = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
-            if "stop".eq_ignore_ascii_case(&msg) {
-                sub.push(HostMsg::kick(id));
+    // this function executes a game step
+    fn step(&mut self,
+            // player messages received for this timestep
+            player_messages: Vec<PlayerMsg>,
+    ) -> Vec<HostMsg>
+    {
+        // collect messages produced in this timestep
+        let mut messages = Vec::new();
+
+        for PlayerMsg { id, data } in player_messages {
+            let message_content = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
+            if "stop".eq_ignore_ascii_case(&message_content) {
+                // kick the quitting client
+                messages.push(HostMsg::kick(id));
+                // print remaining clients
                 self.clients = self.clients.iter().cloned().filter(|&x| x != id).collect();
                 println!("{:?}", self.clients);
             }
 
-            for target in &self.clients {
-                sub.push(HostMsg::Data(
+            // echo the recieved message to all clients
+            for client in &self.clients {
+                messages.push(HostMsg::Data(
                     Data {
-                        value: format!("{}: {}\n", id, msg),
+                        value: format!("{}: {}\n", id, message_content),
                     },
-                    Some(*target),
+                    Some(*client),
                 ));
             }
         }
 
-        sub
+        return messages;
     }
 
     fn state(&mut self) -> Value {
@@ -71,7 +81,7 @@ use std::collections::VecDeque;
 
 #[async_std::main]
 async fn main() -> std::io::Result<()> {
-    let fut = graph::set_default();
+    let graph = graph::set_default();
 
     let sub = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
@@ -79,7 +89,7 @@ async fn main() -> std::io::Result<()> {
     tracing::subscriber::set_global_default(sub).unwrap();
     {
         let pool = ThreadPool::builder().create().unwrap();
-        pool.spawn_ok(fut.map(|_| ()));
+        pool.spawn_ok(graph.map(|_| ()));
 
         let (gmb, handle) = game::Manager::builder(pool.clone());
         let ep = TcpEndpoint::new("127.0.0.1:6666".parse().unwrap(), pool.clone());
@@ -97,6 +107,8 @@ async fn main() -> std::io::Result<()> {
 
             game::Builder::new(players.clone(), game)
         };
+
+        // goat sacrifice to satisfy the heisenbug gods
         async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 
         games.push_back(gm.start_game(game_builder.clone()).await.unwrap());
