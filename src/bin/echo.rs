@@ -86,7 +86,7 @@ impl game::Controller for Echo {
 }
 
 use mozaic::graph;
-use mozaic::modules::net::TcpEndpoint;
+use mozaic::modules::net::{TcpEndpoint, UdpEndpoint};
 
 use std::collections::VecDeque;
 
@@ -103,9 +103,11 @@ async fn main() -> std::io::Result<()> {
         pool.spawn_ok(fut.map(|_| ()));
 
         let (gmb, handle) = game::Manager::builder(pool.clone());
-        let ep = TcpEndpoint::new("127.0.0.1:6666".parse().unwrap(), pool.clone());
+        let ep_tcp = TcpEndpoint::new("127.0.0.1:6666".parse().unwrap(), pool.clone());
+        let ep_udp = UdpEndpoint::new("127.0.0.1:6667".parse().unwrap());
 
-        let gmb = gmb.add_endpoint(ep, "TCP endpoint");
+        let gmb = gmb.add_endpoint(ep_tcp, "TCP endpoint");
+        let gmb = gmb.add_endpoint(ep_udp, "UDP endpoint");
         let gm = gmb.build("game.ini", pool.clone()).await.unwrap();
 
         let mut games = VecDeque::new();

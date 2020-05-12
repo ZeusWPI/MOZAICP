@@ -1,126 +1,52 @@
-// extern crate futures;
-// extern crate mozaic;
-// #[macro_use]
-// extern crate mozaic_derive;
-// #[macro_use]
-// extern crate tokio;
-// extern crate serde_json;
-// #[macro_use]
-// extern crate serde;
+#[macro_use]
+extern crate futures;
+extern crate async_std;
 
-// use std::{any, env, time};
+use async_std::task::sleep;
+use futures::prelude::*;
+use futures::Future;
+use futures::task::{Context, Poll};
+use futures::stream::FuturesUnordered;
 
-// use mozaic::generic;
-// use mozaic::generic::*;
+use std::pin::Pin;
+use std::time::Duration;
 
-// use mozaic::modules::{ClientController, ConnectionManager};
+fn time(sec: u64) -> Box<dyn Future<Output=()> + Unpin> {
+    let fut = async move {
+        sleep(Duration::from_secs(sec)).await
+    };
+    Box::new(fut.boxed())
+}
 
-// use futures::executor::ThreadPool;
+#[async_std::main]
+async fn main() -> std::io::Result<()> {
+    let mut thing = FuturesUnordered::new();
+    thing.push(Fut(1, 0, time(5)));
+    thing.push(Fut(2, 0, time(2)));
+    thing.push(Fut(3, 0, time(1)));
+    thing.push(Fut(4, 0, time(0)));
 
-// #[derive(Serialize, Deserialize, Key)]
-// struct E {
-//     v: u64,
-// }
+    loop {
+        if poll!(thing.next()).is_ready() { break; }
+        sleep(Duration::from_secs(1)).await;
+        println!("LOOPING");
+    }
 
-// struct FooReactor(u64);
-// impl FooReactor {
-//     fn params(amount: u64) -> CoreParams<Self, any::TypeId, Message> {
-//         generic::CoreParams::new(FooReactor(amount))
-//     }
-// }
+    Ok(())
+}
 
-// impl ReactorState<any::TypeId, Message> for FooReactor {
-//     const NAME: &'static str = "FooReactor";
+struct Fut(usize, usize, Box<dyn Future<Output=()> + Unpin>);
 
-//     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
-//         println!("INIT");
+impl Future for Fut {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
+        println!("{}: {}", self.0, self.1);
+        self.as_mut().1 += 1;
 
-//         println!(
-//             "{}",
-//             serde_json::to_string(&Typed::from(E { v: self.0 })).unwrap()
-//         );
+        let mut fut = self.as_mut();
+        let pin = Pin::new(&mut fut.2);
+        let _ = Future::poll(pin, context);
 
-//         let id: u64 = **handle.id();
-
-//         if id == 0 {
-//             handle.open_link(1.into(), FooLink::params(), true);
-//             handle.send_internal(E { v: self.0 }, TargetReactor::Links);
-//         } else {
-//             handle.open_link(0.into(), FooLink::params(), true);
-//         }
-//     }
-// }
-
-// struct FooLink();
-// impl FooLink {
-//     fn params() -> LinkParams<FooLink, any::TypeId, Message> {
-//         LinkParams::new(FooLink())
-//             .internal_handler(FunctionHandler::from(Self::handle_message))
-//             .external_handler(FunctionHandler::from(Self::handle_message))
-//     }
-
-//     fn handle_message(&mut self, handle: &mut LinkHandle<any::TypeId, Message>, e: &E) {
-//         let e = e.v - 1;
-
-//         if e > 0 {
-//             handle.send_message(Typed::from(E { v: e }));
-//         } else {
-//             println!("Done {:?} -> {:?}", handle.source_id(), handle.target_id());
-//             handle.close_link();
-//         }
-//     }
-// }
-
-// async fn run(amount: u64, pool: ThreadPool) {
-//     let broker = BrokerHandle::new(pool.clone());
-//     let p1 = FooReactor::params(amount);
-//     let p2 = FooReactor::params(amount);
-
-//     let json_broker = BrokerHandle::new(pool.clone());
-
-//     let cm = ConnectionManager::params(
-//         pool.clone(),
-//         "127.0.0.1:6666".parse().unwrap(),
-//         json_broker.clone(),
-//         vec![(0, 5.into())].drain(..).collect(),
-//     );
-//     let cc = ClientController::new(
-//         5.into(),
-//         json_broker.clone(),
-//         broker.clone(),
-//         10.into(),
-//         100.into(),
-//         0,
-//     );
-
-//     pool.spawn_ok(cc);
-
-//     join!(
-//         broker.spawn_with_handle(p2, Some(0.into())).0,
-//         broker.spawn_with_handle(p1, Some(1.into())).0,
-//         json_broker.spawn_with_handle(cm, Some(100.into())).0,
-//     );
-// }
-
-// #[tokio::main]
-// async fn main() {
-//     let args: Vec<String> = env::args().collect();
-//     let amount = args
-//         .get(1)
-//         .and_then(|x| x.parse::<u64>().ok())
-//         .unwrap_or(10);
-
-//     {
-//         let pool = ThreadPool::builder()
-//             // .after_start(|i| println!("Starting thread {}", i))
-//             // .before_stop(|i| println!("Stopping thread {}", i))
-//             .create()
-//             .unwrap();
-
-//         run(amount, pool).await;
-//     }
-
-//     std::thread::sleep(time::Duration::from_millis(100));
-// }
-
-fn main() {}
+        Poll::Pending
+    }
+}

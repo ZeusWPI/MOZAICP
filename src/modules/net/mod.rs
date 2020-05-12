@@ -37,6 +37,9 @@ pub use client_manager::{ClientManager, PlayerUUIDs, RegisterGame, SpawnCC, Spaw
 mod tcp_endpoint;
 pub use tcp_endpoint::TcpEndpoint;
 
+mod udp_endpoint;
+pub use udp_endpoint::UdpEndpoint;
+
 // mod ws_endpoint;
 // pub use ws_endpoint::WSEndpoint;
 
