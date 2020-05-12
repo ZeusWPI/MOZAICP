@@ -22,7 +22,7 @@ pub fn set_graph<T: GraphLike + 'static>(graph: T) {
     let graph = Arc::new(graph);
 
     unsafe {
-        mem::replace(&mut GRAPH, Some(graph));
+        let _ = mem::replace(&mut GRAPH, Some(graph));
     }
 }
 
