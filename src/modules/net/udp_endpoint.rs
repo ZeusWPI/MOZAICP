@@ -5,6 +5,7 @@ use crate::modules::types::*;
 
 use futures::channel::mpsc;
 use futures::stream::StreamExt;
+use futures::task::{Poll};
 use futures::*;
 
 use async_std::net;
@@ -13,7 +14,6 @@ use std::any;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::task::Poll;
 
 enum ClientMsg {
     Start(SocketAddr, SenderHandle<any::TypeId, Message>, ReactorID),
@@ -54,6 +54,11 @@ impl UdpEndpoint {
         Pin<Box<dyn Future<Output = Option<()>> + Send>>,
     ) {
         let (tx, rx) = mpsc::unbounded();
+        // let fut = async move {
+        //     let udp = net::UdpSocket::bind(addr).await.ok()?;
+        //     UdpAcceptor::new(id, addr, rx, cm_chan, udp).await
+        // };
+
         (tx, accepting(id, addr, rx, cm_chan).boxed())
     }
 }
@@ -143,6 +148,8 @@ async fn accepting(
                 }
             }
         }
+
+        pending!()
     }
 
     Some(())
