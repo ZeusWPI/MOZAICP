@@ -1,42 +1,22 @@
 use crate::generic::{FromMessage, IntoMessage};
 use std::any::TypeId;
 use std::sync::atomic::AtomicPtr;
+use std::sync::Arc;
+use std::sync::Mutex;
 
+// TODO: Mutex shouldn't be needed :/
+#[derive(Clone)]
 pub struct Message {
-    ptr: AtomicPtr<u8>,
+    ptr: Arc<Mutex<AtomicPtr<u8>>>,
     type_id: TypeId,
-    destroy: Box<dyn Fn(&mut *mut u8) -> () + 'static + Send + Sync>,
+    destroy: Arc<Box<dyn Fn(&mut *mut u8) -> () + 'static + Send + Sync>>,
 }
 
 impl Message {
-    pub fn take<T: 'static>(&mut self) -> Option<T> {
-        let ptr = self.ptr.get_mut();
-
-        match ptr.is_null() {
-            true => None, // When ptr is null return None
-            false => match TypeId::of::<T>() == self.type_id {
-                true => {
-                    // When types match
-
-                    // Transmute into returned value and set internal pointer to
-                    // null, so we avoid owning same value in several places.
-
-                    let result: Box<T> = unsafe { Box::from_raw(ptr.cast()) };
-                    self.ptr = AtomicPtr::new(std::ptr::null_mut());
-
-                    Some(*result) // Unbox and return Some
-                }
-                false => {
-                    // When types do not match return None
-                    trace!("Trying to deref message with wrong type");
-                    None
-                }
-            },
-        }
-    }
-
     pub fn borrow<'a, T: 'static>(&'a mut self) -> Option<&'a T> {
-        let ptr = self.ptr.get_mut();
+        let mut guard = self.ptr.lock().ok()?;
+        let ptr = guard.get_mut();
+
         match ptr.is_null() {
             true => None, // When ptr is null return None
             false => match TypeId::of::<T>() == self.type_id {
@@ -67,14 +47,14 @@ impl<T: 'static> IntoMessage<TypeId, Message> for T {
         Some((
             type_id,
             Message {
-                ptr: AtomicPtr::new(Box::into_raw(boxed).cast()),
+                ptr: Arc::new(Mutex::new(AtomicPtr::new(Box::into_raw(boxed).cast()))),
                 type_id,
 
-                destroy: Box::new(|ptr| {
+                destroy: Arc::new(Box::new(|ptr| {
                     if !ptr.is_null() {
                         unsafe { Box::from_raw(ptr.cast::<T>()) };
                     }
-                }),
+                })),
             },
         ))
     }
@@ -82,25 +62,8 @@ impl<T: 'static> IntoMessage<TypeId, Message> for T {
 
 impl Drop for Message {
     fn drop(&mut self) {
-        (self.destroy)(self.ptr.get_mut());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::generic::IntoMessage;
-
-    struct Val {
-        value: i32,
-    }
-
-    #[test]
-    fn exploration() {
-        let (_, mut maybe) = Val::into_msg(Val { value: 333 }).unwrap();
-        let result = maybe.take::<Val>().map(|x| x.value);
-        assert_eq!(result, Some(333));
-
-        let result = maybe.take::<Val>().map(|x| x.value);
-        assert_eq!(result, None);
+        if Arc::strong_count(&self.destroy) == 1 {
+            (self.destroy)(&mut self.ptr.lock().unwrap().get_mut());
+        }
     }
 }

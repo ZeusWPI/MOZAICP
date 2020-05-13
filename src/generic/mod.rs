@@ -261,14 +261,11 @@ impl<T> EToI<T> {
 
 impl<'a, K, M, S, T> Handler<S, LinkHandle<'a, K, M>, (&K, &mut M)> for EToI<T>
 where
-    T: 'static + Send + FromMessage<K, M> + Clone + IntoMessage<K, M>,
-    K: 'static + Send,
-    M: 'static + Send,
+    M: 'static + Send + Clone,
+    K: 'static + Send + Clone,
 {
     fn handle<'b>(&mut self, _: &mut S, handle: &mut LinkHandle<'b, K, M>, (k, m): (&K, &mut M)) {
-        if let Some(m) = T::from_msg(k, m) {
-            handle.send_internal(m.clone(), self.target.clone());
-        }
+        handle.send_internal_raw(k.clone(), m.clone(), self.target.clone());
     }
 }
 
@@ -294,14 +291,11 @@ impl<T> IToE<T> {
 
 impl<'a, K, M, S, T> Handler<S, LinkHandle<'a, K, M>, (&K, &mut M)> for IToE<T>
 where
-    T: 'static + Send + FromMessage<K, M> + Clone + IntoMessage<K, M>,
-    K: 'static + Send,
-    M: 'static + Send,
+    K: 'static + Send + Clone,
+    M: 'static + Send + Clone,
 {
     fn handle<'b>(&mut self, _: &mut S, handle: &mut LinkHandle<'b, K, M>, (k, m): (&K, &mut M)) {
-        if let Some(m) = T::from_msg(k, m) {
-            handle.send_message(m.clone());
-        }
+        handle.send_raw(k.clone(), m.clone());
     }
 }
 
