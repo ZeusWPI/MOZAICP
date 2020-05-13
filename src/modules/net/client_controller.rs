@@ -120,10 +120,8 @@ impl ClientController {
         let player_id = accept.player;
 
         let client_link_params = LinkParams::new(())
-            .external_handler(FunctionHandler::from(e_to_i::<(), Data>(
-                TargetReactor::Reactor,
-            )))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Data>()))
+            .external_handler(EToI::<Data>::new(TargetReactor::Reactor))
+            .internal_handler(IToE::<Data>::new())
             .closer(move |_state, handle| {
                 handle.send_internal(ClientClosed(player_id), TargetReactor::Reactor);
             });
@@ -170,22 +168,16 @@ impl ReactorState<any::TypeId, Message> for ClientController {
 
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let host_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), ClientStateUpdate>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Connect>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), InitConnect>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Req<Connect>>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
-                TargetReactor::Reactor,
-            )));
+            .internal_handler(IToE::<PlayerMsg>::new())
+            .internal_handler(IToE::<ClientStateUpdate>::new())
+            .internal_handler(IToE::<Res<Connect>>::new())
+            .internal_handler(IToE::<InitConnect>::new())
+            .external_handler(EToI::<Req<Connect>>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<HostMsg>::new(TargetReactor::Reactor));
         handle.open_link(self.host, host_link_params, true);
 
         let cm_link_params =
-            LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<(), Accepted>(
-                TargetReactor::Reactor,
-            )));
+            LinkParams::new(()).external_handler(EToI::<Accepted>::new(TargetReactor::Reactor));
         handle.open_link(self.client_manager, cm_link_params, true);
     }
 }

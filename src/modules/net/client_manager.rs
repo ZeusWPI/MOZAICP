@@ -22,12 +22,6 @@ pub struct RegisterGame {
     pub free_client: Option<(Uuid, SpawnCC)>,
 }
 
-// #[derive(Clone, Debug)]
-// pub struct PlayerUUIDs {
-//     game: Uuid,
-//     ids: Vec<u64>,
-// }
-
 pub type BoxSpawnPlayer = Arc<Mutex<Option<SpawnPlayer>>>;
 
 pub struct SpawnPlayer {
@@ -108,7 +102,7 @@ impl ClientManager {
 
         for (_, cc) in cs.players.values() {
             let cc_params = LinkParams::new(())
-                .internal_handler(FunctionHandler::from(i_to_e::<(), Accepted>()))
+                .internal_handler(IToE::<Accepted>::new())
                 .closer(|_, handle| {
                     handle.send_internal(*handle.target_id(), TargetReactor::Reactor);
                 });
@@ -119,8 +113,7 @@ impl ClientManager {
             self.extra_ccs.insert(*id, spawn_cc.clone());
         }
 
-        let agg_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), NewClientController>()));
+        let agg_params = LinkParams::new(()).internal_handler(IToE::<NewClientController>::new());
         handle.open_link(cs.ag_id, agg_params, false);
     }
 
@@ -148,10 +141,8 @@ impl ClientManager {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         reg: &RegisterEndpoint,
     ) {
-        let ep_link_params =
-            LinkParams::new(()).external_handler(FunctionHandler::from(
-                e_to_i::<(), BoxSpawnPlayer>(TargetReactor::Reactor),
-            ));
+        let ep_link_params = LinkParams::new(())
+            .external_handler(EToI::<BoxSpawnPlayer>::new(TargetReactor::Reactor));
         handle.open_link(reg.0, ep_link_params, false);
     }
 
@@ -183,7 +174,7 @@ impl ClientManager {
                     self.clients.insert(ket, (player, reactor_id));
 
                     let cc_params = LinkParams::new(())
-                        .internal_handler(FunctionHandler::from(i_to_e::<(), Accepted>()))
+                        .internal_handler(IToE::<Accepted>::new())
                         .closer(|_, handle| {
                             handle.send_internal(*handle.target_id(), TargetReactor::Reactor);
                         });
@@ -217,23 +208,14 @@ impl ReactorState<any::TypeId, Message> for ClientManager {
 
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         for reg in &self.endpoints {
-            let ep_link_params =
-                LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<
-                    (),
-                    BoxSpawnPlayer,
-                >(
-                    TargetReactor::Reactor,
-                )));
+            let ep_link_params = LinkParams::new(())
+                .external_handler(EToI::<BoxSpawnPlayer>::new(TargetReactor::Reactor));
             handle.open_link(reg.0, ep_link_params, false);
         }
 
         let gm_link_params = LinkParams::new(())
-            .external_handler(FunctionHandler::from(e_to_i::<(), RegisterGame>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), RegisterEndpoint>(
-                TargetReactor::Reactor,
-            )));
+            .external_handler(EToI::<RegisterGame>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<RegisterEndpoint>::new(TargetReactor::Reactor));
         handle.open_link(self.game_manager, gm_link_params, false);
     }
 }

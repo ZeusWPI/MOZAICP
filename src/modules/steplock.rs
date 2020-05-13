@@ -114,35 +114,24 @@ impl ReactorState<any::TypeId, Message> for StepLock {
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         // Open link to host
         let host_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Vec<PlayerMsg>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<State>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), ClientStateUpdate>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Start>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), HostMsg>(
-                TargetReactor::All,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Req<State>>(
-                TargetReactor::Link(self.player_id),
-            )));
+            .internal_handler(IToE::<PlayerMsg>::new())
+            .internal_handler(IToE::<Vec<PlayerMsg>>::new())
+            .internal_handler(IToE::<Res<State>>::new())
+            .internal_handler(IToE::<ClientStateUpdate>::new())
+            .internal_handler(IToE::<Start>::new())
+            .external_handler(EToI::<HostMsg>::new(TargetReactor::All))
+            .external_handler(EToI::<Req<State>>::new(TargetReactor::Link(self.player_id)));
         handle.open_link(self.host, host_link_params, true);
 
         // Open link to client
         let client_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Req<State>>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Start>(
-                TargetReactor::Link(self.host),
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Res<State>>(
-                TargetReactor::Link(self.host),
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), ClientStateUpdate>(
-                // connect message
-                TargetReactor::Link(self.host),
+            .internal_handler(IToE::<HostMsg>::new())
+            .internal_handler(IToE::<Req<State>>::new())
+            .external_handler(EToI::<PlayerMsg>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<Start>::new(TargetReactor::Link(self.host)))
+            .external_handler(EToI::<Res<State>>::new(TargetReactor::Link(self.host)))
+            .external_handler(EToI::<ClientStateUpdate>::new(TargetReactor::Link(
+                self.host,
             )));
         handle.open_link(self.player_id, client_link_params, true);
 
@@ -152,10 +141,8 @@ impl ReactorState<any::TypeId, Message> for StepLock {
         let self_send_f = handle.chan();
 
         let timeout_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), ResetTimeOut>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), TimeOut>(
-                TargetReactor::Reactor,
-            )));
+            .internal_handler(IToE::<ResetTimeOut>::new())
+            .external_handler(EToI::<TimeOut>::new(TargetReactor::Reactor));
         handle.open_link(timeout_id, timeout_params, true);
 
         let timeout_ms = self.timeout_ms.clone();

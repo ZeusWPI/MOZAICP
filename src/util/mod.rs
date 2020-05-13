@@ -70,7 +70,7 @@ pub mod request {
 
     #[derive(Clone, Debug)]
     pub enum Connect {
-        Connected(PlayerId, String),    // TODO: make vec because of new cc
+        Connected(PlayerId, String), // TODO: make vec because of new cc
         Reconnecting(PlayerId, String),
         Waiting(PlayerId, Uuid),
         Request,
@@ -90,9 +90,8 @@ pub mod request {
 }
 
 use crate::modules::types::Uuid;
-use uuid::{Builder};
+use uuid::Builder;
 pub fn gen_identification_key() -> Uuid {
     let random_bytes = rand::random();
-    Builder::from_bytes(random_bytes)
-        .build()
+    Builder::from_bytes(random_bytes).build()
 }

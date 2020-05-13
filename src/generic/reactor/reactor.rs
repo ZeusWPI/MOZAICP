@@ -6,7 +6,7 @@ use crate::graph;
 
 use tracing::{instrument, Span};
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::hash::Hash;
 
 use futures::stream::Stream;
@@ -66,7 +66,6 @@ where
     >,
 
     channels: (Sender<K, M>, Receiver<K, M>),
-
     // inner_ops: VecDeque<InnerOp<K, M>>,
 }
 

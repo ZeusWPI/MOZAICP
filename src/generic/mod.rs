@@ -18,23 +18,6 @@ pub use self::reactor::{CoreParams, Reactor, ReactorHandle, ReactorState, Target
 // ! Just some types to make things organised
 pub use self::types::ReactorID;
 
-// pub struct FunctionHandler<F, S, R, T, M>
-
-pub fn i_to_e<S, T: Clone + 'static + IntoMessage<any::TypeId, Message>>(
-) -> impl 'static + Fn(&mut S, &mut LinkHandle<any::TypeId, Message>, &T) -> () {
-    |_, handle, t| {
-        handle.send_message(t.clone());
-    }
-}
-
-pub fn e_to_i<S, T: Clone + 'static + IntoMessage<any::TypeId, Message>>(
-    target: TargetReactor,
-) -> impl 'static + Fn(&mut S, &mut LinkHandle<any::TypeId, Message>, &T) -> () {
-    move |_, handle, t| {
-        handle.send_internal(t.clone(), target);
-    }
-}
-
 pub struct Initialize();
 
 /// Shortcut types

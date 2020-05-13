@@ -191,11 +191,7 @@ impl HostLink {
 struct CMLink;
 impl CMLink {
     fn params() -> LinkParams<Self, any::TypeId, Message> {
-        LinkParams::new(Self).external_handler(FunctionHandler::from(e_to_i::<
-            Self,
-            NewClientController,
-        >(
-            TargetReactor::Reactor
-        )))
+        LinkParams::new(Self)
+            .external_handler(EToI::<NewClientController>::new(TargetReactor::Reactor))
     }
 }

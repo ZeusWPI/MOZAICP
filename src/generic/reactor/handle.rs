@@ -1,6 +1,6 @@
 use crate::generic::{
     BrokerHandle, CoreParams, IntoMessage, LinkSpawner, Operation, ReactorID, ReactorState, Sender,
-    SenderHandle, TargetReactor, SpawnHandle,
+    SenderHandle, SpawnHandle, TargetReactor,
 };
 
 use std::hash::Hash;
@@ -18,11 +18,7 @@ impl<'a, K, M> ReactorHandle<'a, K, M> {
         id: &'a ReactorID,
         broker: &'a mut BrokerHandle<K, M>,
     ) -> Self {
-        ReactorHandle {
-            chan,
-            id,
-            broker,
-        }
+        ReactorHandle { chan, id, broker }
     }
 }
 
@@ -36,7 +32,11 @@ where
     where
         L: Into<LinkSpawner<K, M>>,
     {
-        if self.chan.unbounded_send(Operation::OpenLink(target, spawner.into(), cascade)).is_err() {
+        if self
+            .chan
+            .unbounded_send(Operation::OpenLink(target, spawner.into(), cascade))
+            .is_err()
+        {
             info!("Couldn't send open link operation");
         }
     }

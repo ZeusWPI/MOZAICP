@@ -1,6 +1,6 @@
 use crate::generic::*;
-use crate::modules::net::{EndpointBuilder, SpawnPlayer};
 use crate::modules::net::types::Register;
+use crate::modules::net::{EndpointBuilder, SpawnPlayer};
 use crate::modules::types::*;
 
 use futures::channel::mpsc;

@@ -4,17 +4,15 @@ extern crate async_std;
 
 use async_std::task::sleep;
 use futures::prelude::*;
-use futures::Future;
-use futures::task::{Context, Poll};
 use futures::stream::FuturesUnordered;
+use futures::task::{Context, Poll};
+use futures::Future;
 
 use std::pin::Pin;
 use std::time::Duration;
 
-fn time(sec: u64) -> Box<dyn Future<Output=()> + Unpin> {
-    let fut = async move {
-        sleep(Duration::from_secs(sec)).await
-    };
+fn time(sec: u64) -> Box<dyn Future<Output = ()> + Unpin> {
+    let fut = async move { sleep(Duration::from_secs(sec)).await };
     Box::new(fut.boxed())
 }
 
@@ -27,7 +25,9 @@ async fn main() -> std::io::Result<()> {
     thing.push(Fut(4, 0, time(0)));
 
     loop {
-        if poll!(thing.next()).is_ready() { break; }
+        if poll!(thing.next()).is_ready() {
+            break;
+        }
         sleep(Duration::from_secs(1)).await;
         println!("LOOPING");
     }
@@ -35,7 +35,7 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-struct Fut(usize, usize, Box<dyn Future<Output=()> + Unpin>);
+struct Fut(usize, usize, Box<dyn Future<Output = ()> + Unpin>);
 
 impl Future for Fut {
     type Output = ();

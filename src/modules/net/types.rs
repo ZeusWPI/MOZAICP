@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::PlayerId;
-use crate::modules::types::Uuid;
 use crate::generic::ReactorID;
+use crate::modules::types::Uuid;
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct Register {

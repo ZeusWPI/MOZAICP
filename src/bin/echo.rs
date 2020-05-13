@@ -52,7 +52,9 @@ impl game::Controller for Echo {
     fn on_step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
         let mut sub = Vec::new();
         for PlayerMsg { id, data } in turns {
-            let msg = data.map(|x| String::from_utf8(x.value).unwrap()).unwrap_or_else(|| "TIMEOUT".to_string());
+            let msg = data
+                .map(|x| String::from_utf8(x.value).unwrap())
+                .unwrap_or_else(|| "TIMEOUT".to_string());
             if "stop".eq_ignore_ascii_case(&msg) {
                 sub.push(HostMsg::kick(id));
                 self.clients = self.clients.iter().cloned().filter(|&x| x != id).collect();
@@ -86,8 +88,8 @@ impl game::Controller for Echo {
 }
 
 use mozaic::graph;
-use mozaic::modules::types::Uuid;
 use mozaic::modules::net::{TcpEndpoint, UdpEndpoint};
+use mozaic::modules::types::Uuid;
 
 use std::collections::VecDeque;
 

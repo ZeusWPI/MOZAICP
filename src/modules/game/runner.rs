@@ -1,5 +1,7 @@
 use crate::generic::*;
-use crate::modules::types::{ClientState, ClientStateUpdate, HostMsg, PlayerId, PlayerMsg, Start, Uuid};
+use crate::modules::types::{
+    ClientState, ClientStateUpdate, HostMsg, PlayerId, PlayerMsg, Start, Uuid,
+};
 
 use super::request::*;
 use super::GameBox;
@@ -134,39 +136,26 @@ impl ReactorState<any::TypeId, Message> for Runner {
     const NAME: &'static str = "Game";
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let client_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), HostMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Req<State>>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), PlayerMsg>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), ClientStateUpdate>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Start>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Vec<PlayerMsg>>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Res<State>>(
-                TargetReactor::Reactor,
-            )));
+            .internal_handler(IToE::<HostMsg>::new())
+            .internal_handler(IToE::<Req<State>>::new())
+            .external_handler(EToI::<PlayerMsg>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<ClientStateUpdate>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<Start>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<Vec<PlayerMsg>>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<Res<State>>::new(TargetReactor::Reactor));
         handle.open_link(self.clients_id, client_params, true);
 
         let gm_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<(Value, State)>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Kill>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), (Uuid, Value)>()))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Req<State>>(
-                TargetReactor::Link(self.clients_id),
+            .internal_handler(IToE::<Res<(Value, State)>>::new())
+            .internal_handler(IToE::<Res<Kill>>::new())
+            .internal_handler(IToE::<(Uuid, Value)>::new())
+            .external_handler(EToI::<Req<State>>::new(TargetReactor::Link(
+                self.clients_id,
             )))
-            .external_handler(FunctionHandler::from(e_to_i::<(), Req<Kill>>(
-                TargetReactor::Reactor,
-            )));
+            .external_handler(EToI::<Req<Kill>>::new(TargetReactor::Reactor));
         handle.open_link(self.gm_id, gm_link_params, false);
 
-        let logger_link_params =
-            LinkParams::new(()).internal_handler(FunctionHandler::from(i_to_e::<(), Value>()));
+        let logger_link_params = LinkParams::new(()).internal_handler(IToE::<Value>::new());
         handle.open_link(self.logger_id, logger_link_params, false);
     }
 }

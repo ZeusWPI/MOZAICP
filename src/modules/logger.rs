@@ -44,9 +44,7 @@ impl<T: 'static + Send + Clone> Logger<T> {
         handle: &mut ReactorHandle<any::TypeId, Message>,
         game: &GameJoin,
     ) {
-        let link = LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<(), T>(
-            TargetReactor::Reactor,
-        )));
+        let link = LinkParams::new(()).external_handler(EToI::<T>::new(TargetReactor::Reactor));
         handle.open_link(game.0.clone(), link, false);
     }
 
@@ -62,9 +60,7 @@ impl<T> ReactorState<any::TypeId, Message> for Logger<T> {
 
     fn init<'a>(&mut self, handle: &mut ReactorHandle<'a, any::TypeId, Message>) {
         let manager_link =
-            LinkParams::new(()).external_handler(FunctionHandler::from(e_to_i::<(), GameJoin>(
-                TargetReactor::Reactor,
-            )));
+            LinkParams::new(()).external_handler(EToI::<GameJoin>::new(TargetReactor::Reactor));
         handle.open_link(self.manager, manager_link, false);
     }
 }

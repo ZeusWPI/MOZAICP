@@ -9,11 +9,11 @@ use futures::*;
 
 use async_std::net;
 
-use std::collections::HashMap;
-use std::task::Poll;
 use std::any;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::task::Poll;
 
 enum ClientMsg {
     Start(SocketAddr, SenderHandle<any::TypeId, Message>, ReactorID),
