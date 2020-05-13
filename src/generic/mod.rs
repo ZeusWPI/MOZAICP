@@ -244,3 +244,73 @@ where
             .expect("No message found at pointer location");
     }
 }
+
+pub struct EToI<T> {
+    pd: PhantomData<T>,
+    target: TargetReactor,
+}
+
+impl<T> EToI<T> {
+    pub fn new(target: TargetReactor) -> Self {
+        Self {
+            target,
+            pd: PhantomData,
+        }
+    }
+}
+
+impl<'a, K, M, S, T> Handler<S, LinkHandle<'a, K, M>, (&K, &mut M)> for EToI<T>
+where
+    T: 'static + Send + FromMessage<K, M> + Clone + IntoMessage<K, M>,
+    K: 'static + Send,
+    M: 'static + Send,
+{
+    fn handle<'b>(&mut self, _: &mut S, handle: &mut LinkHandle<'b, K, M>, (k, m): (&K, &mut M)) {
+        if let Some(m) = T::from_msg(k, m) {
+            handle.send_internal(m.clone(), self.target.clone());
+        }
+    }
+}
+
+impl<T, K> Into<(K, Self)> for EToI<T>
+where
+    T: 'static + Send + Key<K>,
+    K: 'static + Send,
+{
+    fn into(self) -> (K, Self) {
+        (T::key(), self)
+    }
+}
+
+pub struct IToE<T> {
+    pd: PhantomData<T>,
+}
+
+impl<T> IToE<T> {
+    pub fn new() -> Self {
+        Self { pd: PhantomData }
+    }
+}
+
+impl<'a, K, M, S, T> Handler<S, LinkHandle<'a, K, M>, (&K, &mut M)> for IToE<T>
+where
+    T: 'static + Send + FromMessage<K, M> + Clone + IntoMessage<K, M>,
+    K: 'static + Send,
+    M: 'static + Send,
+{
+    fn handle<'b>(&mut self, _: &mut S, handle: &mut LinkHandle<'b, K, M>, (k, m): (&K, &mut M)) {
+        if let Some(m) = T::from_msg(k, m) {
+            handle.send_message(m.clone());
+        }
+    }
+}
+
+impl<T, K> Into<(K, Self)> for IToE<T>
+where
+    T: 'static + Send + Key<K>,
+    K: 'static + Send,
+{
+    fn into(self) -> (K, Self) {
+        (T::key(), self)
+    }
+}

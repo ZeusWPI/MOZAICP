@@ -164,37 +164,27 @@ struct ClientLink;
 impl ClientLink {
     fn params(host_id: ReactorID) -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self)
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, HostMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, Req<Connect>>()))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, PlayerMsg>(
-                TargetReactor::Link(host_id),
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, ClientStateUpdate>(
-                TargetReactor::Link(host_id),
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, Res<Connect>>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, InitConnect>(
-                TargetReactor::Reactor,
-            )))
+            .internal_handler(IToE::<HostMsg>::new())
+            .internal_handler(IToE::<Req<Connect>>::new())
+            .external_handler(EToI::<PlayerMsg>::new(TargetReactor::Link(host_id)))
+            .external_handler(EToI::<ClientStateUpdate>::new(TargetReactor::Link(host_id)))
+            .external_handler(EToI::<Res<Connect>>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<InitConnect>::new(TargetReactor::Reactor))
     }
 }
 
+// %s/FunctionHandler::from(i_to_e::<[^<]* \(.*\)>())/IToE::<\1>::new()/g
 struct HostLink;
+
 impl HostLink {
     fn params() -> LinkParams<Self, any::TypeId, Message> {
         LinkParams::new(Self)
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, ClientStateUpdate>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, PlayerMsg>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, Start>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<Self, Res<State>>()))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, HostMsg>(
-                TargetReactor::Reactor,
-            )))
-            .external_handler(FunctionHandler::from(e_to_i::<Self, Req<State>>(
-                TargetReactor::Reactor,
-            )))
+            .internal_handler(IToE::<ClientStateUpdate>::new())
+            .internal_handler(IToE::<PlayerMsg>::new())
+            .internal_handler(IToE::<Start>::new())
+            .internal_handler(IToE::<Res<State>>::new())
+            .external_handler(EToI::<Req<State>>::new(TargetReactor::Reactor))
+            .external_handler(EToI::<HostMsg>::new(TargetReactor::Reactor))
     }
 }
 
