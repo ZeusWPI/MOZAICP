@@ -7,6 +7,7 @@ use crate::modules::net::{
 };
 use crate::modules::types::*;
 use crate::modules::*;
+use crate::util::gen_identification_key;
 
 use std::any;
 use std::collections::HashMap;
@@ -17,12 +18,12 @@ pub type BoxedBuilder = Box<
             ReactorID,
             ReactorID,
             ReactorID,
-            u64,
+            Uuid,
         ) -> (
             ReactorID,
             ReactorID,
-            HashMap<u64, (PlayerId, ReactorID)>,
-            Option<(u64, SpawnCC)>,
+            HashMap<Uuid, (PlayerId, ReactorID)>,
+            Option<(Uuid, SpawnCC)>,
         ) + Send,
 >;
 
@@ -30,7 +31,7 @@ pub struct Builder<G, S: spawner::IntoSpawner<any::TypeId, Message>> {
     steplock: Option<StepLock>,
     players: Vec<PlayerId>,
     game: G,
-    free_client: Option<(u64, S)>,
+    free_client: Option<(Uuid, S)>,
 }
 
 impl<G: Clone, S: Clone + spawner::IntoSpawner<any::TypeId, Message>> Clone for Builder<G, S> {
@@ -67,7 +68,7 @@ impl<
         self
     }
 
-    pub fn with_free_client(mut self, id: u64, spawner: S) -> Self {
+    pub fn with_free_client(mut self, id: Uuid, spawner: S) -> Self {
         self.free_client = Some((id, spawner));
         self
     }
@@ -78,22 +79,22 @@ impl<
         gm_id: ReactorID,
         cm_id: ReactorID,
         logger_id: ReactorID,
-        id: u64,
+        id: Uuid,
     ) -> (
         ReactorID,
         ReactorID,
-        HashMap<u64, (PlayerId, ReactorID)>,
-        Option<(u64, SpawnCC)>,
+        HashMap<Uuid, (PlayerId, ReactorID)>,
+        Option<(Uuid, SpawnCC)>,
     ) {
         let game_id = ReactorID::rand();
         let step_id = ReactorID::rand();
         let agg_id = ReactorID::rand();
 
-        let players: HashMap<u64, (PlayerId, ReactorID)> = self
+        let players: HashMap<Uuid, (PlayerId, ReactorID)> = self
             .players
             .iter()
             .map(|&x| {
-                let key = rand::random();
+                let key = gen_identification_key();
                 let params =
                     client_controller::ClientController::params(cm_id, agg_id, x, key, true);
                 let id = broker.spawn(params, None);

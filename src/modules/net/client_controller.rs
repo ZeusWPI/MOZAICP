@@ -18,7 +18,7 @@ pub struct ClientController {
     client_name: Option<String>,
 
     buffer: VecDeque<Data>,
-    key: u64,
+    key: Uuid,
 
     try_reconnect: bool,
 }
@@ -28,7 +28,7 @@ impl ClientController {
         client_manager: ReactorID,
         host: ReactorID,
         client_id: PlayerId,
-        key: u64,
+        key: Uuid,
         try_reconnect: bool,
     ) -> CoreParams<Self, any::TypeId, Message> {
         CoreParams::new(Self {
@@ -193,7 +193,8 @@ impl ReactorState<any::TypeId, Message> for ClientController {
 pub mod spawner {
     use super::{super::SpawnCC, ClientController, ClientControllerBuilder};
     use crate::generic::*;
-    use crate::modules::types::PlayerId;
+    use crate::modules::types::{PlayerId, Uuid};
+    use crate::util::gen_identification_key;
     use std::any;
     use std::hash::Hash;
     use std::sync::Arc;
@@ -240,8 +241,8 @@ pub mod spawner {
             &self,
             spawn: SpawnHandle<'a, any::TypeId, Message>,
             cm_id: ReactorID,
-        ) -> (u64, PlayerId, ReactorID, ReactorID) {
-            let key = rand::random();
+        ) -> (Uuid, PlayerId, ReactorID, ReactorID) {
+            let key = gen_identification_key();
             let player: PlayerId = rand::random();
             let params =
                 ClientController::params(cm_id, self.agg_id, player, key, self.try_reconnect);

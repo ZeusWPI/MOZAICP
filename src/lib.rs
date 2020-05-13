@@ -19,6 +19,7 @@ extern crate tracing_futures;
 
 #[macro_use]
 extern crate mozaic_derive;
+extern crate uuid;
 
 pub mod modules;
 

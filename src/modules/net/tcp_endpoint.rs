@@ -157,7 +157,7 @@ async fn handle_spawn(
                     None => { trace!("Closing"); break; },
                     Some((_from, key, mut message)) => {
                         let data: &Data = Data::from_msg(&key, &mut message)?;
-                        writer.write_all(data.value.as_bytes()).await
+                        writer.write_all(&data.value).await
                             .map_err(|error| { info!(?error, "Write to player failed")})
                             .ok()?;
                         writer.write_all(b"\n").await.ok()?;
@@ -167,7 +167,7 @@ async fn handle_spawn(
             },
             v = lines.next() => {
                 let value = match v? {
-                    Ok(v) => v,
+                    Ok(v) => v.into_bytes(),
                     Err(err) => {
                         info!(?err, "Player stream error");
                         break;

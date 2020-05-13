@@ -25,4 +25,5 @@ tracing-subscriber = "0.2.0"
 
 mozaic-derive = { path = "./mozaic-derive" }
 
+uuid = { version = "0.8.1", features = ["serde"] }
 ws = "0.9.1"

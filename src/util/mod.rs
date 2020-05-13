@@ -3,23 +3,23 @@ pub mod request {
     use std::hash::Hash;
 
     #[derive(Clone, Debug, Copy, Hash, Eq, PartialEq, PartialOrd)]
-    pub struct UUID(u64);
-    impl UUID {
+    pub struct RequestID(u64);
+    impl RequestID {
         pub fn new() -> Self {
-            UUID(rand::random())
+            RequestID(rand::random())
         }
     }
-    impl std::convert::Into<u64> for UUID {
+    impl std::convert::Into<u64> for RequestID {
         fn into(self) -> u64 {
             self.0
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Req<T>(pub UUID, pub T);
+    pub struct Req<T>(pub RequestID, pub T);
     impl<T> Req<T> {
         pub fn new(t: T) -> Self {
-            Req(UUID(rand::random()), t)
+            Req(RequestID(rand::random()), t)
         }
         pub fn res<R>(&self, r: R) -> Res<R> {
             Res(self.0, r)
@@ -27,19 +27,19 @@ pub mod request {
     }
     impl<T: Default> Req<T> {
         pub fn default() -> Self {
-            Req(UUID(rand::random()), T::default())
+            Req(RequestID(rand::random()), T::default())
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Res<T>(pub UUID, pub T);
+    pub struct Res<T>(pub RequestID, pub T);
     impl<T> Res<T> {
-        pub fn new<U: Into<UUID>>(uuid: U, t: T) -> Self {
+        pub fn new<U: Into<RequestID>>(uuid: U, t: T) -> Self {
             Res(uuid.into(), t)
         }
     }
     impl<T: Default> Res<T> {
-        pub fn default<U: Into<UUID>>(uuid: U) -> Self {
+        pub fn default<U: Into<RequestID>>(uuid: U) -> Self {
             Res(uuid.into(), T::default())
         }
     }
@@ -66,13 +66,13 @@ pub mod request {
         }
     }
 
-    use crate::modules::types::PlayerId;
+    use crate::modules::types::{PlayerId, Uuid};
 
     #[derive(Clone, Debug)]
     pub enum Connect {
         Connected(PlayerId, String),    // TODO: make vec because of new cc
         Reconnecting(PlayerId, String),
-        Waiting(PlayerId, u64),
+        Waiting(PlayerId, Uuid),
         Request,
     }
 
@@ -87,4 +87,12 @@ pub mod request {
             }
         }
     }
+}
+
+use crate::modules::types::Uuid;
+use uuid::{Builder};
+pub fn gen_identification_key() -> Uuid {
+    let random_bytes = rand::random();
+    Builder::from_bytes(random_bytes)
+        .build()
 }

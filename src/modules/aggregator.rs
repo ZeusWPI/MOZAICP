@@ -14,7 +14,7 @@ pub struct Aggregator {
     clients: HashMap<PlayerId, ReactorID>,
 
     init_connected: HashMap<PlayerId, Option<String>>,
-    current_requests: HashMap<UUID, HashMap<PlayerId, Option<Connect>>>,
+    current_requests: HashMap<RequestID, HashMap<PlayerId, Option<Connect>>>,
 }
 
 impl Aggregator {

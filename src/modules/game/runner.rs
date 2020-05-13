@@ -1,5 +1,5 @@
 use crate::generic::*;
-use crate::modules::types::{ClientState, ClientStateUpdate, HostMsg, PlayerId, PlayerMsg, Start};
+use crate::modules::types::{ClientState, ClientStateUpdate, HostMsg, PlayerId, PlayerMsg, Start, Uuid};
 
 use super::request::*;
 use super::GameBox;
@@ -13,7 +13,7 @@ pub struct Runner {
     gm_id: ReactorID,
     logger_id: ReactorID,
     game: GameBox,
-    game_id: u64,
+    game_id: Uuid,
 
     players: Vec<(PlayerId, String)>,
 }
@@ -24,7 +24,7 @@ impl Runner {
         gm_id: ReactorID,
         logger_id: ReactorID,
         game: GameBox,
-        game_id: u64,
+        game_id: Uuid,
     ) -> CoreParams<Self, any::TypeId, Message> {
         let me = Self {
             clients_id,
@@ -156,7 +156,7 @@ impl ReactorState<any::TypeId, Message> for Runner {
         let gm_link_params = LinkParams::new(())
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<(Value, State)>>()))
             .internal_handler(FunctionHandler::from(i_to_e::<(), Res<Kill>>()))
-            .internal_handler(FunctionHandler::from(i_to_e::<(), (u64, Value)>()))
+            .internal_handler(FunctionHandler::from(i_to_e::<(), (Uuid, Value)>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), Req<State>>(
                 TargetReactor::Link(self.clients_id),
             )))

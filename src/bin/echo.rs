@@ -30,7 +30,7 @@ impl game::Controller for Echo {
         let mut out = Vec::new();
         out.push(HostMsg::Data(
             Data {
-                value: format!("{} connected\n", player),
+                value: format!("{} connected\n", player).into_bytes(),
             },
             None,
         ));
@@ -42,7 +42,7 @@ impl game::Controller for Echo {
         let mut out = Vec::new();
         out.push(HostMsg::Data(
             Data {
-                value: format!("{} disconnected\n", player),
+                value: format!("{} disconnected\n", player).into_bytes(),
             },
             None,
         ));
@@ -52,7 +52,7 @@ impl game::Controller for Echo {
     fn on_step(&mut self, turns: Vec<PlayerMsg>) -> Vec<HostMsg> {
         let mut sub = Vec::new();
         for PlayerMsg { id, data } in turns {
-            let msg = data.map(|x| x.value).unwrap_or(String::from("TIMEOUT"));
+            let msg = data.map(|x| String::from_utf8(x.value).unwrap()).unwrap_or_else(|| "TIMEOUT".to_string());
             if "stop".eq_ignore_ascii_case(&msg) {
                 sub.push(HostMsg::kick(id));
                 self.clients = self.clients.iter().cloned().filter(|&x| x != id).collect();
@@ -60,7 +60,7 @@ impl game::Controller for Echo {
 
             sub.push(HostMsg::Data(
                 Data {
-                    value: format!("{}: {}\n", id, msg),
+                    value: format!("{}: {}\n", id, msg).into_bytes(),
                 },
                 None,
             ));
@@ -86,6 +86,7 @@ impl game::Controller for Echo {
 }
 
 use mozaic::graph;
+use mozaic::modules::types::Uuid;
 use mozaic::modules::net::{TcpEndpoint, UdpEndpoint};
 
 use std::collections::VecDeque;
@@ -117,9 +118,11 @@ async fn main() -> std::io::Result<()> {
             let game = Echo {
                 clients: players.clone(),
             };
+            let uuid = Uuid::from_u128(12);
+            println!("UUID {}", uuid);
 
             game::Builder::new(players.clone(), game)
-                .with_free_client(0, SpawnerBuilder::new(false))
+                .with_free_client(uuid, SpawnerBuilder::new(false))
         };
         async_std::task::sleep(std::time::Duration::from_millis(100)).await;
 

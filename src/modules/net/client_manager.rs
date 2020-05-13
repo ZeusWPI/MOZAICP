@@ -16,17 +16,17 @@ pub type SpawnCC =
 
 #[derive(Clone)]
 pub struct RegisterGame {
-    pub game: u64,
+    pub game: Uuid,
     pub ag_id: ReactorID,
-    pub players: HashMap<u64, (PlayerId, ReactorID)>,
-    pub free_client: Option<(u64, SpawnCC)>,
+    pub players: HashMap<Uuid, (PlayerId, ReactorID)>,
+    pub free_client: Option<(Uuid, SpawnCC)>,
 }
 
-#[derive(Clone, Debug)]
-pub struct PlayerUUIDs {
-    game: u64,
-    ids: Vec<u64>,
-}
+// #[derive(Clone, Debug)]
+// pub struct PlayerUUIDs {
+//     game: Uuid,
+//     ids: Vec<u64>,
+// }
 
 pub type BoxSpawnPlayer = Arc<Mutex<Option<SpawnPlayer>>>;
 
@@ -74,8 +74,8 @@ impl SpawnPlayer {
 pub struct RegisterEndpoint(pub ReactorID);
 
 pub struct ClientManager {
-    clients: HashMap<u64, (PlayerId, ReactorID)>,
-    extra_ccs: HashMap<u64, SpawnCC>,
+    clients: HashMap<Uuid, (PlayerId, ReactorID)>,
+    extra_ccs: HashMap<Uuid, SpawnCC>,
     game_manager: ReactorID,
     endpoints: Vec<RegisterEndpoint>,
 }
@@ -228,7 +228,6 @@ impl ReactorState<any::TypeId, Message> for ClientManager {
         }
 
         let gm_link_params = LinkParams::new(())
-            .internal_handler(FunctionHandler::from(i_to_e::<(), PlayerUUIDs>()))
             .external_handler(FunctionHandler::from(e_to_i::<(), RegisterGame>(
                 TargetReactor::Reactor,
             )))

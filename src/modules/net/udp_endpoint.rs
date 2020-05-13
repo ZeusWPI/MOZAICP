@@ -77,7 +77,7 @@ async fn accepting(
     while running {
         while let Poll::Ready(Ok((c, addr))) = poll!(udp.recv_from(&mut buf).boxed()) {
             if let Some((client_chan, s_id)) = clients.get(&addr) {
-                let value = String::from_utf8(buf[..c].to_vec()).unwrap();
+                let value = buf[..c].to_vec();
 
                 if client_chan.send(*s_id, Data { value }).is_none() {
                     error!("Something somethings client error");
@@ -131,7 +131,7 @@ async fn accepting(
             match x {
                 None => return None,
                 Some(ClientMsg::Data(data, addr)) => {
-                    if udp.send_to(data.value.as_bytes(), addr).await.is_err() {
+                    if udp.send_to(&data.value, addr).await.is_err() {
                         let _ = clients.remove(&addr);
                     }
                 }

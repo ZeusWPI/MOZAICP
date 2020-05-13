@@ -141,6 +141,7 @@ pub mod builder {
     }
 }
 
+use crate::modules::types::Uuid;
 use builder::Builder;
 
 struct GameOpReq(GameOp, oneshot::Sender<GameOpRes>);
@@ -153,12 +154,12 @@ impl GameOpReq {
 
 enum GameOp {
     Build(BoxedBuilder),
-    Kill(GameID),
-    State(GameID),
+    Kill(Uuid),
+    State(Uuid),
 }
 
 pub enum GameOpRes {
-    Built(Option<GameID>),
+    Built(Option<Uuid>),
     State(Option<Result<(Value, Vec<Connect>), Value>>),
     Kill(Option<()>),
 }
@@ -188,7 +189,7 @@ impl Manager {
         Self { op_tx }
     }
 
-    pub async fn start_game<B: Into<BoxedBuilder>>(&self, builder: B) -> Option<u64> {
+    pub async fn start_game<B: Into<BoxedBuilder>>(&self, builder: B) -> Option<Uuid> {
         let (req, chan) = GameOpReq::new(GameOp::Build(builder.into()));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -200,7 +201,7 @@ impl Manager {
         }
     }
 
-    pub async fn get_state(&self, game: u64) -> Option<Result<(Value, Vec<Connect>), Value>> {
+    pub async fn get_state(&self, game: Uuid) -> Option<Result<(Value, Vec<Connect>), Value>> {
         let (req, chan) = GameOpReq::new(GameOp::State(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -212,7 +213,7 @@ impl Manager {
         }
     }
 
-    pub async fn kill_game(&self, game: u64) -> Option<()> {
+    pub async fn kill_game(&self, game: Uuid) -> Option<()> {
         let (req, chan) = GameOpReq::new(GameOp::Kill(game));
         self.op_tx.unbounded_send(req).ok()?;
 
@@ -226,14 +227,14 @@ impl Manager {
 }
 
 use super::request::*;
+use crate::util::gen_identification_key;
 use std::collections::HashMap;
-type GameID = u64;
 
 /// Game manager 'back end'
 struct GameManagerFuture {
     broker: BrokerHandle<any::TypeId, Message>,
-    games: HashMap<GameID, Result<SenderHandle<any::TypeId, Message>, Value>>,
-    requests: HashMap<UUID, oneshot::Sender<GameOpRes>>,
+    games: HashMap<Uuid, Result<SenderHandle<any::TypeId, Message>, Value>>,
+    requests: HashMap<RequestID, oneshot::Sender<GameOpRes>>,
 
     id: ReactorID,
     cm_id: ReactorID,
@@ -272,7 +273,7 @@ impl GameManagerFuture {
                         req = op_rx.next() => {
                             // Handle request
                             if let Some(GameOpReq(req, chan)) = req {
-                                let uuid = UUID::new();
+                                let uuid = RequestID::new();
                                 this.requests.insert(uuid, chan);
 
                                 match req {
@@ -292,8 +293,8 @@ impl GameManagerFuture {
                                     Res::<(Value, State)>::from_msg(&key, &mut msg).map(|Res(id, (value, state))| {
                                         this.send_msg(*id, GameOpRes::State(Some(Ok((value.clone(), state.res().clone())))))
                                     }).is_none()
-                                } else if key == any::TypeId::of::<(u64, Value)>() {
-                                    <(u64, Value)>::from_msg(&key, &mut msg).map(|(id, value)| {
+                                } else if key == any::TypeId::of::<(Uuid, Value)>() {
+                                    <(Uuid, Value)>::from_msg(&key, &mut msg).map(|(id, value)| {
                                         this.games.insert(*id, Err(value.clone()))
                                     }).is_none()
                                 } else {
@@ -316,7 +317,7 @@ impl GameManagerFuture {
         op_tx
     }
 
-    fn send_msg(&mut self, uuid: UUID, res: GameOpRes) {
+    fn send_msg(&mut self, uuid: RequestID, res: GameOpRes) {
         if self
             .requests
             .remove(&uuid)
@@ -327,8 +328,8 @@ impl GameManagerFuture {
         }
     }
 
-    fn handle_gamebuilder(&mut self, uuid: UUID, builder: BoxedBuilder) {
-        let game_uuid = rand::random();
+    fn handle_gamebuilder(&mut self, uuid: RequestID, builder: BoxedBuilder) {
+        let game_uuid = gen_identification_key();
         let (game_id, ag_id, players, free_client) = builder(
             self.broker.clone(),
             self.id,
@@ -353,7 +354,7 @@ impl GameManagerFuture {
         self.send_msg(uuid, GameOpRes::Built(Some(game_uuid)));
     }
 
-    fn handle_state(&mut self, uuid: UUID, game: GameID) {
+    fn handle_state(&mut self, uuid: RequestID, game: Uuid) {
         if let Some(ch) = self.games.get(&game) {
             match ch {
                 Ok(ch) => {
@@ -371,7 +372,7 @@ impl GameManagerFuture {
         }
     }
 
-    fn handle_kill(&mut self, uuid: UUID, game: GameID) {
+    fn handle_kill(&mut self, uuid: RequestID, game: Uuid) {
         if let Some(Ok(ch)) = self.games.get(&game) {
             if ch.send(self.id, Req(uuid, Kill)).is_none() {
                 self.send_msg(uuid, GameOpRes::Kill(None));

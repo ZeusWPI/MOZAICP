@@ -1,8 +1,9 @@
 use crate::generic::ReactorID;
 use serde::{Deserialize, Serialize};
 
+pub type Uuid = uuid::Uuid;
 pub type PlayerId = u64;
-pub type DataType = String;
+pub type DataType = Vec<u8>;
 
 #[derive(Serialize, Deserialize, Clone, Key, Debug)]
 pub struct PlayerMsg {

@@ -32,7 +32,7 @@ pub use types::Register;
 pub mod client_controller;
 
 mod client_manager;
-pub use client_manager::{ClientManager, PlayerUUIDs, RegisterGame, SpawnCC, SpawnPlayer};
+pub use client_manager::{ClientManager, RegisterGame, SpawnCC, SpawnPlayer};
 
 mod tcp_endpoint;
 pub use tcp_endpoint::TcpEndpoint;
@@ -69,7 +69,7 @@ where
         &self,
         spawn: SpawnHandle<'a, K, M>,
         cm_id: ReactorID,
-    ) -> (u64, PlayerId, ReactorID, ReactorID);
+    ) -> (Uuid, PlayerId, ReactorID, ReactorID);
 }
 
 // / GameManager
