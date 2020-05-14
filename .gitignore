@@ -11,3 +11,4 @@ Cargo.lock
 
 tmp/*
 log.log
+**/node_modules

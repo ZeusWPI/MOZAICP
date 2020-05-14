@@ -21,6 +21,9 @@ extern crate tracing_futures;
 extern crate mozaic_derive;
 extern crate uuid;
 
+extern crate tungstenite;
+extern crate async_tungstenite;
+
 pub mod modules;
 
 pub mod generic;

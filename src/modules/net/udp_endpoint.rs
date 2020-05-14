@@ -54,11 +54,6 @@ impl UdpEndpoint {
         Pin<Box<dyn Future<Output = Option<()>> + Send>>,
     ) {
         let (tx, rx) = mpsc::unbounded();
-        // let fut = async move {
-        //     let udp = net::UdpSocket::bind(addr).await.ok()?;
-        //     UdpAcceptor::new(id, addr, rx, cm_chan, udp).await
-        // };
-
         (tx, accepting(id, addr, rx, cm_chan).boxed())
     }
 }
